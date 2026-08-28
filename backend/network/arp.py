@@ -1,0 +1,140 @@
+from ..core.event import Event
+from dataclasses import dataclass
+from ..network.frame import EthernetFrame
+
+@dataclass
+class ARPPacket:
+
+    operation: str
+
+    sender_ip: str
+    sender_mac: str
+
+    target_ip: str
+    target_mac: str | None = None
+
+
+class ARP:
+
+    def __init__(self, network):
+        self.network = network
+        self.cache = {}
+
+
+    def resolve(self, source, target_ip):
+
+        if target_ip in self.cache.keys():
+            return self.cache[target_ip]
+
+        target = None
+
+        #FROM INTERFACE NOT HOST
+        req = ARPPacket(
+            operation="REQUEST",
+            sender_ip=source.ip,
+            sender_mac=source.mac,
+            target_ip=target_ip
+        )
+
+        frame = EthernetFrame(
+            source_mac=source.mac,
+            destination_mac="FF:FF:FF:FF:FF:FF",
+            payload=req
+        )
+
+        self.network.add_event(Event(
+            type="ARP_REQUEST",
+            source=source.ip,
+            destination=target_ip,
+            protocol="ARP",
+            metadata={
+                "mac": source.mac
+            }
+        ))
+
+
+
+        source.send(frame)
+
+        return self.cache.get(target_ip)
+
+    """
+        if target is None:
+            self.network.add_event(Event(
+                type="ARP_FAILURE",
+                source=source.get_ip(),
+                destination=target_ip,
+                protocol="ARP",
+                metadata={
+                    "reason": "Host not found"
+                }
+            ))
+            return None
+
+        interface = target.interfaces[0]
+
+        # ARP request
+        self.network.add_event(Event(
+            type="ARP_REQUEST",
+            source=source.get_ip(),
+            destination=target_ip,
+            protocol="ARP",
+            metadata={
+                "source_host": source.name
+            }
+        ))
+
+        # ARP reply
+        self.network.add_event(Event(
+                type="ARP_REPLY",
+                source=target_ip,
+                destination=source.get_ip(),
+                protocol="ARP",
+                metadata={
+                    "target_host": target.name,
+                    "mac": interface.mac
+                }
+        ))
+
+
+        self.cache[target_ip] = interface.mac
+
+        return interface.mac"""
+
+    def receive(self, interface, packet):
+        if packet.operation == "REQUEST":
+
+            if packet.target_ip != interface.ip:
+                return
+
+
+            reply = ARPPacket(
+                operation="REPLY",
+                sender_ip=interface.ip,
+                sender_mac=interface.mac,
+                target_ip=packet.sender_ip,
+                target_mac=packet.sender_mac
+            )
+
+            frame = EthernetFrame(
+                source_mac= interface.mac,
+                destination_mac=packet.sender_mac,
+                payload=reply
+            )
+
+            interface.send(frame)
+
+        if packet.operation == "REPLY":
+
+            self.cache[packet.sender_ip] = packet.sender_mac
+
+            self.network.add_event(Event(
+                type="ARP_REPLY",
+                source=packet.sender_ip,
+                destination=packet.target_ip,
+                protocol="ARP",
+                metadata={
+                    "mac": packet.sender_mac
+                }
+
+            ))
