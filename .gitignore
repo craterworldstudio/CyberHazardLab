@@ -1,3 +1,6 @@
 /.venv
 /test_routing.py
 /tests
+
+*.pyc
+__pycache__

@@ -1,5 +1,5 @@
 # SOC LAB
-#### Video Demo:  <URL HERE>
+<!-- #### Video Demo:  <URL HERE> -->
 #### Description:
 Hello, this is Soulfire and This was Cs50!
 I am building a SOC LAB Simulation with a real Network Simulation Running in the Background on a complete Isolated Backend which is self contained by nature purely for learning about networking and networks and people who want to be a SOC Analyst! There is additionally a Mannual Penetrator Dashboard too so you can attack your OWN System but not break it!

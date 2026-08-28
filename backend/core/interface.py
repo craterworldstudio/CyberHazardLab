@@ -13,6 +13,7 @@ class NetworkInterface:
     link: Link = None
     network: Any |None = None
     subnet: str | None = None
+    owner: Any | None = None
 
     def connect_link(self, link):
         self.link = link
@@ -29,6 +30,9 @@ class NetworkInterface:
         return self.link.transmit(frame, self)
 
     def receive(self, frame):
+        if self.owner is not None:
+            return self.owner.receive(frame, self)
+
         print(f"\n{self.name} received frame: {frame}")
 
         payload = frame.payload
@@ -48,9 +52,31 @@ class NetworkInterface:
                 f"{self.name} is not attached to a network"
             )
 
+        source_subnet = self.network.get_subnet(self.ip)
+        destination_subnet = self.network.get_subnet(
+            packet.destination_ip
+        )
+
+        if source_subnet is None:
+            raise ValueError(
+                f"{self.ip} does not belong to a known subnet"
+            )
+
+        if destination_subnet is None:
+            raise ValueError(
+                f"{packet.destination_ip} does not belong to a known subnet"
+            )
+
+        if source_subnet == destination_subnet:
+            next_hop_ip = packet.destination_ip
+        else:
+            next_hop_ip = self.network.get_gateway(self.ip)
+
+
+
         destination_mac = self.network.arp.resolve(
             self,
-            packet.destination_ip
+            next_hop_ip
         )
 
         if destination_mac is None:
