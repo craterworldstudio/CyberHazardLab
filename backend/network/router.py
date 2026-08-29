@@ -123,15 +123,25 @@ class Router:
     
         if destination_ip == in_interface.ip:
             return "ROUTER_DESTINATION"
-    
-        out_interface = self.get_interface_for_ip(destination_ip)
-    
-        if out_interface is None:
+
+        route = self.lookup_route(destination_ip)
+
+        if route is None:
             return "NO_ROUTE"
+    
+        out_interface = route["interface"]
+    
+        if out_interface == in_interface:
+            return "SAME_INTERFACE"
+
+        next_hop_ip = route["next_ip"]
+
+        if next_hop_ip is None:
+            next_hop_ip = destination_ip
     
         destination_mac = self.network.arp.resolve(
             out_interface,
-            destination_ip
+            next_hop_ip
         )
     
         if destination_mac is None:
