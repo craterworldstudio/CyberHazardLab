@@ -21,7 +21,6 @@ class Router:
             name="eth0",
             mac=generate_mac(),
             ip="10.0.0.1",
-            network=self.network,
             owner=self,
             subnet="10.0.0.0/24"
             )
@@ -29,11 +28,11 @@ class Router:
             name="eth1",
             mac=generate_mac(),
             ip="10.0.1.1",
-            network=self.network,
             owner=self,
             subnet="10.0.1.0/24"
             )
-
+        self.eth0.attach_network(self.network)
+        self.eth1.attach_network(self.network)
         self.add_interface(self.eth0)
         self.add_interface(self.eth1)  
 
@@ -110,7 +109,7 @@ class Router:
         packet = frame.payload
 
         if isinstance(packet, ARPPacket):
-            return self.network.arp.receive(
+            return self.in_interface.arp.receive(
                 in_interface,
                 packet
             )
@@ -139,7 +138,7 @@ class Router:
         if next_hop_ip is None:
             next_hop_ip = destination_ip
     
-        destination_mac = self.network.arp.resolve(
+        destination_mac = self.out_interface.arp.resolve(
             out_interface,
             next_hop_ip
         )
