@@ -58,48 +58,7 @@ class ARP:
 
         return self.cache.get(target_ip)
 
-    """
-        if target is None:
-            self.network.add_event(Event(
-                type="ARP_FAILURE",
-                source=source.get_ip(),
-                destination=target_ip,
-                protocol="ARP",
-                metadata={
-                    "reason": "Host not found"
-                }
-            ))
-            return None
 
-        interface = target.interfaces[0]
-
-        # ARP request
-        self.network.add_event(Event(
-            type="ARP_REQUEST",
-            source=source.get_ip(),
-            destination=target_ip,
-            protocol="ARP",
-            metadata={
-                "source_host": source.name
-            }
-        ))
-
-        # ARP reply
-        self.network.add_event(Event(
-                type="ARP_REPLY",
-                source=target_ip,
-                destination=source.get_ip(),
-                protocol="ARP",
-                metadata={
-                    "target_host": target.name,
-                    "mac": interface.mac
-                }
-        ))
-
-
-        self.cache[target_ip] = interface.mac
-
-        return interface.mac"""
 
     def receive(self, interface, packet):
         if packet.operation == "REQUEST":

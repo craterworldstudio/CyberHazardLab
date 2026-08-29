@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import ipaddress
 from ..network.link import Link
 from ..network.arp import ARP
 from typing import Any
@@ -70,7 +71,7 @@ class NetworkInterface:
                 f"{packet.destination_ip} does not belong to a known subnet"
             )
 
-        if source_subnet == destination_subnet:
+        if self.subnet and ipaddress.ip_address(packet.destination_ip) in ipaddress.ip_network(self.subnet):
             next_hop_ip = packet.destination_ip
         else:
             next_hop_ip = self.network.get_gateway(self.ip)
