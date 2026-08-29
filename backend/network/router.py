@@ -152,5 +152,17 @@ class Router:
             destination_mac=destination_mac,
             payload=packet
         )
+
+        self.network.add_event(Event(
+            type="PACKET_FORWARDED",
+            source=packet.source_ip,
+            destination=packet.destination_ip,
+            protocol=packet.protocol,
+            metadata={
+                "router": self.name,
+                "in_interface": in_interface.name,
+                "out_interface": out_interface.name
+                }
+            ))
     
         return out_interface.send(new_frame)
