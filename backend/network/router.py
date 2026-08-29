@@ -22,14 +22,16 @@ class Router:
             mac=generate_mac(),
             ip="10.0.0.1",
             network=self.network,
-            owner=self         
+            owner=self,
+            subnet="10.0.0.0/24"
             )
         self.eth1 = NetworkInterface(
             name="eth1",
             mac=generate_mac(),
             ip="10.0.1.1",
             network=self.network,
-            owner=self           
+            owner=self,
+            subnet="10.0.1.0/24"
             )
 
         self.add_interface(self.eth0)
@@ -37,11 +39,53 @@ class Router:
 
 
     def add_interface(self, interface: NetworkInterface):
+        interface.owner = self
         self.interfaces.append(interface)
 
+        if interface.subnet is not None:
+            self.add_route(
+                destination=interface.subnet,
+                interface=interface
+                )
+
     def update_intf(self, interface: NetworkInterface, ip=None, subnet=None):
-        interface.ip = ip if ip is not None else interface.ip
-        interface.subnet = subnet if subnet is not None else interface.subnet
+        if ip is not None:
+            interface.ip = ip
+        if subnet is not None:
+            interface.subnet = subnet
+        if interface.subnet is not None:
+            self.add_route(
+                destination=subnet,
+                interface=interface
+                )
+                
+    
+
+    def add_route(self, destination, interface, next_hop=None):
+        route = {
+            "destination": ipaddress.ip_network(destination),
+            "interface": interface,
+            "next_hop": next_hop
+            }
+
+        self.routes.append(route)
+
+    def lookup_route(self, destination_ip):
+        destination_ip = ipaddress.ip_address(destination_ip)
+
+        matching_routes = [
+            route
+            for route in self.routes
+            if destination_ip in route["destination"]
+            ]
+
+        if not matching_routes:
+            return None
+
+        return max(
+            matching_routes,
+            key=lambda route: route["destination"].prefixlen
+        )
 
     def get_interface_for_ip(self, ip):
         address = ipaddress.ip_address(ip)
