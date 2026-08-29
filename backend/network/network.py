@@ -22,7 +22,7 @@ class Network:
 		self.subnets = {}
 		#self.gateway = gateway
 
-		self.arp = ARP(self)
+		#self.arp = ARP(self)
 
 	def add_subnet(self, subnet, gateway):
 		network = ipaddress.ip_network(subnet)
@@ -89,8 +89,8 @@ class Network:
 
 		if dst_ip not in self.hosts:
 			raise ValueError(f"{destination.name} is not part of this network")
-
-		dest_mac = self.arp.resolve(source, dst_ip)
+		intf = source.interfaces[0]
+		dest_mac = intf.arp.resolve(intf, dst_ip)
 
 		if dest_mac is None:
 			self.add_event(Event(
