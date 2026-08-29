@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from ..network.link import Link
+from ..network.arp import ARP
 from typing import Any
 from ..network.frame import EthernetFrame
 from ..network.arp import ARPPacket
@@ -14,13 +15,14 @@ class NetworkInterface:
     network: Any |None = None
     subnet: str | None = None
     owner: Any | None = None
-    arp_table: dict[str, str] = field(default_factory=dict)
+    arp: ARP | None = None
 
     def connect_link(self, link):
         self.link = link
 
     def attach_network(self, network):
         self.network = network
+        self.arp = ARP(self.network)
 
     def send(self, frame):
         if self.link is None:
@@ -40,7 +42,7 @@ class NetworkInterface:
 
         if isinstance(payload, ARPPacket):
 
-            self.network.arp.receive(
+            self.arp.receive(
                 self, payload
             )
 
@@ -75,7 +77,7 @@ class NetworkInterface:
 
 
 
-        destination_mac = self.network.arp.resolve(
+        destination_mac = self.arp.resolve(
             self,
             next_hop_ip
         )
