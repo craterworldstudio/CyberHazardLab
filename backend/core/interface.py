@@ -14,6 +14,7 @@ class NetworkInterface:
     network: Any |None = None
     subnet: str | None = None
     owner: Any | None = None
+    arp_table: dict[str, str] = field(default_factory=dict)
 
     def connect_link(self, link):
         self.link = link
