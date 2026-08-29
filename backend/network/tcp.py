@@ -96,4 +96,41 @@ class TCPConnection:
 
             return None
 
-            
+
+
+    def send_data(self, data):
+        if self.state != TCPState.ESTABLISHED:
+            raise ValueError("TCP connection is not established")
+
+        packet = TCPPacket(
+            source_port=self.local_port,
+            destination_port=self.remote_port,
+            sequence_number=self.sequence_number,
+            acknowledgement_number=self.acknowledgement_number,
+            flags={"ACK"},
+            payload=data
+        )
+
+        self.sequence_number += len(data)
+
+        return packet
+
+    def receive_data(self, packet: TCPPacket):
+
+        if self.state != TCPState.ESTABLISHED:
+            raise ValueError("TCP connection is not established")
+    
+        if "ACK" not in packet.flags:
+            return None
+    
+        self.acknowledgement_number = (
+            packet.sequence_number + len(packet.payload)
+        )
+    
+        return TCPPacket(
+            source_port=self.local_port,
+            destination_port=self.remote_port,
+            sequence_number=self.sequence_number,
+            acknowledgement_number=self.acknowledgement_number,
+            flags={"ACK"}
+        )
