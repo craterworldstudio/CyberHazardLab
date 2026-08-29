@@ -1,5 +1,5 @@
 
-# 🛡️ SOC LAB Simulation
+# 🛡️ Cyber Hazard Lab
 
 > **Course Project:** This was CS50! Built by **Soulfire**.
 
@@ -7,7 +7,7 @@
 
 ## 📝 Description
 
-**SOC LAB** is an interactive Security Operations Center (SOC) simulation environment. It features a **real, fully isolated network simulation** running in the background, making it entirely self-contained. 
+**Cyber Hazard Lab** is an interactive Security Operations Center (SOC) simulation environment. It features a **real, fully isolated network simulation** running in the background, making it entirely self-contained. 
 
 Designed specifically for students and aspiring network/security professionals, this platform offers a safe environment to learn core networking concepts and practical security monitoring. Additionally, the project includes a **Manual Penetrator Dashboard**—allowing users to safely launch cyber attacks against their own simulated infrastructure to see how a SOC catches real-world threats without risking actual damage.
 
