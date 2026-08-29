@@ -134,7 +134,7 @@ class Router:
         if out_interface == in_interface:
             return "SAME_INTERFACE"
 
-        next_hop_ip = route["next_ip"]
+        next_hop_ip = route["next_hop"]
 
         if next_hop_ip is None:
             next_hop_ip = destination_ip
