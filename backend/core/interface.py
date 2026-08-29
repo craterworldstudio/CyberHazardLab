@@ -4,7 +4,7 @@ from ..network.link import Link
 from ..network.arp import ARP
 from typing import Any
 from ..network.frame import EthernetFrame
-from ..network.arp import ARPPacket
+from ..network.packet import ARPPacket
 from .event import Event
 
 @dataclass

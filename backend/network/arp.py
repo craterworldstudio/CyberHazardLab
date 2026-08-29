@@ -1,18 +1,8 @@
+from .packet import ARPPacket
+
 from ..core.event import Event
 from dataclasses import dataclass
 from ..network.frame import EthernetFrame
-
-@dataclass
-class ARPPacket:
-
-    operation: str
-
-    sender_ip: str
-    sender_mac: str
-
-    target_ip: str
-    target_mac: str | None = None
-
 
 class ARP:
 

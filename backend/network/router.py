@@ -1,6 +1,6 @@
 import ipaddress
 
-from .arp import ARPPacket
+from .packet import ARPPacket
 
 from .frame import EthernetFrame
 from ..core.event import Event
