@@ -3,7 +3,7 @@ import ipaddress
 from .arp import ARPPacket
 
 from .frame import EthernetFrame
-
+from ..core.event import Event
 from ..core.interface import NetworkInterface
 from ..core.mac import generate_mac
 
@@ -86,19 +86,6 @@ class Router:
             key=lambda route: route["destination"].prefixlen
         )
 
-    def get_interface_for_ip(self, ip):
-        address = ipaddress.ip_address(ip)
-
-        for interface in self.interfaces:
-            if interface.subnet is None:
-                continue
-
-            subnet = ipaddress.ip_network(interface.subnet)
-            if address in subnet:
-                return interface
-
-        return None
-
     def receive(self, frame, in_interface):
         
         print(
@@ -109,7 +96,7 @@ class Router:
         packet = frame.payload
 
         if isinstance(packet, ARPPacket):
-            return self.in_interface.arp.receive(
+            return in_interface.arp.receive(
                 in_interface,
                 packet
             )
@@ -138,7 +125,7 @@ class Router:
         if next_hop_ip is None:
             next_hop_ip = destination_ip
     
-        destination_mac = self.out_interface.arp.resolve(
+        destination_mac = out_interface.arp.resolve(
             out_interface,
             next_hop_ip
         )
