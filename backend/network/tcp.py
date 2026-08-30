@@ -8,6 +8,7 @@ class TCPState(Enum):
     SYN_RECEIVED = "SYN_RECEIVED"
     ESTABLISHED = "ESTABLISHED"
     FIN_WAIT = "FIN_WAIT"
+    CLOSE_WAIT = "CLOSE_WAIT"
 
 class TCPConnection:
 
@@ -93,8 +94,46 @@ class TCPConnection:
 
                     self.state = TCPState.ESTABLISHED
 
+        if self.state == TCPState.ESTABLISHED:
 
-            return None
+            if "FIN" in packet.flags:
+
+                self.acknowledgement_number = packet.sequence_number + 1
+                self.state = TCPState.CLOSE_WAIT
+
+            return TCPPacket(
+                source_port=self.local_port,
+                destination_port=self.remote_port,
+                sequence_number=self.sequence_number,
+                acknowledgement_number=self.acknowledgement_number,
+                flags={"ACK"}
+                )
+
+        if self.state == TCPState.FIN_WAIT:
+
+            if "FIN" in packet.flags:
+
+                self.acknowledgement_number = packet.sequence_number + 1
+                self.state = TCPState.CLOSED
+
+            return TCPPacket(
+                    source_port=self.local_port,
+                    destination_port=self.remote_port,
+                    sequence_number=self.sequence_number,
+                    acknowledgement_number=self.acknowledgement_number,
+                    flags={"ACK"}
+                    )
+
+        if self.state == TCPState.CLOSE_WAIT:
+
+            if "ACK" in packet.flags:
+
+                self.state = TCPState.CLOSED
+                return None
+
+
+
+        return None
 
 
 
@@ -138,4 +177,21 @@ class TCPConnection:
             sequence_number=self.sequence_number,
             acknowledgement_number=self.acknowledgement_number,
             flags={"ACK"}
+        )
+
+    def close(self):
+
+        if self.state not in {
+                TCPState.ESTABLISHED, TCPState.CLOSE_WAIT }:
+            raise ValueError("TCP connection is not established")
+
+        self.state = TCPState.FIN_WAIT
+        self.sequence_number += 1
+
+        return TCPPacket(
+            source_port=self.local_port,
+            destination_port=self.remote_port,
+            sequence_number=self.sequence_number,
+            acknowledgement_number=self.acknowledgement_number,
+            flags={"FIN", "ACK"}
         )

@@ -1,4 +1,5 @@
 from backend.network.tcp import TCPConnection
+from backend.network.packet import TCPPacket
 
 client = TCPConnection(
     local_ip="10.0.2.100",
@@ -32,3 +33,17 @@ data = client.send_data("Hello")
 print(data)
 data_ack = server.receive_data(data)
 print(data_ack)
+
+bad_packet = TCPPacket(
+    source_port=49152,
+    destination_port=80,
+    sequence_number=9999,
+    acknowledgement_number=5001,
+    flags={"ACK"},
+    payload="This should not be accepted"
+)
+
+result = server.receive_data(bad_packet)
+
+print(result)
+print(server.acknowledgement_number)
