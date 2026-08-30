@@ -2,13 +2,20 @@ from enum import Enum
 from .packet import TCPPacket
 
 class TCPState(Enum):
-    CLOSED = "CLOSED"
+    
     LISTEN = "LISTEN"
     SYN_SENT = "SYN_SENT"
     SYN_RECEIVED = "SYN_RECEIVED"
     ESTABLISHED = "ESTABLISHED"
-    FIN_WAIT = "FIN_WAIT"
+
+    FIN_WAIT1 = "FIN_WAIT1"
+    FIN_WAIT2 = "FIN_WAIT2"
     CLOSE_WAIT = "CLOSE_WAIT"
+    LAST_ACK = "LAST_ACK"
+    TIME_WAIT = "TIME_WAIT"
+    CLOSED = "CLOSED"
+
+    RST = "RST"
 
 class TCPConnection:
 
@@ -50,6 +57,8 @@ class TCPConnection:
 
         return packet
 
+
+    
     def receive(self, packet: TCPPacket):
 
         if self.state == TCPState.CLOSED:
@@ -68,8 +77,7 @@ class TCPConnection:
                     acknowledgement_number=self.acknowledgement_number,
                     flags={"SYN", "ACK"}
                 )
-
-        
+   
         elif self.state == TCPState.SYN_SENT:
             if "SYN" in packet.flags and "ACK" in packet.flags:
 
@@ -94,6 +102,64 @@ class TCPConnection:
 
                     self.state = TCPState.ESTABLISHED
 
+        if self.state == TCPState.FIN_WAIT1:
+
+            #FIN was acknowledged 
+            if "ACK" in packet.flags:
+
+                self.state = TCPState.FIN_WAIT2
+
+                #the peer is closing too, so we advance to closure
+                if "FIN" in packet.flags:
+        
+                    self.acknowledgement_number = packet.sequence_number + 1
+                    self.state = TCPState.TIME_WAIT
+        
+                    return TCPPacket(
+                        source_port=self.local_port,
+                        destination_port=self.remote_port,
+                        sequence_number=self.sequence_number,
+                        acknowledgement_number=self.acknowledgement_number,
+                        flags={"ACK"}
+                        )
+
+                return None
+
+            #peer sent FIN before acknowledging ours. we close the connection. since both parties have agreed to FIN
+            if "FIN" in packet.flags: 
+                
+                self.acknowledgement_number = packet.sequence_number + 1
+                self.state = TCPState.TIME_WAIT
+
+                return TCPPacket(
+                    source_port=self.local_port,
+                    destination_port=self.remote_port,
+                    sequence_number=self.sequence_number,
+                    acknowledgement_number=self.acknowledgement_number,
+                    flags={"ACK"}
+                )
+            return None
+
+        if self.state == TCPState.FIN_WAIT2:
+
+            if "FIN" in packet.flags:
+
+                self.acknowledgement_number = packet.sequence_number + 1
+                self.state = TCPState.TIME_WAIT
+
+                return TCPPacket(
+                    source_port=self.local_port,
+                    destination_port=self.remote_port,
+                    sequence_number=self.sequence_number,
+                    acknowledgement_number=self.acknowledgement_number,
+                    flags = {"ACK"}
+                )
+            return None
+
+        if self.state == TCPState.LAST_ACK:
+            if "ACK" in packet.flags:
+                self.state = TCPState.CLOSED
+        
         if self.state == TCPState.ESTABLISHED:
 
             if "FIN" in packet.flags:
@@ -101,35 +167,16 @@ class TCPConnection:
                 self.acknowledgement_number = packet.sequence_number + 1
                 self.state = TCPState.CLOSE_WAIT
 
-            return TCPPacket(
-                source_port=self.local_port,
-                destination_port=self.remote_port,
-                sequence_number=self.sequence_number,
-                acknowledgement_number=self.acknowledgement_number,
-                flags={"ACK"}
-                )
-
-        if self.state == TCPState.FIN_WAIT:
-
-            if "FIN" in packet.flags:
-
-                self.acknowledgement_number = packet.sequence_number + 1
-                self.state = TCPState.CLOSED
-
-            return TCPPacket(
+                return TCPPacket(
                     source_port=self.local_port,
                     destination_port=self.remote_port,
                     sequence_number=self.sequence_number,
                     acknowledgement_number=self.acknowledgement_number,
                     flags={"ACK"}
                     )
-
+      
         if self.state == TCPState.CLOSE_WAIT:
-
-            if "ACK" in packet.flags:
-
-                self.state = TCPState.CLOSED
-                return None
+            return None
 
 
 
@@ -181,17 +228,34 @@ class TCPConnection:
 
     def close(self):
 
-        if self.state not in {
-                TCPState.ESTABLISHED, TCPState.CLOSE_WAIT }:
-            raise ValueError("TCP connection is not established")
+        if self.state == TCPState.ESTABLISHED:
+            packet = TCPPacket(
+                source_port=self.local_port,
+                destination_port=self.remote_port,
+                sequence_number=self.sequence_number,
+                acknowledgement_number=self.acknowledgement_number,
+                flags={"FIN", "ACK"}
+            )
 
-        self.state = TCPState.FIN_WAIT
-        self.sequence_number += 1
+            self.state = TCPState.FIN_WAIT1
+            self.sequence_number += 1
 
-        return TCPPacket(
-            source_port=self.local_port,
-            destination_port=self.remote_port,
-            sequence_number=self.sequence_number,
-            acknowledgement_number=self.acknowledgement_number,
-            flags={"FIN", "ACK"}
+            return packet
+
+        if self.state == TCPState.CLOSE_WAIT:
+            packet = TCPPacket(
+                    source_port=self.local_port,
+                    destination_port=self.remote_port,
+                    sequence_number=self.sequence_number,
+                    acknowledgement_number=self.acknowledgement_number,
+                    flags={"FIN", "ACK"}
+                )
+
+            self.sequence_number += 1
+            self.state = TCPState.LAST_ACK
+
+            return packet
+
+        raise ValueError(
+            f"Cannot close connection from state {self.state.value}"
         )
