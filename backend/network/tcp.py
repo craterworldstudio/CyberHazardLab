@@ -123,8 +123,8 @@ class TCPConnection:
         if "ACK" not in packet.flags:
             return None
 
-        if self.acknowledgement_nukber != packet.sequence_number:
-            return Nonw
+        if self.acknowledgement_number != packet.sequence_number:
+            return None
 
         payload_length = len(packet.payload) if packet.payload is not None else 0
     
