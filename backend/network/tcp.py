@@ -35,6 +35,8 @@ class TCPConnection:
         self.sequence_number = 0
         self.acknowledgement_number = 0
 
+        self.time_wait_remaining = None
+
 
     #client connect
     def connect(self):
@@ -60,10 +62,13 @@ class TCPConnection:
 
     
     def receive(self, packet: TCPPacket):
+        if "RST" in packet.flags:
+            self.state = TCPState.CLOSED
+            return None
 
-        if self.state == TCPState.CLOSED:
+        elif self.state == TCPState.LISTEN:
 
-            if "SYN" in packet.flags and not ("ACK" in packet.flags):
+            if "SYN" in packet.flags and "ACK" not in packet.flags:
 
                 self.acknowledgement_number = packet.sequence_number + 1
                 self.sequence_number = 5000
@@ -102,7 +107,7 @@ class TCPConnection:
 
                     self.state = TCPState.ESTABLISHED
 
-        if self.state == TCPState.FIN_WAIT1:
+        elif self.state == TCPState.FIN_WAIT1:
 
             #FIN was acknowledged 
             if "ACK" in packet.flags:
@@ -114,6 +119,7 @@ class TCPConnection:
         
                     self.acknowledgement_number = packet.sequence_number + 1
                     self.state = TCPState.TIME_WAIT
+                    self.time_wait_remaining = 60
         
                     return TCPPacket(
                         source_port=self.local_port,
@@ -130,6 +136,7 @@ class TCPConnection:
                 
                 self.acknowledgement_number = packet.sequence_number + 1
                 self.state = TCPState.TIME_WAIT
+                self.time_wait_remaining = 60
 
                 return TCPPacket(
                     source_port=self.local_port,
@@ -140,12 +147,13 @@ class TCPConnection:
                 )
             return None
 
-        if self.state == TCPState.FIN_WAIT2:
+        elif self.state == TCPState.FIN_WAIT2:
 
             if "FIN" in packet.flags:
 
                 self.acknowledgement_number = packet.sequence_number + 1
                 self.state = TCPState.TIME_WAIT
+                self.time_wait_remaining = 60
 
                 return TCPPacket(
                     source_port=self.local_port,
@@ -156,11 +164,28 @@ class TCPConnection:
                 )
             return None
 
-        if self.state == TCPState.LAST_ACK:
+        elif self.state == TCPState.TIME_WAIT:
+
+            if "FIN" in packet.flags:
+            
+                self.acknowledgement_number = packet.sequence_number + 1
+                self.time_wait_remaining = 60
+
+                return TCPPacket(
+                    source_port=self.local_port,
+                    destination_port=self.remote_port,
+                    sequence_number=self.sequence_number,
+                    acknowledgement_number=self.acknowledgement_number,
+                    flags={"ACK"}
+                )
+
+            return None
+
+        elif self.state == TCPState.LAST_ACK:
             if "ACK" in packet.flags:
                 self.state = TCPState.CLOSED
         
-        if self.state == TCPState.ESTABLISHED:
+        elif self.state == TCPState.ESTABLISHED:
 
             if "FIN" in packet.flags:
 
@@ -175,14 +200,12 @@ class TCPConnection:
                     flags={"ACK"}
                     )
       
-        if self.state == TCPState.CLOSE_WAIT:
+        elif self.state == TCPState.CLOSE_WAIT:
             return None
 
 
 
         return None
-
-
 
     def send_data(self, data):
         if self.state != TCPState.ESTABLISHED:
@@ -258,4 +281,40 @@ class TCPConnection:
 
         raise ValueError(
             f"Cannot close connection from state {self.state.value}"
+        )
+
+    def listen(self):
+
+        if self.state != TCPState.CLOSED:
+            raise RuntimeError(
+                f"Cannot listen from state {self.state.value}"
+            )
+
+        self.state = TCPState.LISTEN
+
+    def tick(self, seconds):
+
+        if self.state != TCPState.TIME_WAIT:
+            return
+
+        self.time_wait_remaining -= seconds
+
+        if self.time_wait_remaining <= 0:
+
+            self.time_wait_remaining = None
+            self.state = TCPState.CLOSED
+
+    def reset(self):
+
+        if self.state == TCPState.CLOSED:
+            raise ValueError("Connection is already closed")
+
+        self.state = TCPState.CLOSED
+
+        return TCPPacket(
+            source_port=self.local_port,
+            destination_port=self.remote_port,
+            sequence_number=self.sequence_number,
+            acknowledgement_number=self.acknowledgement_number,
+            flags={"RST"}
         )

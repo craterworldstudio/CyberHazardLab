@@ -27,9 +27,13 @@ server = TCPConnection(
 
 print("=== HANDSHAKE ===")
 
+server.listen()
+print("Server:", server.state)
+
 syn = client.connect()
 
 print("Client:", client.state)
+
 
 syn_ack = server.receive(syn)
 
