@@ -1,4 +1,7 @@
 from dataclasses import dataclass, field
+
+from backend.network.packet import *
+from backend.network.tcp import TCPConnection
 from .service import Service
 from .interface import NetworkInterface
 from .mac import generate_mac
@@ -10,16 +13,19 @@ class Host:
     services: list[Service] = field(default_factory=list)
 
     def __post_init__(self):
+        self.tcp_connections = {}
         if not self.interfaces:
             self.add_interface(NetworkInterface(
-                name="eth0", mac=generate_mac()
+                name="eth0", mac=generate_mac(), owner=self
             ))
 
     def add_service(self, service: Service):
         self.services.append(service)
 
     def add_interface(self, interface: NetworkInterface):
+        interface.owner = self
         self.interfaces.append(interface)
+        
 
     def get_interface(self, interface_name):
 
@@ -40,4 +46,94 @@ class Host:
         for interface in self.interfaces:
             if interface.mac is not None:
                 return interface.mac
+
+    def receive_frame(self, interface, frame):
+
+        payload = frame.payload
+    
+        if isinstance(payload, ARPPacket):
+            return interface.arp.receive(
+                interface,
+                payload
+            )
+    
+        if isinstance(payload, Packet):
+            return self.receive_packet(
+                interface,
+                payload
+            )
+    
+        return None
+
+    def receive_packet(self, interface, packet):
+
+        if packet.protocol.upper() == "TCP":
+
+            return self.receive_tcp(
+                interface,
+                packet
+            )
+
+        if packet.protocol.upper() == "UDP":
+            pass
+
+        return None
+
+    def receive_tcp(self, interface, packet):
+        print(
+            f"{self.name} received TCP ", f"{packet.source_ip}:{packet.payload.source_port} -> ", f"{packet.destination_ip}:{packet.payload.destination_port}"
+        )
+
+        tcp_packet = packet.payload
+
+        connection_key = (
+            packet.source_ip,
+            tcp_packet.source_port,
+            packet.destination_ip,
+            tcp_packet.destination_port
+        )
+
+        connection = self.tcp_connections.get( connection_key )
+
+        if connection is None:
+            service = None
+
+            for candidate in self.services:
+
+                if (
+                    candidate.protocol.upper() == "TCP"
+                    and candidate.port == tcp_packet.destination_port
+                    and candidate.status.lower() == "running"
+                ):
+                    service = candidate
+                    break
+
+            if service is None:
+                return None
+
+            connection = TCPConnection(
+                local_ip=packet.destination_ip,
+                local_port=tcp_packet.destination_port,
+                remote_ip=packet.source_ip,
+                remote_port=tcp_packet.source_port
+            )
+
+            connection.listen()
+
+            self.tcp_connections[connection_key] = connection
+
+
+
+        response = connection.receive(tcp_packet)
+        if response is None:
+            return None
+
+        response_packet = Packet(
+            source_ip=interface.ip,
+            destination_ip=packet.source_ip,
+            protocol="TCP",
+            payload=response
+        )
+
+        return interface.send_ip_packet(response_packet)
 

@@ -35,7 +35,11 @@ class NetworkInterface:
 
     def receive(self, frame):
         if self.owner is not None:
-            return self.owner.receive(frame, self)
+            if hasattr(self.owner, "receive_frame"):
+                return self.owner.receive_frame( self, frame ) # host: interface, frame
+
+            if hasattr(self.owner, "receive"):
+                return self.owner.receive( frame, self ) # router: frame, interface
 
         print(f"\n{self.name} received frame: {frame}")
 
