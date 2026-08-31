@@ -216,6 +216,107 @@ print("NETWORK RESULT:", result)
 
 print("\nCLIENT STATE:", client_tcp.state)
 
+# ============================================================
+# TCP TERMINATION
+# ============================================================
+
+print("\n=== TCP TERMINATION ===")
+
+# Get the server-side connection created by WEB-01
+server_key = (
+    pc.interfaces[0].ip,
+    49152,
+    web.interfaces[0].ip,
+    80
+)
+
+server_tcp = web.tcp_connections[server_key]
+
+print("CLIENT STATE:", client_tcp.state)
+print("SERVER STATE:", server_tcp.state)
+
+
+# ------------------------------------------------------------
+# CLIENT -> SERVER : FIN
+# ------------------------------------------------------------
+
+fin = client_tcp.close()
+
+print("\nCLIENT -> SERVER:", fin)
+print("CLIENT STATE:", client_tcp.state)
+
+fin_ip = tcp_to_ip_packet(
+    pc.interfaces[0],
+    web.interfaces[0].ip,
+    fin
+)
+
+print("\n=== NETWORK: FIN ===")
+
+result = pc.interfaces[0].send_ip_packet(fin_ip)
+
+print("NETWORK RESULT:", result)
+
+
+# ------------------------------------------------------------
+# SERVER -> CLIENT : FIN-ACK
+# ------------------------------------------------------------
+
+print("\nCLIENT STATE:", client_tcp.state)
+print("SERVER STATE:", server_tcp.state)
+
+server_key = (
+    pc.interfaces[0].ip,
+    49152,
+    web.interfaces[0].ip,
+    80
+)
+
+server_tcp = web.tcp_connections[server_key]
+
+print("\n=== SERVER CLOSE ===")
+
+print("CLIENT STATE:", client_tcp.state)
+print("SERVER STATE:", server_tcp.state)
+
+server_fin = server_tcp.close()
+
+print("\nSERVER -> CLIENT:", server_fin)
+print("SERVER STATE:", server_tcp.state)
+
+server_fin_ip = tcp_to_ip_packet(
+    web.interfaces[0],
+    pc.interfaces[0].ip,
+    server_fin
+)
+
+print("\n=== NETWORK: SERVER FIN ===")
+
+result = web.interfaces[0].send_ip_packet(
+    server_fin_ip
+)
+
+print("NETWORK RESULT:", result)
+
+print("\nCLIENT STATE:", client_tcp.state)
+print("SERVER STATE:", server_tcp.state)
+
+
+print("\n=== TIME WAIT ===")
+
+print("CLIENT STATE:", client_tcp.state)
+print("SERVER STATE:", server_tcp.state)
+
+client_tcp.tick(59)
+
+print("AFTER 59s:")
+print("CLIENT STATE:", client_tcp.state)
+
+client_tcp.tick(1)
+
+print("AFTER 60s:")
+print("CLIENT STATE:", client_tcp.state)
+
 
 print("\n=== ROUTING TABLES ===")
 
