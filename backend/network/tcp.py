@@ -1,5 +1,6 @@
 from enum import Enum
 from .packet import TCPPacket
+from backend.core.event import Event
 
 class TCPState(Enum):
     
@@ -22,7 +23,8 @@ class TCPConnection:
     def __init__(
         self,
         local_ip: str, local_port: int,
-        remote_ip: str, remote_port: int
+        remote_ip: str, remote_port: int,
+        network
     ):
         self.local_ip = local_ip
         self.local_port = local_port
@@ -36,6 +38,30 @@ class TCPConnection:
         self.acknowledgement_number = 0
 
         self.time_wait_remaining = None
+
+        self.network = network
+
+    # Helper method for consistent telemetry formatting
+    def _log_event(self, event_type: str, flags: list, metadata: dict = None):
+        if not self.network:
+            return
+        
+        event_metadata = {
+            "state": self.state.value,
+            "seq": self.sequence_number,
+            "ack": self.acknowledgement_number,
+            "flags": flags
+        }
+        if metadata:
+            event_metadata.update(metadata)
+
+        self.network.add_event(
+            event_type,
+            f"{self.local_ip}:{self.local_port}",
+            f"{self.remote_ip}:{self.remote_port}",
+            "TCP",
+            event_metadata
+        )
 
     #client connect
     def connect(self):
@@ -55,6 +81,7 @@ class TCPConnection:
         )
 
         self.state = TCPState.SYN_SENT
+        self._log_event("TCP_SYN_SENT", ["SYN"])
 
         return packet
  
@@ -63,6 +90,7 @@ class TCPConnection:
         
         if "RST" in packet.flags:
             self.state = TCPState.CLOSED
+            self._log_event("TCP_RESET_RECEIVED", ["RST"])
             return None
 
         elif self.state == TCPState.LISTEN:
@@ -73,6 +101,7 @@ class TCPConnection:
                 self.sequence_number = 5000
 
                 self.state = TCPState.SYN_RECEIVED
+                self._log_event("TCP_SYN_RECEIVED", ["SYN"])
 
                 return TCPPacket(
                     source_port=self.local_port,
@@ -90,6 +119,7 @@ class TCPConnection:
                     self.sequence_number += 1
 
                     self.state = TCPState.ESTABLISHED
+                    self._log_event("TCP_ESTABLISHED", ["ACK"])
 
                     return TCPPacket(
                             source_port=self.local_port,
@@ -105,6 +135,7 @@ class TCPConnection:
                 if packet.acknowledgement_number == (self.sequence_number + 1):
 
                     self.state = TCPState.ESTABLISHED
+                    self._log_event("TCP_ESTABLISHED", ["ACK"])
 
         elif self.state == TCPState.FIN_WAIT1:
 
@@ -115,13 +146,15 @@ class TCPConnection:
                     return None
 
                 self.state = TCPState.FIN_WAIT2
+                self._log_event("TCP_FIN_ACK_RECEIVED", ["ACK"])
 
                 #the peer is closing too, so we advance to closure
                 if "FIN" in packet.flags:
         
                     self.acknowledgement_number = packet.sequence_number + 1
                     self.state = TCPState.TIME_WAIT
-                    self.time_wait_remaining = TIME_WAIT_DURATION 
+                    self.time_wait_remaining = TIME_WAIT_DURATION
+                    self._log_event("TCP_TIME_WAIT", ["ACK"])
         
                     return TCPPacket(
                         source_port=self.local_port,
@@ -138,7 +171,8 @@ class TCPConnection:
                 
                 self.acknowledgement_number = packet.sequence_number + 1
                 self.state = TCPState.TIME_WAIT
-                self.time_wait_remaining = TIME_WAIT_DURATION 
+                self.time_wait_remaining = TIME_WAIT_DURATION
+                self._log_event("TCP_TIME_WAIT", ["ACK"])
 
                 return TCPPacket(
                     source_port=self.local_port,
@@ -157,6 +191,7 @@ class TCPConnection:
                 self.acknowledgement_number = packet.sequence_number + 1
                 self.state = TCPState.TIME_WAIT
                 self.time_wait_remaining = TIME_WAIT_DURATION
+                self._log_event("TCP_TIME_WAIT", ["ACK"])
 
                 return TCPPacket(
                     source_port=self.local_port,
@@ -172,7 +207,8 @@ class TCPConnection:
             if "FIN" in packet.flags:
             
                 self.acknowledgement_number = packet.sequence_number + 1
-                self.time_wait_remaining = TIME_WAIT_DURATION 
+                self.time_wait_remaining = TIME_WAIT_DURATION
+                self._log_event("TCP_TIME_WAIT_RETRANSMIT", ["ACK"])
 
                 return TCPPacket(
                     source_port=self.local_port,
@@ -191,6 +227,7 @@ class TCPConnection:
                     return None
 
                 self.state = TCPState.CLOSED
+                self._log_event("TCP_CLOSED", ["ACK"])
                 return None
 
             return None
@@ -201,6 +238,7 @@ class TCPConnection:
 
                 self.acknowledgement_number = packet.sequence_number + 1
                 self.state = TCPState.CLOSE_WAIT
+                self._log_event("TCP_CLOSE_WAIT", ["ACK"])
 
                 return TCPPacket(
                     source_port=self.local_port,
@@ -231,6 +269,7 @@ class TCPConnection:
         )
 
         self.sequence_number += len(data)
+        self._log_event("TCP_DATA_SENT", ["ACK"], {"data_length": len(data)})
 
         return packet
 
@@ -250,6 +289,8 @@ class TCPConnection:
         self.acknowledgement_number = (
             packet.sequence_number + payload_length
         )
+
+        self._log_event("TCP_DATA_RECEIVED", ["ACK"], {"data_length": payload_length})
     
         return TCPPacket(
             source_port=self.local_port,
@@ -272,6 +313,7 @@ class TCPConnection:
 
             self.state = TCPState.FIN_WAIT1
             self.sequence_number += 1
+            self._log_event("TCP_FIN_SENT", ["FIN", "ACK"])
 
             return packet
 
@@ -286,6 +328,7 @@ class TCPConnection:
 
             self.sequence_number += 1
             self.state = TCPState.LAST_ACK
+            self._log_event("TCP_LAST_ACK", ["FIN", "ACK"])
 
             return packet
 
@@ -301,6 +344,7 @@ class TCPConnection:
             )
 
         self.state = TCPState.LISTEN
+        self._log_event("TCP_LISTEN", [])
 
         return None
 
@@ -318,6 +362,7 @@ class TCPConnection:
 
             self.time_wait_remaining = None
             self.state = TCPState.CLOSED
+            self._log_event("TCP_CLOSED_TIME_WAIT_EXPIRED", [])
 
     def reset(self):
 
@@ -326,6 +371,7 @@ class TCPConnection:
 
         self.state = TCPState.CLOSED
         self.time_wait_remaining = None
+        self._log_event("TCP_RESET_SENT", ["RST"])
 
         return TCPPacket(
             source_port=self.local_port,

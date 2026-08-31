@@ -159,7 +159,8 @@ client_tcp = TCPConnection(
     local_ip=pc.interfaces[0].ip,
     local_port=49152,
     remote_ip=web.interfaces[0].ip,
-    remote_port=80
+    remote_port=80,
+    network=network
 )
 
 client_key = (

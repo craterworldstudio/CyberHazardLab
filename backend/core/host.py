@@ -2,18 +2,22 @@ from dataclasses import dataclass, field
 
 from backend.network.packet import *
 from backend.network.tcp import TCPConnection
+from backend.network.udp import UDPConnection
 from .service import Service
 from .interface import NetworkInterface
 from .mac import generate_mac
+from .event import Event
 
 @dataclass
 class Host:
     name: str
     interfaces: list[NetworkInterface] = field(default_factory=list)
     services: list[Service] = field(default_factory=list)
+    network: Any = None
 
     def __post_init__(self):
         self.tcp_connections = {}
+        self.udp_connections = {}
         if not self.interfaces:
             self.add_interface(NetworkInterface(
                 name="eth0", mac=generate_mac(), owner=self
@@ -25,7 +29,6 @@ class Host:
     def add_interface(self, interface: NetworkInterface):
         interface.owner = self
         self.interfaces.append(interface)
-        
 
     def get_interface(self, interface_name):
 
@@ -70,12 +73,13 @@ class Host:
         if packet.protocol.upper() == "TCP":
 
             return self.receive_tcp(
-                interface,
-                packet
+                interface, packet
             )
 
         if packet.protocol.upper() == "UDP":
-            pass
+            return self.receive_udp(
+                interface, packet
+            )
 
         return None
 
@@ -115,7 +119,8 @@ class Host:
                 local_ip=packet.destination_ip,
                 local_port=tcp_packet.destination_port,
                 remote_ip=packet.source_ip,
-                remote_port=tcp_packet.source_port
+                remote_port=tcp_packet.source_port,
+                network=self.interfaces[0].network
             )
 
             connection.listen()
@@ -136,4 +141,81 @@ class Host:
         )
 
         return interface.send_ip_packet(response_packet)
+
+    def receive_udp(self, interface, packet):
+
+        udp = packet.payload
+    
+        if not isinstance(udp, UDPPacket):
+            self.network.add_event(Event(
+                type="UDP_DATAGRAM_DROPPED",
+                source=packet.source_ip,
+                destination=packet.destination_ip,
+                protocol="UDP",
+                metadata={
+                    "reason": "INVALID_PACKET"
+                }
+            ))
+            return None
+    
+        service = self.network.get_service_by_port(
+            self,
+            "UDP",
+            udp.destination_port
+        )
+    
+        if service is None:
+            self.network.add_event(Event(
+                type="UDP_PORT_UNREACHABLE",
+                source=packet.source_ip,
+                destination=packet.destination_ip,
+                protocol="UDP",
+                port=udp.destination_port,
+                metadata={
+                    "source_port": udp.source_port,
+                    "destination_port": udp.destination_port,
+                    "host": self.name,
+                    "reason": "PORT_CLOSED"
+                }
+            ))
+            return None
+    
+        if service.status.lower() != "running":
+            self.network.add_event(Event(
+                type="UDP_DATAGRAM_DROPPED",
+                source=packet.source_ip,
+                destination=packet.destination_ip,
+                protocol="UDP",
+                port=udp.destination_port,
+                metadata={
+                    "source_port": udp.source_port,
+                    "destination_port": udp.destination_port,
+                    "host": self.name,
+                    "reason": "SERVICE_STOPPED"
+                }
+            ))
+            return None
+    
+        # Find/create the UDP connection for this endpoint pair
+        key = (
+            packet.source_ip,
+            udp.source_port,
+            packet.destination_ip,
+            udp.destination_port
+        )
+    
+        connection = self.udp_connections.get(key)
+    
+        if connection is None:
+            connection = UDPConnection(
+                local_ip=packet.destination_ip,
+                local_port=udp.destination_port,
+                remote_ip=packet.source_ip,
+                remote_port=udp.source_port
+            )
+    
+            self.udp_connections[key] = connection
+    
+        return connection.receive(udp)
+
 

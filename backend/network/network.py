@@ -68,7 +68,7 @@ class Network:
 				)
 
 			
-
+		host.network = self
 		self.hosts[host.get_ip()] = host
 
 	def add_event(self, event: Event):
@@ -156,6 +156,16 @@ class Network:
 		for service in host.services:
 				if service.name.lower() == service_name.lower():
 					return service
+
+		return None
+
+	def get_service_by_port(self, host: Host, protocol: str, port: int):
+		for service in host.services:
+			if (
+				service.protocol.upper() == protocol.upper()
+				and service.port == port
+			):
+				return service
 
 		return None
 

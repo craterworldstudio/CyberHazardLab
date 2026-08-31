@@ -31,3 +31,19 @@ class TCPPacket:
     acknowledgement_number: int 
     flags : set[str] = field(default_factory=set)
     payload: Any = None
+
+
+@dataclass
+class UDPPacket:
+    source_port: int
+    destination_port: int
+    payload: Any = None
+
+    def __repr__(self):
+        return (
+            f"UDPPacket("
+            f"source_port={self.source_port}, "
+            f"destination_port={self.destination_port}, "
+            f"payload={self.payload!r}"
+            f")"
+        )
