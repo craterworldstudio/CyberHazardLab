@@ -34,7 +34,7 @@ Designed specifically for students and aspiring network/security professionals, 
 | Phase | Description | Progress | Status |
 | :--- | :--- | :--- | :---: |
 | **Phase 1** | Foundation             | `████████████████████` 4/4 | ✅ Done |
-| **Phase 2** | Local Networking       | `██████████████████░░` 8/9 | 🟡 In Progress |
+| **Phase 2** | Local Networking       | `████████████████████` 9/9 | ✅ Done |
 | **Phase 3** | Transport Layer        | `███████████████░░░░░` 6/8 | 🟡 In Progress |
 | **Phase 4** | Network Infrastructure | `████████████░░░░░░░░` 3/5 | 🟡 In Progress |
 | **Phase 5** | Application Layer      | `░░░░░░░░░░░░░░░░░░░░` 0/4 | ❌ Not Started |
@@ -60,7 +60,7 @@ Designed specifically for students and aspiring network/security professionals, 
 - [x] Layer 2 Switch emulation
 - [x] ARP → Ethernet integration
 - [x] Multi-Switch network environments
-- [ ] Network orchestrator
+- [x] Network orchestrator
 
 #### PHASE 3 — Transport Layer 🟡
 - [x] ARP integration
