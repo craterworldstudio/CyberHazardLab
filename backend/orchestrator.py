@@ -263,6 +263,21 @@ class Simulation:
 
         return connection
 
+    def remove_tcp_connection(self, connection):
+
+        key = (
+            connection.remote_ip,
+            connection.remote_port,
+            connection.local_ip,
+            connection.local_port
+        )
+
+        self.tcp_connections.pop(key, None)
+
+        host = self.get_host_by_ip(connection.local_ip)
+
+        host.tcp_connections.pop(key, None)
+
     def tcp_connect( self, connection ):
 
         packet = connection.connect()
@@ -319,6 +334,22 @@ class Simulation:
 
         return connection
 
+
+    def remove_udp_connection(self, connection):
+
+        key = (
+            connection.remote_ip,
+            connection.remote_port,
+            connection.local_ip,
+            connection.local_port
+        )
+
+        self.udp_connections.pop(key, None)
+
+        host = self.get_host_by_ip(connection.local_ip)
+
+        host.udp_connections.pop(key, None)
+        
     def udp_send( self, connection, data ):
 
         packet = connection.send(data)
@@ -337,6 +368,42 @@ class Simulation:
             ip_packet
         )
 
+    # ========================================================
+    # CONNECTION MANAGEMENT
+    # ========================================================
+
+    def get_tcp_connection( self, source, source_port, destination, destination_port ):
+        if isinstance(source, str):
+            source = self.get_host(source)
+
+        if isinstance(destination, str):
+            destination = self.get_host(destination)
+
+        key = (
+            destination.get_ip(),
+            destination_port,
+            source.get_ip(),
+            source_port
+        )
+
+        return self.tcp_connections.get(key)
+
+
+    def get_udp_connection( self, source, source_port, destination, destination_port ):
+        if isinstance(source, str):
+            source = self.get_host(source)
+
+        if isinstance(destination, str):
+            destination = self.get_host(destination)
+
+        key = (
+            destination.get_ip(),
+            destination_port,
+            source.get_ip(),
+            source_port
+        )
+
+        return self.udp_connections.get(key)
     # ========================================================
     # GENERIC PACKET SENDING
     # ========================================================

@@ -83,6 +83,8 @@ class Host:
 
         return None
 
+
+
     def receive_tcp(self, interface, packet):
         print(
             f"{self.name} received TCP ", f"{packet.source_ip}:{packet.payload.source_port} -> ", f"{packet.destination_ip}:{packet.payload.destination_port}"
@@ -141,6 +143,45 @@ class Host:
         )
 
         return interface.send_ip_packet(response_packet)
+
+    def add_tcp_connection(self, connection):
+        key = (
+            connection.local_ip,
+            connection.local_port,
+            connection.remote_ip,
+            connection.remote_port
+        )
+
+        if key in self.tcp_connections:
+            raise ValueError(
+                f"TCP connection already exists: {key}"
+            )
+
+        self.tcp_connections[key] = connection
+        return connection
+
+    def get_tcp_connection( self, local_ip, local_port, remote_ip, remote_port ):
+        key = (
+            local_ip,
+            local_port,
+            remote_ip,
+            remote_port
+        )
+
+        return self.tcp_connections.get(key)
+
+    def remove_tcp_connection( self, local_ip, local_port, remote_ip, remote_port ):
+        key = (
+            local_ip,
+            local_port,
+            remote_ip,
+            remote_port
+        )
+
+        return self.tcp_connections.pop(key, None)
+
+
+
 
     def receive_udp(self, interface, packet):
 
@@ -219,4 +260,39 @@ class Host:
     
         return connection.receive(udp)
 
+    def add_udp_connection(self, connection):
+        key = (
+            connection.local_ip,
+            connection.local_port,
+            connection.remote_ip,
+            connection.remote_port
+        )
+
+        if key in self.udp_connections:
+            raise ValueError(
+                f"UDP connection already exists: {key}"
+            )
+
+        self.udp_connections[key] = connection
+        return connection
+
+    def get_udp_connection( self, local_ip, local_port, remote_ip, remote_port ):
+        key = (
+            local_ip,
+            local_port,
+            remote_ip,
+            remote_port
+        )
+
+        return self.udp_connections.get(key)
+
+    def remove_udp_connection( self, local_ip, local_port, remote_ip, remote_port ):
+        key = (
+            local_ip,
+            local_port,
+            remote_ip,
+            remote_port
+        )
+
+        return self.udp_connections.pop(key, None)
 
