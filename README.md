@@ -34,8 +34,8 @@ Designed specifically for students and aspiring network/security professionals, 
 | Phase | Description | Progress | Status |
 | :--- | :--- | :--- | :---: |
 | **Phase 1** | Foundation             | `████████████████████` 4/4 | ✅ Done |
-| **Phase 2** | Local Networking       | `██████████████████░░` 8/9 | ✅ Done |
-| **Phase 3** | Transport Layer        | `█████████████░░░░░░░` 5/8 | 🟡 In Progress |
+| **Phase 2** | Local Networking       | `██████████████████░░` 8/9 | 🟡 In Progress |
+| **Phase 3** | Transport Layer        | `███████████████░░░░░` 6/8 | 🟡 In Progress |
 | **Phase 4** | Network Infrastructure | `████████████░░░░░░░░` 3/5 | 🟡 In Progress |
 | **Phase 5** | Application Layer      | `░░░░░░░░░░░░░░░░░░░░` 0/4 | ❌ Not Started |
 | **Phase 6** | SOC Integration        | `███░░░░░░░░░░░░░░░░░` 1/6 | 🟡 In Progress |
@@ -67,7 +67,7 @@ Designed specifically for students and aspiring network/security professionals, 
 - [x] ARP cache tables
 - [x] IP packet forwarding
 - [x] TCP state machine
-- [ ] UDP communication
+- [x] UDP communication
 - [x] TCP 3-way handshake simulation
 - [ ] Active connection management
 - [ ] Raw data streams

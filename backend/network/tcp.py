@@ -55,12 +55,12 @@ class TCPConnection:
         if metadata:
             event_metadata.update(metadata)
 
-        self.network.add_event(
-            event_type,
-            f"{self.local_ip}:{self.local_port}",
-            f"{self.remote_ip}:{self.remote_port}",
-            "TCP",
-            event_metadata
+        self.network.add_event(Event(
+            type=event_type,
+            source=f"{self.local_ip}:{self.local_port}",
+            destination=f"{self.remote_ip}:{self.remote_port}",
+            protocol="TCP",
+            metadata=event_metadata)
         )
 
     #client connect

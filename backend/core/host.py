@@ -211,7 +211,8 @@ class Host:
                 local_ip=packet.destination_ip,
                 local_port=udp.destination_port,
                 remote_ip=packet.source_ip,
-                remote_port=udp.source_port
+                remote_port=udp.source_port,
+                network=self.network
             )
     
             self.udp_connections[key] = connection
