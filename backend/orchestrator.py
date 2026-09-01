@@ -325,6 +325,16 @@ class Simulation:
         if isinstance(destination, str):
             destination = self.get_host(destination)
 
+        existing = self.get_udp_connection(
+            source,
+            source_port,
+            destination,
+            destination_port
+        )
+        
+        if existing is not None:
+            return existing
+
         connection = UDPConnection(
             local_ip=source.get_ip(),
             local_port=source_port,
