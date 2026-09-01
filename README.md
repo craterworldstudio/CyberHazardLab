@@ -35,7 +35,7 @@ Designed specifically for students and aspiring network/security professionals, 
 | :--- | :--- | :--- | :---: |
 | **Phase 1** | Foundation             | `████████████████████` 4/4 | ✅ Done |
 | **Phase 2** | Local Networking       | `████████████████████` 9/9 | ✅ Done |
-| **Phase 3** | Transport Layer        | `█████████████████░░░` 7/8 | 🟡 In Progress |
+| **Phase 3** | Transport Layer        | `████████████████████` 8/8 | ✅ Done |
 | **Phase 4** | Network Infrastructure | `████████████░░░░░░░░` 3/5 | 🟡 In Progress |
 | **Phase 5** | Application Layer      | `░░░░░░░░░░░░░░░░░░░░` 0/4 | ❌ Not Started |
 | **Phase 6** | SOC Integration        | `███░░░░░░░░░░░░░░░░░` 1/6 | 🟡 In Progress |
@@ -69,7 +69,7 @@ Designed specifically for students and aspiring network/security professionals, 
 - [x] TCP state machine
 - [x] UDP communication
 - [x] TCP 3-way handshake simulation
-- [ ] Active connection management
+- [x] Active connection management
 - [x] Raw data streams
 
 #### PHASE 4 — Network Infrastructure 🟡

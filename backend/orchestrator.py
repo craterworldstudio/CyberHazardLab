@@ -242,6 +242,16 @@ class Simulation:
         if isinstance(destination, str):
             destination = self.get_host(destination)
 
+        existing = self.get_tcp_connection(
+            source,
+            source_port,
+            destination,
+            destination_port
+        )
+        
+        if existing is not None:
+            return existing
+
         connection = TCPConnection(
             local_ip=source.get_ip(),
             local_port=source_port,
@@ -334,7 +344,6 @@ class Simulation:
 
         return connection
 
-
     def remove_udp_connection(self, connection):
 
         key = (
@@ -349,7 +358,7 @@ class Simulation:
         host = self.get_host_by_ip(connection.local_ip)
 
         host.udp_connections.pop(key, None)
-        
+
     def udp_send( self, connection, data ):
 
         packet = connection.send(data)
@@ -388,7 +397,6 @@ class Simulation:
 
         return self.tcp_connections.get(key)
 
-
     def get_udp_connection( self, source, source_port, destination, destination_port ):
         if isinstance(source, str):
             source = self.get_host(source)
@@ -404,6 +412,39 @@ class Simulation:
         )
 
         return self.udp_connections.get(key)
+
+    def get_active_connections(self):
+
+        return {
+            "tcp": [
+                {
+                    "local": (
+                        connection.local_ip,
+                        connection.local_port
+                    ),
+                    "remote": (
+                        connection.remote_ip,
+                        connection.remote_port
+                    ),
+                    "state": connection.state.value
+                }
+                for connection in self.tcp_connections.values()
+            ],
+
+            "udp": [
+                {
+                    "local": (
+                        connection.local_ip,
+                        connection.local_port
+                    ),
+                    "remote": (
+                        connection.remote_ip,
+                        connection.remote_port
+                    )
+                }
+                for connection in self.udp_connections.values()
+            ]
+        }
     # ========================================================
     # GENERIC PACKET SENDING
     # ========================================================
@@ -435,9 +476,12 @@ class Simulation:
                 "seconds cannot be negative"
             )
 
-        for connection in self.tcp_connections.values():
+        for connection in list(self.tcp_connections.values()):
 
             connection.tick(seconds)
+
+            if connection.state.value == "CLOSED":
+                self.remove_tcp_connection(connection)
 
     # ========================================================
     # TELEMETRY
