@@ -62,7 +62,7 @@ Designed specifically for students and aspiring network/security professionals, 
 - [x] Multi-Switch network environments
 - [x] Network orchestrator
 
-#### PHASE 3 — Transport Layer 🟡
+#### PHASE 3 — Transport Layer ✅
 - [x] ARP integration
 - [x] ARP cache tables
 - [x] IP packet forwarding
