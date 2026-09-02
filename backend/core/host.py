@@ -7,10 +7,12 @@ from .service import Service
 from .interface import NetworkInterface
 from .mac import generate_mac
 from .event import Event
+from .device import DeviceType
 
 @dataclass
 class Host:
     name: str
+    device_type: DeviceType = DeviceType.PC
     interfaces: list[NetworkInterface] = field(default_factory=list)
     services: list[Service] = field(default_factory=list)
     network: Any = None
@@ -71,15 +73,14 @@ class Host:
     def receive_packet(self, interface, packet):
 
         if packet.protocol.upper() == "TCP":
-
-            return self.receive_tcp(
-                interface, packet
-            )
+            return self.receive_tcp(interface, packet)
 
         if packet.protocol.upper() == "UDP":
-            return self.receive_udp(
-                interface, packet
-            )
+            return self.receive_udp(interface, packet)
+
+        if packet.protocol.upper() == "ICMP":
+            return self.receive_icmp(interface, packet)
+
 
         return None
 
@@ -296,3 +297,87 @@ class Host:
 
         return self.udp_connections.pop(key, None)
 
+
+    def receive_icmp(self, interface, packet):
+
+        icmp = packet.payload
+
+        if not isinstance(icmp, ICMPPacket):
+
+            self.network.add_event(Event(
+                type="ICMP_PACKET_DROPPED",
+                source=packet.source_ip,
+                destination=packet.destination_ip,
+                protocol="ICMP",
+                metadata={
+                    "reason": "INVALID_PACKET"
+                }
+            ))
+
+            return None
+
+        if icmp.type == "ECHO_REQUEST":
+
+            self.network.add_event(Event(
+                type="ICMP_ECHO_REQUEST_RECEIVED",
+                source=packet.source_ip,
+                destination=packet.destination_ip,
+                protocol="ICMP"
+            ))
+
+            reply = ICMPPacket(
+                type="ECHO_REPLY",
+                code=0,
+                payload=icmp.payload
+            )
+
+            response = Packet(
+                source_ip=interface.ip,
+                destination_ip=packet.source_ip,
+                protocol="ICMP",
+                payload=reply
+            )
+
+            self.network.add_event(Event(
+                type="ICMP_ECHO_REPLY_SENT",
+                source=packet.destination_ip,
+                destination=packet.source_ip,
+                protocol="ICMP"
+            ))
+
+            return interface.send_ip_packet(response)
+
+        if icmp.type == "ECHO_REPLY":
+
+            self.network.add_event(Event(
+                type="ICMP_ECHO_REPLY_RECEIVED",
+                source=packet.source_ip,
+                destination=packet.destination_ip,
+                protocol="ICMP"
+            ))
+
+            return icmp.payload
+
+        if icmp.type == "TIME_EXCEEDED":
+
+            self.network.add_event(Event(
+                type="ICMP_TIME_EXCEEDED_RECEIVED",
+                source=packet.source_ip,
+                destination=packet.destination_ip,
+                protocol="ICMP"
+            ))
+
+            return icmp.payload
+
+        if icmp.type == "DESTINATION_UNREACHABLE":
+
+            self.network.add_event(Event(
+                type="ICMP_DESTINATION_UNREACHABLE_RECEIVED",
+                source=packet.source_ip,
+                destination=packet.destination_ip,
+                protocol="ICMP"
+            ))
+
+            return icmp.payload
+
+        return None

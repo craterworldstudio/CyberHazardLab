@@ -53,7 +53,8 @@ sim.add_dhcp_scope(
 
 web = sim.add_host(
     "WEB-01",
-    "10.0.0.0/24"
+    "10.0.0.0/24",
+    sim.get_device_type("server")
 )
 
 pc = sim.add_host(

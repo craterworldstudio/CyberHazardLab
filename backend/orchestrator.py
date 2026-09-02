@@ -8,8 +8,9 @@ from backend.network.router import Router
 from backend.network.link import Link
 from backend.network.tcp import TCPConnection
 from backend.network.udp import UDPConnection
+from backend.core.device import DeviceType
+from backend.network.packet import *
 
-import pprint
 
 class Simulation:
 
@@ -52,9 +53,25 @@ class Simulation:
     # HOSTS
     # ========================================================
 
-    def add_host( self, name, subnet=None):
+    def get_device_type(self, value_str: str) -> DeviceType:
+        """
+        Takes a string input and returns the corresponding HostDeviceType Enum.
+        Returns HostDeviceType.OTHER if the string does not match any valid enum value.
+        """
+        # Clean the input string to handle case sensitivity and whitespace
+        cleaned_input = str(value_str).lower().strip()
 
-        host = Host(name)
+        try:
+            # Looks up the enum member by its exact string value
+            return DeviceType(cleaned_input)
+        except ValueError:
+            # Fallback if the string isn't recognized
+            return DeviceType.OTHER
+        
+
+    def add_host( self, name, subnet=None, device:DeviceType = DeviceType.PC):
+
+        host = Host(name, device_type=device, network=self.network)
 
         host.interfaces[0].attach_network(
             self.network
@@ -230,6 +247,15 @@ class Simulation:
             payload=udp_packet
         )
 
+    @staticmethod
+    def icmp_to_ip_packet( source_interface, destination_ip, icmp_packet ):
+
+        return Packet(
+            source_ip=source_interface.ip,
+            destination_ip=destination_ip,
+            protocol="ICMP",
+            payload=icmp_packet
+        )
     # ========================================================
     # TCP
     # ========================================================
@@ -455,9 +481,30 @@ class Simulation:
                 for connection in self.udp_connections.values()
             ]
         }
+
     # ========================================================
     # GENERIC PACKET SENDING
     # ========================================================
+    def ping(self, source, destination_ip, payload="ping"):
+
+        if isinstance(source, str):
+            source = self.get_host(source)
+
+        interface = source.interfaces[0]
+
+        request = ICMPPacket(
+            type="ECHO_REQUEST",
+            code=0,
+            payload=payload
+        )
+
+        packet = self.icmp_to_ip_packet(
+            interface,
+            destination_ip,
+            request
+        )
+
+        return interface.send_ip_packet(packet)
 
     def send_packet( self, source, destination_ip, packet ):
 
@@ -517,9 +564,10 @@ class Simulation:
             "hosts": [
                 {
                     "name": host.name,
+                    
                     "ip": host.get_ip(),
                     "mac": host.get_mac(),
-
+                    "device_type": host.device_type.name,
                     "services": [
                         {
                             "name": service.name,

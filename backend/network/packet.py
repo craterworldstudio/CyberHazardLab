@@ -47,3 +47,10 @@ class UDPPacket:
             f"payload={self.payload!r}"
             f")"
         )
+
+@dataclass
+class ICMPPacket:
+
+    type: str
+    code: int = 0
+    payload: object = None
