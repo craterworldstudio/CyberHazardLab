@@ -20,6 +20,8 @@ class Host:
     def __post_init__(self):
         self.tcp_connections = {}
         self.udp_connections = {}
+        self.last_icmp_result = None
+
         if not self.interfaces:
             self.add_interface(NetworkInterface(
                 name="eth0", mac=generate_mac(), owner=self
@@ -356,7 +358,14 @@ class Host:
                 protocol="ICMP"
             ))
 
-            return icmp.payload
+            self.last_icmp_result = {
+                "type": "ECHO_REPLY",
+                "source": packet.source_ip,
+                "destination": packet.destination_ip,
+                "payload": icmp.payload
+            }
+
+            return self.last_icmp_result
 
         if icmp.type == "TIME_EXCEEDED":
 
@@ -367,7 +376,14 @@ class Host:
                 protocol="ICMP"
             ))
 
-            return icmp.payload
+            self.last_icmp_result = {
+                "type": "TIME_EXCEEDED",
+                "source": packet.source_ip,
+                "destination": packet.destination_ip,
+                "payload": icmp.payload
+            }
+
+            return self.last_icmp_result
 
         if icmp.type == "DESTINATION_UNREACHABLE":
 
@@ -378,6 +394,13 @@ class Host:
                 protocol="ICMP"
             ))
 
-            return icmp.payload
+            self.last_icmp_result = {
+                "type": "DESTINATION_UNREACHABLE",
+                "source": packet.source_ip,
+                "destination": packet.destination_ip,
+                "payload": icmp.payload
+            }
+        
+            return self.last_icmp_result
 
         return None

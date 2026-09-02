@@ -8,7 +8,16 @@ class Packet:
     destination_ip: str
     protocol: str
     payload: Any = None
+    ttl: int = 64
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+
+        if not isinstance(self.ttl, int):
+            raise TypeError("TTL must be an integer")
+
+        if self.ttl < 0:
+            raise ValueError("TTL cannot be negative")
 
 
 @dataclass

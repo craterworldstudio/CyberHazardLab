@@ -6,6 +6,7 @@ from .frame import EthernetFrame
 from ..core.event import Event
 from ..core.interface import NetworkInterface
 from ..core.mac import generate_mac
+from .packet import *
 
 class Router:
 
@@ -91,6 +92,65 @@ class Router:
             key=lambda route: route["destination"].prefixlen
         )
 
+    def send_icmp_time_exceeded(self, packet, in_interface):
+
+        icmp = ICMPPacket(
+            type="TIME_EXCEEDED",
+            code=0,
+            payload=packet
+        )
+
+        response = Packet(
+            source_ip=in_interface.ip,
+            destination_ip=packet.source_ip,
+            protocol="ICMP",
+            payload=icmp
+        )
+
+        self.network.add_event(Event(
+            type="ICMP_TIME_EXCEEDED_SENT",
+            source=in_interface.ip,
+            destination=packet.source_ip,
+            protocol="ICMP",
+            metadata={
+                "router": self.name,
+                "interface": in_interface.name
+            }
+        ))
+
+
+        return self.send_ip_packet(response)
+
+    def send_ip_packet(self, packet):
+
+        route = self.lookup_route(packet.destination_ip)
+
+        if route is None:
+            return "NO_ROUTE"
+
+        out_interface = route["interface"]
+
+        next_hop_ip = route["next_hop"]
+
+        if next_hop_ip is None:
+            next_hop_ip = packet.destination_ip
+
+        destination_mac = out_interface.arp.resolve(
+            out_interface,
+            next_hop_ip
+        )
+
+        if destination_mac is None:
+            return "ARP_FAILED"
+
+        frame = EthernetFrame(
+            source_mac=out_interface.mac,
+            destination_mac=destination_mac,
+            payload=packet
+        )
+
+        return out_interface.send(frame)
+
     def receive(self, frame, in_interface):
         
         print(
@@ -111,10 +171,16 @@ class Router:
         
     
         destination_ip = packet.destination_ip
-    
         if destination_ip == in_interface.ip:
             return "ROUTER_DESTINATION"
-
+        
+        if packet.ttl <= 1:
+            return self.send_icmp_time_exceeded(
+                packet,
+                in_interface
+            )
+        packet.ttl -= 1
+        
         route = self.lookup_route(destination_ip)
 
         if route is None:

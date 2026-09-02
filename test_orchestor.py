@@ -1,6 +1,8 @@
 from backend import Simulation
 import pprint
 
+from backend.network.packet import ICMPPacket, Packet
+
 # ============================================================
 # SIMULATION
 # ============================================================
@@ -276,6 +278,24 @@ print(
     tcp.state
 )
 
+result = sim.ping(
+    "PC-01",
+    "10.0.0.100",
+    ttl=100
+)
+
+print("\nPING RESULT:")
+print(result)
+
+result = sim.traceroute(
+    "PC-01",
+    "10.0.0.100"
+)
+
+print("\nTRACEROUTE RESULT:")
+
+for hop in result:
+    print(hop)
 
 # ============================================================
 # STATE
@@ -298,7 +318,7 @@ for event in sim.get_events():
 
     timestamp = event.timestamp.strftime("%H:%M:%S")
 
-    e_type = f"{event.type:<25}"
+    e_type = f"{event.type:<30}"
 
     endpoints = (
         f"{event.source} -> {event.destination}"

@@ -228,32 +228,35 @@ class Simulation:
     # ========================================================
 
     @staticmethod
-    def tcp_to_ip_packet( source_interface, destination_ip, tcp_packet):
+    def tcp_to_ip_packet( source_interface, destination_ip, tcp_packet, ttl=64):
 
         return Packet(
             source_ip=source_interface.ip,
             destination_ip=destination_ip,
             protocol="TCP",
+            ttl = ttl,
             payload=tcp_packet
         )
 
     @staticmethod
-    def udp_to_ip_packet( source_interface, destination_ip, udp_packet ):
+    def udp_to_ip_packet( source_interface, destination_ip, udp_packet, ttl=64 ):
 
         return Packet(
             source_ip=source_interface.ip,
             destination_ip=destination_ip,
             protocol="UDP",
+            ttl = ttl,
             payload=udp_packet
         )
 
     @staticmethod
-    def icmp_to_ip_packet( source_interface, destination_ip, icmp_packet ):
+    def icmp_to_ip_packet( source_interface, destination_ip, icmp_packet, ttl=64 ):
 
         return Packet(
             source_ip=source_interface.ip,
             destination_ip=destination_ip,
             protocol="ICMP",
+            ttl = ttl,
             payload=icmp_packet
         )
     # ========================================================
@@ -485,12 +488,14 @@ class Simulation:
     # ========================================================
     # GENERIC PACKET SENDING
     # ========================================================
-    def ping(self, source, destination_ip, payload="ping"):
+    def ping(self, source, destination_ip, payload="ping", ttl=64):
 
         if isinstance(source, str):
             source = self.get_host(source)
 
         interface = source.interfaces[0]
+        source.last_icmp_result = None
+
 
         request = ICMPPacket(
             type="ECHO_REQUEST",
@@ -501,10 +506,11 @@ class Simulation:
         packet = self.icmp_to_ip_packet(
             interface,
             destination_ip,
-            request
+            request,
+            ttl=ttl
         )
-
-        return interface.send_ip_packet(packet)
+        interface.send_ip_packet(packet)
+        return source.last_icmp_result
 
     def send_packet( self, source, destination_ip, packet ):
 
@@ -521,6 +527,60 @@ class Simulation:
         return source.interfaces[0].send_ip_packet(
             ip_packet
         )
+
+    def traceroute(self, source, destination_ip, max_hops=30):
+
+        if isinstance(source, str):
+            source = self.get_host(source)
+
+        hops = []
+
+        for ttl in range(1, max_hops + 1):
+
+            result = self.ping(
+                source=source,
+                destination_ip=destination_ip,
+                ttl=ttl
+            )
+
+            if result is None:
+                hops.append({
+                    "ttl": ttl,
+                    "address": None,
+                    "type": "TIMEOUT"
+                })
+
+                continue
+
+            if result["type"] == "TIME_EXCEEDED":
+
+                hops.append({
+                    "ttl": ttl,
+                    "address": result["source"],
+                    "type": "TIME_EXCEEDED"
+                })
+
+                continue
+
+            if result["type"] == "ECHO_REPLY":
+
+                hops.append({
+                    "ttl": ttl,
+                    "address": result["source"],
+                    "type": "ECHO_REPLY"
+                })
+
+                break
+
+            hops.append({
+                "ttl": ttl,
+                "address": result["source"],
+                "type": result["type"]
+            })
+
+            break
+
+        return hops
 
     # ========================================================
     # TIME

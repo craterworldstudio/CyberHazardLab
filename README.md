@@ -36,7 +36,7 @@ Designed specifically for students and aspiring network/security professionals, 
 | **Phase 1** | Foundation             | `████████████████████` 4/4 | ✅ Done |
 | **Phase 2** | Local Networking       | `████████████████████` 9/9 | ✅ Done |
 | **Phase 3** | Transport Layer        | `████████████████████` 8/8 | ✅ Done |
-| **Phase 4** | Network Infrastructure | `████████████░░░░░░░░` 3/5 | 🟡 In Progress |
+| **Phase 4** | Network Infrastructure | `██████████████░░░░░░` 6/8 | 🟡 In Progress |
 | **Phase 5** | Application Layer      | `░░░░░░░░░░░░░░░░░░░░` 0/4 | ❌ Not Started |
 | **Phase 6** | SOC Integration        | `███░░░░░░░░░░░░░░░░░` 1/6 | 🟡 In Progress |
 | **Phase 7** | Penetrator Dashboard   | `░░░░░░░░░░░░░░░░░░░░` 0/5 | ❌ Not Started |
@@ -76,6 +76,9 @@ Designed specifically for students and aspiring network/security professionals, 
 - [x] Router integration
 - [x] Routing table engines
 - [x] Multiple subnet routing
+- [x] ICMP Communication
+- [x] Ping Devices
+- [x] Traceroute
 - [ ] DNS resolution architecture
 - [ ] State-based Firewall
 

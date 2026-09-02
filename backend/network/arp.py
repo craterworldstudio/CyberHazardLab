@@ -16,8 +16,6 @@ class ARP:
         if target_ip in self.cache.keys():
             return self.cache[target_ip]
 
-        target = None
-
         #FROM INTERFACE NOT HOST
         req = ARPPacket(
             operation="REQUEST",
@@ -46,7 +44,14 @@ class ARP:
 
         source.send(frame)
 
-        return self.cache.get(target_ip)
+        print(
+            f"ARP RESOLVE: {source.ip} -> {target_ip} "
+            f"cache={self.cache}"
+        )
+
+
+
+        return self.cache.get(target_ip, None)
 
 
 
@@ -73,7 +78,7 @@ class ARP:
 
             interface.send(frame)
 
-        if packet.operation == "REPLY":
+        elif packet.operation == "REPLY":
 
             self.cache[packet.sender_ip] = packet.sender_mac
 
