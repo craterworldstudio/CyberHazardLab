@@ -94,6 +94,16 @@ class Router:
 
     def send_icmp_time_exceeded(self, packet, in_interface):
 
+        #print(
+        #f"TIME EXCEEDED: router={self.name}, "
+        #f"interface={in_interface.name}, "
+        #f"source={packet.source_ip}, "
+        #f"destination={packet.destination_ip}, "
+        #f"ttl={packet.ttl}"
+        #)
+
+
+
         icmp = ICMPPacket(
             type="TIME_EXCEEDED",
             code=0,
@@ -121,7 +131,42 @@ class Router:
 
         return self.send_ip_packet(response)
 
+    def send_icmp_destination_unreachable( self, packet, in_interface, code=0 ):  
+        icmp = ICMPPacket(
+            type="DESTINATION_UNREACHABLE",
+            code=code,
+            payload=packet
+        )
+
+        response = Packet(
+            source_ip=in_interface.ip,
+            destination_ip=packet.source_ip,
+            protocol="ICMP",
+            payload=icmp
+        )
+
+        self.network.add_event(Event(
+            type="ICMP_DESTINATION_UNREACHABLE_SENT",
+            source=in_interface.ip,
+            destination=packet.source_ip,
+            protocol="ICMP",
+            metadata={
+                "router": self.name,
+                "interface": in_interface.name,
+                "code": code
+            }
+        ))
+
+        return self.send_ip_packet(response)
+
+    
     def send_ip_packet(self, packet):
+
+        #print(
+        #f"ROUTER SEND: {self.name}: "
+        #f"{packet.source_ip} -> {packet.destination_ip}"
+        #)
+
 
         route = self.lookup_route(packet.destination_ip)
 
@@ -153,10 +198,10 @@ class Router:
 
     def receive(self, frame, in_interface):
         
-        print(
-            f"{self.name} received frame "
-            f"on {in_interface.name}: {frame}"
-        )
+        #print(
+        #    f"{self.name} received frame "
+        #    f"on {in_interface.name}: {frame}"
+        #)
     
         packet = frame.payload
 
@@ -184,31 +229,13 @@ class Router:
         route = self.lookup_route(destination_ip)
 
         if route is None:
-            return "NO_ROUTE"
+            return self.send_icmp_destination_unreachable( packet, in_interface )
     
         out_interface = route["interface"]
     
         if out_interface == in_interface:
-            return "SAME_INTERFACE"
-
-        next_hop_ip = route["next_hop"]
-
-        if next_hop_ip is None:
-            next_hop_ip = destination_ip
+            return "SAME_INTERFACE"   
     
-        destination_mac = out_interface.arp.resolve(
-            out_interface,
-            next_hop_ip
-        )
-    
-        if destination_mac is None:
-            return "ARP_FAILED"
-    
-        new_frame = EthernetFrame(
-            source_mac=out_interface.mac,
-            destination_mac=destination_mac,
-            payload=packet
-        )
 
         self.network.add_event(Event(
             type="PACKET_FORWARDED",
@@ -222,4 +249,10 @@ class Router:
                 }
             ))
     
-        return out_interface.send(new_frame)
+        return self.send_ip_packet(packet)
+
+
+
+
+
+

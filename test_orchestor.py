@@ -279,17 +279,17 @@ print(
 )
 
 result = sim.ping(
-    "PC-01",
-    "10.0.0.100",
-    ttl=100
+    source="PC-01",
+    destination_ip="10.0.0.100",
+    ttl=32
 )
 
 print("\nPING RESULT:")
 print(result)
 
 result = sim.traceroute(
-    "PC-01",
-    "10.0.0.100"
+    source="PC-01",
+    destination_ip="10.0.0.100"
 )
 
 print("\nTRACEROUTE RESULT:")

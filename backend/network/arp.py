@@ -44,10 +44,10 @@ class ARP:
 
         source.send(frame)
 
-        print(
-            f"ARP RESOLVE: {source.ip} -> {target_ip} "
-            f"cache={self.cache}"
-        )
+        #print(
+        #    f"ARP RESOLVE: {source.ip} -> {target_ip} "
+        #    f"cache={self.cache}"
+        #)
 
 
 

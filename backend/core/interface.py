@@ -41,7 +41,7 @@ class NetworkInterface:
             if hasattr(self.owner, "receive"):
                 return self.owner.receive( frame, self ) # router: frame, interface
 
-        print(f"\n{self.name} received frame: {frame}")
+        #print(f"\n{self.name} received frame: {frame}")
 
         payload = frame.payload
 

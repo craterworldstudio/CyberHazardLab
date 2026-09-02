@@ -46,6 +46,7 @@ class Switch:
 
     def receive(self, frame: EthernetFrame, in_port):
         #print("swr")
+        
         self.learn(
             frame.source_mac, in_port
         )
