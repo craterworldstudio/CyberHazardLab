@@ -34,6 +34,7 @@ class Router:
             )
         self.eth0.attach_network(self.network)
         self.eth1.attach_network(self.network)
+        
         self.add_interface(self.eth0)
         self.add_interface(self.eth1)  
 
@@ -159,7 +160,6 @@ class Router:
 
         return self.send_ip_packet(response)
 
-    
     def send_ip_packet(self, packet):
 
         #print(
@@ -250,6 +250,12 @@ class Router:
             ))
     
         return self.send_ip_packet(packet)
+
+    def get_interface(self, interface_name):
+        for interface in self.interfaces:
+            if interface.name == interface_name:
+                return interface
+        return None
 
 
 

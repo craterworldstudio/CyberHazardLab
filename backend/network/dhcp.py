@@ -16,8 +16,9 @@ class DHCPScope:
         return ip_address(ip) in self.network
 
     def allocate(self, intf):
-        for lease_intf in self.leases.keys():
-            if intf.mac == lease_intf.mac:
+        
+        for lease_intf_mac in self.leases.keys():
+            if intf.mac == lease_intf_mac:
 
                 return self.leases[intf]
 
@@ -84,7 +85,6 @@ class DHCP:
             raise ValueError(
                 f"No DHCP scope exists for {subnet}"
             )
-
         ip = scope.allocate(interface)
 
         interface.ip = ip

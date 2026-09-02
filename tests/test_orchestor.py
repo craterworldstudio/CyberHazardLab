@@ -2,13 +2,17 @@ from backend import Simulation
 import pprint
 
 from backend.network.packet import ICMPPacket, Packet
+from Application.ntm import NetworkTopologyManager
+
+
+
 
 # ============================================================
 # SIMULATION
 # ============================================================
 
 sim = Simulation("Orchestrator Test")
-
+ntm = NetworkTopologyManager(sim)
 
 # ============================================================
 # SUBNETS
@@ -150,17 +154,17 @@ sim.configure_router_interface(
 # ROUTER CONNECTIONS
 # ============================================================
 
-sim.connect_router_interface(
+sim.connect_switch_to_router(
     sw1,
     router1.eth0
 )
 
-sim.connect_router_interface(
+sim.connect_switch_to_router(
     sw2,
     router2.eth1
 )
 
-sim.connect_router_interfaces(
+sim.connect_interfaces(
     router1.eth1,
     router2.eth0
 )
@@ -305,7 +309,19 @@ print("\n=== SIMULATION STATE ===")
 
 state = sim.get_state()
 
-pprint.pprint(state, indent=4, width=40)
+#pprint.pprint(state, indent=4, width=40)
+print("=== DEVICES ===")
+
+for name, device in ntm.get_devices().items():
+    print(name, type(device).__name__)
+    print("Connections:", ntm.get_device_connections(name))
+    ...
+
+print("\n=== LINKS ===")
+
+for link in ntm.get_links():
+    print(link)
+
 
 
 # ============================================================
@@ -317,15 +333,11 @@ print("\n=== SOC TELEMETRY EVENTS ===")
 for event in sim.get_events():
 
     timestamp = event.timestamp.strftime("%H:%M:%S")
-
     e_type = f"{event.type:<30}"
-
     endpoints = (
         f"{event.source} -> {event.destination}"
     )
-
     ep_fmt = f"{endpoints:<45}"
-
     protocol = (
         f"({event.protocol})".ljust(12)
     )

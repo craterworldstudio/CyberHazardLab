@@ -1,4 +1,6 @@
 from backend.core.host import Host
+from backend.core.interface import NetworkInterface
+from backend.core.mac import generate_mac
 from backend.core.service import Service
 from backend.network.network import Network
 from backend.network.dhcp import DHCP
@@ -68,7 +70,6 @@ class Simulation:
             # Fallback if the string isn't recognized
             return DeviceType.OTHER
         
-
     def add_host( self, name, subnet=None, device:DeviceType = DeviceType.PC):
 
         host = Host(name, device_type=device, network=self.network)
@@ -78,7 +79,7 @@ class Simulation:
         )
 
         if subnet is not None:
-
+            #print(host.interfaces)
             self.dhcp.req_ip(
                 host.interfaces[0],
                 subnet
@@ -98,6 +99,55 @@ class Simulation:
             )
 
         return self.hosts[name]
+
+    def add_host_interface(self, host, name=None, mac=None):
+        if isinstance(host, str):
+            host = self.get_host(host)
+    
+        if name is None:
+            name = f"eth{len(host.interfaces)}"
+    
+        if mac is None:
+            mac = generate_mac()
+    
+        interface = NetworkInterface(
+            name=name,
+            mac=mac,
+            owner=host
+        )
+    
+        interface.attach_network(self.network)
+    
+        host.add_interface(interface)
+    
+        return interface
+
+    def remove_host_interface(self, host, interface):
+        if isinstance(host, str):
+            host = self.get_host(host)
+
+        if isinstance(interface, str):
+            interface = host.get_interface(interface)
+
+        if interface is None:
+            raise ValueError(
+                f"Interface does not exist on {host.name}"
+            )
+
+        if interface.link is not None:
+            raise ValueError(
+                f"Cannot remove {interface.name}: "
+                "interface is connected to a link"
+            )
+
+        if interface not in host.interfaces:
+            raise ValueError(
+                f"{interface.name} does not belong to {host.name}"
+            )
+
+        host.interfaces.remove(interface)
+
+        return interface
 
     # ========================================================
     # SERVICES
@@ -167,6 +217,20 @@ class Simulation:
 
         switch.connect(host)
 
+    def connect_switches(self, switch_a, switch_b):
+        if isinstance(switch_a, str):
+            switch_a = self.switches[switch_a]
+
+        if isinstance(switch_b, str):
+            switch_b = self.switches[switch_b]
+
+        return switch_a.connect_switch(switch_b)
+
+    def remove_switch_port(self, switch, port_number):
+        if isinstance(switch, str):
+            switch = self.switches[switch]
+    
+        return switch.remove_port(port_number)
     # ========================================================
     # ROUTERS
     # ========================================================
@@ -193,7 +257,7 @@ class Simulation:
             subnet=subnet
         )
 
-    def connect_router_interface( self, switch, router_interface ):
+    def connect_switch_to_router( self, switch, router_interface ):
 
         if isinstance(switch, str):
             switch = self.switches[switch]
@@ -202,12 +266,15 @@ class Simulation:
             router_interface
         )
 
-    def connect_router_interfaces( self, interface_a, interface_b ):
+    def connect_interfaces( self, interface_a, interface_b ):
 
         link = Link(
             interface_a,
             interface_b
         )
+
+        self.network.add_link(link)
+
 
         interface_a.connect_link(link)
         interface_b.connect_link(link)
@@ -222,6 +289,56 @@ class Simulation:
             interface=interface,
             next_hop=next_hop
         )
+
+    def add_router_interface(self, router, name=None, mac=None):
+        if isinstance(router, str):
+            router = self.routers[router]
+
+        if name is None:
+            name = f"eth{len(router.interfaces)}"
+
+        if mac is None:
+            mac = generate_mac()
+
+        interface = NetworkInterface(
+            name=name,
+            mac=mac,
+            owner=router
+        )
+
+        interface.attach_network(self.network)
+
+        router.add_interface(interface)
+
+        return interface
+
+    def remove_router_interface(self, router, interface):
+        if isinstance(router, str):
+            router = self.routers[router]
+
+        if isinstance(interface, str):
+            interface = router.get_interface(interface)
+
+        if interface is None:
+            raise ValueError(
+                f"Interface does not exist on {router.name}"
+            )
+
+        if interface.link is not None:
+            raise ValueError(
+                f"Cannot remove {interface.name}: "
+                "interface is connected to a link"
+            )
+
+        if interface not in router.interfaces:
+            raise ValueError(
+                f"{interface.name} does not belong to {router.name}"
+            )
+
+        router.interfaces.remove(interface)
+
+        return interface
+
 
     # ========================================================
     # PACKET HELPERS
@@ -678,5 +795,6 @@ class Simulation:
             ]
         }
 
-
+    def get_links(self):
+        return self.network.links
     

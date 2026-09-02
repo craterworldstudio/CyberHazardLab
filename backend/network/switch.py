@@ -36,6 +36,8 @@ class Switch:
 
         link = Link(interface, port)
 
+        self.network.add_link(link)
+
         port.connect_link(link)
         interface.connect_link(link)
 
@@ -169,6 +171,8 @@ class Switch:
 
         link = Link(local_port, remote_port)
 
+        self.network.add_link(link)
+
         local_port.connect_link(link)  # To SwitchPort
         remote_port.connect_link(link) # To SwitchPort 
 
@@ -184,6 +188,8 @@ class Switch:
         )
 
         link = Link(rut_intf, port)
+
+        self.network.add_link(link)
 
         port.connect_link(link)
         rut_intf.connect_link(link)
@@ -201,7 +207,21 @@ class Switch:
 
         return port
 
+    def remove_port(self, port_number):
+        port = self.ports.get(port_number)
     
+        if port is None:
+            raise ValueError(
+                f"Switch {self.name} does not have port {port_number}"
+            )
+    
+        if port.link is not None:
+            raise ValueError(
+                f"Cannot remove Port-{port_number}: "
+                "port is connected to a link"
+            )
+    
+        return self.ports.pop(port_number)
         
 
 

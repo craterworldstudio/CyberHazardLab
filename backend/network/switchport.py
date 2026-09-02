@@ -25,5 +25,11 @@ class SwitchPort:
             )
         self.link.transmit(frame, self)
 
+    def __repr__(self):
+        # Checks if the port belongs to a parent Switch (e.g., "SW-01")
+        switch_name = getattr(getattr(self, 'owner', None), 'name', None) or getattr(getattr(self, 'switch', None), 'name', 'Switch')
+
+        return f"{switch_name}:Port-{self.port_number}"
+
     
 

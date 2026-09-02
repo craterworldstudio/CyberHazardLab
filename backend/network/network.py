@@ -17,6 +17,7 @@ class Network:
 
 		self.hosts : dict[str, Host] = {}
 		self.events : list[Event] = []
+		self.links = []
 
 		#self.subnet = [ipaddress.ip_network(subnet)]
 		self.subnets = {}
@@ -245,7 +246,10 @@ class Network:
 						}
 					))
 
-
+	def add_link(self, link):
+		if link in self.links:
+			return
+		self.links.append(link)
 
 
 

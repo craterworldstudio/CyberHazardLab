@@ -88,7 +88,7 @@ Designed specifically for students and aspiring network/security professionals, 
 - [ ] Secure Shell (SSH) emulation
 - [ ] Fully integrated DHCP services
 
-#### PHASE 6 — SOC Integration 🟡
+#### PHASE 6 — Application Integration 🟡
 - [x] Network Telemetry generation
 - [ ] Packet & event ingestion engines
 - [ ] Custom detection rule matching
