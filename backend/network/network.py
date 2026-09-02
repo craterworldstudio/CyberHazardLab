@@ -251,7 +251,11 @@ class Network:
 			return
 		self.links.append(link)
 
+	def remove_link(self, link):
+		if link not in self.links:
+			raise ValueError("Link is not registered in the network")
 
+		self.links.remove(link)
 
 
 

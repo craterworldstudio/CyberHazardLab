@@ -97,7 +97,7 @@ router2 = sim.add_router("RUT-02")
 # NTM CONNECTION TESTS
 # ============================================================
 
-print("\n=== NTM CONNECTION TESTS ===")
+print("\n=== Network Topology Manager CONNECTION TESTS ===")
 
 
 # ------------------------------------------------------------
@@ -106,10 +106,7 @@ print("\n=== NTM CONNECTION TESTS ===")
 
 print("\nHost → Switch")
 
-ntm.connect(
-    "WEB-01",
-    "SW-01"
-)
+print(ntm.connect( "WEB-01", "SW-01" ))
 
 
 # ------------------------------------------------------------
@@ -118,10 +115,7 @@ ntm.connect(
 
 print("\nSwitch → Host")
 
-ntm.connect(
-    "SW-02",
-    "PC-01"
-)
+print(ntm.connect( "SW-02", "PC-01" ))
 
 
 # ------------------------------------------------------------
@@ -130,10 +124,7 @@ ntm.connect(
 
 print("\nRouter → Switch")
 
-ntm.connect(
-    "RUT-01",
-    "SW-01"
-)
+print(ntm.connect( "RUT-01", "SW-01" ))
 
 
 # ------------------------------------------------------------
@@ -142,10 +133,7 @@ ntm.connect(
 
 print("\nSwitch → Router")
 
-ntm.connect(
-    "SW-02",
-    "RUT-02"
-)
+print(ntm.connect( "SW-02", "RUT-02" ))
 
 
 # ------------------------------------------------------------
@@ -154,10 +142,7 @@ ntm.connect(
 
 print("\nRouter → Router")
 
-ntm.connect(
-    "RUT-01",
-    "RUT-02"
-)
+print(ntm.connect( "RUT-01", "RUT-02" ))
 
 
 # ------------------------------------------------------------
@@ -166,10 +151,7 @@ ntm.connect(
 
 print("\nSwitch → Switch")
 
-ntm.connect(
-    "SW-01",
-    "SW-02"
-)
+print(ntm.connect( "SW-01", "SW-02" ))
 
 
 # ------------------------------------------------------------
@@ -178,10 +160,7 @@ ntm.connect(
 
 print("\nHost → Router")
 
-ntm.connect(
-    "PC-02",
-    "RUT-01"
-)
+print(ntm.connect( "PC-02", "RUT-01" ))
 
 
 # ------------------------------------------------------------
@@ -190,10 +169,7 @@ ntm.connect(
 
 print("\nRouter → Host")
 
-ntm.connect(
-    "RUT-02",
-    "PC-02"
-)
+print(ntm.connect( "RUT-02", "PC-02" ))
 
 
 # ------------------------------------------------------------
@@ -202,10 +178,7 @@ ntm.connect(
 
 print("\nHost → Host")
 
-ntm.connect(
-    "PC-01",
-    "PC-02"
-)
+print(ntm.connect("PC-01","PC-02"))
 
 
 # ============================================================
@@ -232,6 +205,22 @@ for name, device in ntm.get_devices().items():
 # ============================================================
 
 print("\n=== LINKS ===")
+
+for link in ntm.get_links():
+    print(link)
+
+
+print("\n=== DISCONNECT TEST ===")
+
+print("Disconnected: ", ntm.disconnect("PC-01", "PC-02"))
+
+print("\n=== DEVICES AFTER DISCONNECT ===")
+
+for name, device in ntm.get_devices().items():
+    print(device.name, type(device).__name__)
+    print("Connections:", ntm.get_device_connections(device.name))
+
+print("\n=== LINKS AFTER DISCONNECT ===")
 
 for link in ntm.get_links():
     print(link)

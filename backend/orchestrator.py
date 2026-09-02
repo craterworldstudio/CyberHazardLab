@@ -215,7 +215,7 @@ class Simulation:
         if isinstance(switch, str):
             switch = self.switches[switch]
 
-        switch.connect(host)
+        return switch.connect(host)
 
     def connect_switches(self, switch_a, switch_b):
         if isinstance(switch_a, str):
@@ -229,7 +229,7 @@ class Simulation:
     def remove_switch_port(self, switch, port_number):
         if isinstance(switch, str):
             switch = self.switches[switch]
-    
+
         return switch.remove_port(port_number)
     # ========================================================
     # ROUTERS
@@ -262,7 +262,7 @@ class Simulation:
         if isinstance(switch, str):
             switch = self.switches[switch]
 
-        switch.connect_router(
+        return switch.connect_router(
             router_interface
         )
 
@@ -278,6 +278,8 @@ class Simulation:
 
         interface_a.connect_link(link)
         interface_b.connect_link(link)
+
+        return link
 
     def add_route( self, router, destination, interface, next_hop=None ):
 
@@ -602,6 +604,23 @@ class Simulation:
             ]
         }
 
+    def disconnect(self, link):
+        if link not in self.network.links:
+            raise ValueError("Link is not registered in the network")
+
+        endpoint_a = link.endpointA
+        endpoint_b = link.endpointB
+
+        if hasattr(endpoint_a, "link") and endpoint_a.link is link:
+            endpoint_a.link = None
+
+        if hasattr(endpoint_b, "link") and endpoint_b.link is link:
+            endpoint_b.link = None
+
+        self.network.remove_link(link)
+
+        return link
+    
     # ========================================================
     # GENERIC PACKET SENDING
     # ========================================================
