@@ -3,6 +3,11 @@ class NetworkTopologyManager:
     def __init__(self, simulation):
         self.simulation = simulation
 
+
+    # ========================================================
+    # STATUS/DATA HELPER FUNCTIONS
+    # ========================================================
+
     def get_links(self):
         return self.simulation.get_links()
 
@@ -47,6 +52,10 @@ class NetworkTopologyManager:
             raise ValueError(f"Unknown device: {name}")
 
         return devices[name]
+
+    # ========================================================
+    # CONNECTION MANAGEMENT
+    # ========================================================
 
     def connect(self, device_a, device_b):
         device_a = self.get_device(device_a)
@@ -117,26 +126,26 @@ class NetworkTopologyManager:
     def disconnect(self, device_a, device_b):
         device_a = self.get_device(device_a)
         device_b = self.get_device(device_b)
-    
+
         for link in self.get_links():
             endpoint_a = link.endpointA
             endpoint_b = link.endpointB
-    
+
             owner_a = getattr(endpoint_a, "owner", None)
             if owner_a is None:
                 owner_a = getattr(endpoint_a, "switch", None)
-    
+
             owner_b = getattr(endpoint_b, "owner", None)
             if owner_b is None:
                 owner_b = getattr(endpoint_b, "switch", None)
-    
+
             if (
                 (owner_a is device_a and owner_b is device_b)
                 or
                 (owner_a is device_b and owner_b is device_a)
             ):
                 return self.simulation.disconnect(link)
-    
+
         raise ValueError(
             f"No connection exists between "
             f"{device_a.name} and {device_b.name}"

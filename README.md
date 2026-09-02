@@ -36,8 +36,8 @@ Designed specifically for students and aspiring network/security professionals, 
 | **Phase 1** | Foundation             | `████████████████████` 4/4 | ✅ Done |
 | **Phase 2** | Local Networking       | `████████████████████` 9/9 | ✅ Done |
 | **Phase 3** | Transport Layer        | `████████████████████` 8/8 | ✅ Done |
-| **Phase 4** | Network Infrastructure | `██████████████░░░░░░` 6/8 | 🟡 In Progress |
-| **Phase 5** | Application Layer      | `░░░░░░░░░░░░░░░░░░░░` 0/4 | ❌ Not Started |
+| **Phase 4** | Network Infrastructure | `███████████████░░░░░` 7/9 | 🟡 In Progress |
+| **Phase 5** | Application Layer      | `████░░░░░░░░░░░░░░░░` 1/4 | 🟡 In Progress |
 | **Phase 6** | SOC Integration        | `███░░░░░░░░░░░░░░░░░` 1/6 | 🟡 In Progress |
 | **Phase 7** | Penetrator Dashboard   | `░░░░░░░░░░░░░░░░░░░░` 0/5 | ❌ Not Started |
 
@@ -79,14 +79,15 @@ Designed specifically for students and aspiring network/security professionals, 
 - [x] ICMP Communication
 - [x] Ping Devices
 - [x] Traceroute
+- [x] Dynamic network topology management
 - [ ] DNS resolution architecture
 - [ ] State-based Firewall
 
-#### PHASE 5 — Application Layer ❌
+#### PHASE 5 — Application Layer 🟡
 - [ ] HTTP protocol support
 - [ ] Core DNS services
 - [ ] Secure Shell (SSH) emulation
-- [ ] Fully integrated DHCP services
+- [x] Fully integrated DHCP services
 
 #### PHASE 6 — Application Integration 🟡
 - [x] Network Telemetry generation
