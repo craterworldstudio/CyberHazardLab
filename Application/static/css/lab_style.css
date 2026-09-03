@@ -1,6 +1,6 @@
-/* ================================
-   RESET & VARIABLES
-   ================================ */
+/* ============================================
+   RESET
+   ============================================ */
 
 * {
     margin: 0;
@@ -8,19 +8,32 @@
     box-sizing: border-box;
 }
 
+
+/* ============================================
+   VARIABLES
+   ============================================ */
+
 :root {
     --bg-page: #05070a;
     --bg-floor: #080c10;
+
     --border-color: rgba(0, 229, 255, 0.15);
-    
+
     --cyan: #00e5ff;
+
     --text-primary: #d5ebf2;
     --text-muted: #526870;
 }
 
+
+/* ============================================
+   BODY
+   ============================================ */
+
 body {
     width: 100vw;
     height: 100vh;
+
     overflow: hidden;
 
     background-color: var(--bg-page);
@@ -32,74 +45,296 @@ body {
     flex-direction: column;
 }
 
-/* ================================
-   1. TITLE BAR
-   ================================ */
+
+/* ============================================
+   TITLE BAR
+   ============================================ */
 
 .title-bar {
     height: 32px;
+
     padding: 0 16px;
 
     display: flex;
     align-items: center;
 
     background: rgba(5, 7, 10, 0.95);
+
     border-bottom: 1px solid var(--border-color);
 
     z-index: 10;
+
     flex-shrink: 0;
 }
+
 
 .brand {
     display: flex;
     align-items: center;
+
     gap: 8px;
 
     font-size: 11px;
+
     letter-spacing: 2px;
+
     font-weight: bold;
 }
+
 
 .brand-title {
     color: var(--text-primary);
 }
 
+
 .brand-separator {
     color: var(--border-color);
 }
+
 
 .brand-module {
     color: var(--cyan);
 }
 
-/* ================================
-   2 & 3. TOPOLOGY FLOOR + (+) PATTERN
-   ================================ */
+
+/* ============================================
+   WORKSPACE
+   ============================================ */
+
+.workspace-container {
+    flex: 1;
+
+    width: 100%;
+
+    display: flex;
+
+    overflow: hidden;
+
+    position: relative;
+}
+
+
+/* ============================================
+   DEVICE PALETTE
+   ============================================ */
+
+.palette-sidebar {
+    width: 180px;
+
+    flex-shrink: 0;
+
+    display: flex;
+    flex-direction: column;
+
+    background-color: rgba(5, 7, 10, 0.95);
+
+    border-right: 1px solid var(--border-color);
+
+    z-index: 8;
+
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+
+/* --------------------------------------------
+   Sidebar Header
+   -------------------------------------------- */
+
+.sidebar-header {
+    padding: 10px 12px;
+
+    font-size: 10px;
+
+    letter-spacing: 2px;
+
+    font-weight: bold;
+
+    color: var(--text-muted);
+
+    border-bottom: 1px solid var(--border-color);
+}
+
+
+/* --------------------------------------------
+   Palette Items
+   -------------------------------------------- */
+
+.palette-items {
+    padding: 10px;
+
+    display: flex;
+    flex-direction: column;
+
+    gap: 8px;
+}
+
+
+.palette-item {
+    display: flex;
+    align-items: center;
+
+    gap: 10px;
+
+    padding: 8px;
+
+    background-color: rgba(8, 12, 16, 0.6);
+
+    border: 1px solid rgba(0, 229, 255, 0.1);
+
+    border-radius: 2px;
+
+    cursor: grab;
+
+    transition:
+        background-color 0.15s ease,
+        border-color 0.15s ease;
+}
+
+
+.palette-item:hover:not(.disabled) {
+    background-color: rgba(0, 229, 255, 0.05);
+
+    border-color: rgba(0, 229, 255, 0.4);
+}
+
+
+.palette-item:active:not(.disabled) {
+    cursor: grabbing;
+}
+
+
+/* --------------------------------------------
+   Palette Icon
+   -------------------------------------------- */
+
+.palette-icon {
+    width: 32px;
+    height: 32px;
+
+    object-fit: contain;
+
+    pointer-events: none;
+}
+
+
+/* --------------------------------------------
+   Palette Label
+   -------------------------------------------- */
+
+.palette-label {
+    font-size: 10px;
+
+    letter-spacing: 1px;
+
+    color: var(--text-primary);
+
+    font-weight: bold;
+}
+
+
+/* --------------------------------------------
+   Disabled Devices
+   -------------------------------------------- */
+
+.palette-item.disabled {
+    opacity: 0.35;
+
+    cursor: not-allowed;
+
+    border-style: dashed;
+}
+
+
+/* ============================================
+   TOPOLOGY FLOOR
+   ============================================ */
 
 .topology-floor {
     flex: 1;
-    width: 100%;
+
     position: relative;
+
+    overflow: hidden;
 
     background-color: var(--bg-floor);
 
-    /* 
-       Subtle repeating SVG '+' crosshair grid.
-       30px grid interval, cyan color with low opacity.
-    */
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" viewBox="0 0 30 30"><path d="M 15 11 L 15 19 M 11 15 L 19 15" stroke="rgba(0, 229, 255, 0.14)" stroke-width="1" fill="none"/></svg>');
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30' viewBox='0 0 30 30'%3E%3Cpath d='M 15 11 L 15 19 M 11 15 L 19 15' stroke='%2300e5ff' stroke-opacity='0.14' stroke-width='1' fill='none'/%3E%3C/svg%3E");
+
     background-repeat: repeat;
     background-position: 0 0;
-
-    overflow: hidden;
 }
 
-/* ================================
-   4. STATUS BAR
-   ================================ */
+/* ============================================
+   NETWORK DEVICE
+   ============================================ */
+
+.device-node {
+    position: absolute;
+
+    width: 64px;
+    height: 64px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    cursor: grab;
+
+    user-select: none;
+    -webkit-user-select: none;
+
+    /*
+        Prevent browser image dragging.
+    */
+    -webkit-user-drag: none;
+}
+
+
+.device-node:active {
+    cursor: grabbing;
+}
+
+
+/* --------------------------------------------
+   Device Icon
+   -------------------------------------------- */
+
+.device-icon {
+    width: 64px;
+    height: 64px;
+
+    object-fit: contain;
+
+    pointer-events: none;
+
+    -webkit-user-drag: none;
+}
+
+
+/* --------------------------------------------
+   Selected Device
+   -------------------------------------------- */
+
+.device-node.selected {
+    outline: 1px solid var(--cyan);
+
+    outline-offset: 4px;
+
+    box-shadow:
+        0 0 8px rgba(0, 229, 255, 0.15);
+}
+
+
+/* ============================================
+   STATUS BAR
+   ============================================ */
 
 .status-bar {
     height: 26px;
+
+    flex-shrink: 0;
+
     padding: 0 16px;
 
     display: flex;
@@ -107,104 +342,46 @@ body {
     justify-content: space-between;
 
     background: rgba(5, 7, 10, 0.95);
+
     border-top: 1px solid var(--border-color);
 
     font-size: 10px;
+
     letter-spacing: 2px;
+
     color: var(--text-muted);
 
     z-index: 10;
-    flex-shrink: 0;
 }
+
+
+/* --------------------------------------------
+   Status Groups
+   -------------------------------------------- */
 
 .status-group {
     display: flex;
     align-items: center;
+
     gap: 16px;
 }
 
+
+/* --------------------------------------------
+   Highlight
+   -------------------------------------------- */
+
 .status-item.highlight {
     color: var(--cyan);
+
     font-weight: bold;
 }
+
+
+/* --------------------------------------------
+   Status Values
+   -------------------------------------------- */
 
 .status-val {
     color: var(--text-primary);
-}
-
-/* ================================
-   WORKSPACE LAYOUT & SIDEBAR
-   ================================ */
-
-.workspace-container {
-    flex: 1;
-    display: flex;
-    width: 100%;
-    height: calc(100vh - 58px); /* Account for title (32px) + status bar (26px) */
-    overflow: hidden;
-    position: relative;
-}
-
-.palette-sidebar {
-    width: 180px;
-    background-color: rgba(5, 7, 10, 0.95);
-    border-right: 1px solid var(--border-color);
-    display: flex;
-    flex-direction: column;
-    z-index: 8;
-    user-select: none;
-    -webkit-user-select: none;
-    flex-shrink: 0;
-}
-
-.sidebar-header {
-    padding: 10px 12px;
-    font-size: 10px;
-    letter-spacing: 2px;
-    font-weight: bold;
-    color: var(--text-muted);
-    border-bottom: 1px solid var(--border-color);
-}
-
-.palette-items {
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.palette-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px;
-    background-color: rgba(8, 12, 16, 0.6);
-    border: 1px solid rgba(0, 229, 255, 0.1);
-    border-radius: 2px;
-    cursor: pointer;
-    transition: background-color 0.15s ease, border-color 0.15s ease;
-}
-
-.palette-item:hover:not(.disabled) {
-    background-color: rgba(0, 229, 255, 0.05);
-    border-color: rgba(0, 229, 255, 0.4);
-}
-
-.palette-icon {
-    width: 32px;
-    height: 32px;
-    object-fit: contain;
-}
-
-.palette-label {
-    font-size: 10px;
-    letter-spacing: 1px;
-    color: var(--text-primary);
-    font-weight: bold;
-}
-
-.palette-item.disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
-    border-style: dashed;
 }
