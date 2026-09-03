@@ -1,0 +1,74 @@
+=== NCM DEVICE TESTS ===
+
+--- GET DEVICES ---
+PC-01 Host
+PC-02 Host
+SW-01 Switch
+RUT-01 Router
+
+--- GET DEVICE ---
+Host(name='PC-01', device_type=<DeviceType.PC: 'pc'>, interfaces=[NetworkInterface(name='eth0', mac='02:3c:2b:14:06:c4', ip='10.0.0.100', link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet='10.0.0.0/24', owner=..., arp=<backend.network.arp.ARP object at 0x7719e67f5430>)], services=[], network=<backend.network.network.Network object at 0x7719e69a61b0>)
+<backend.network.switch.Switch object at 0x7719e67f56a0>
+<backend.network.router.Router object at 0x7719e67f5490>
+
+=== NCM INTERFACE TESTS ===
+
+--- INITIAL INTERFACES ---
+
+PC-01:
+NetworkInterface(name='eth0', mac='02:3c:2b:14:06:c4', ip='10.0.0.100', link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet='10.0.0.0/24', owner=Host(name='PC-01', device_type=<DeviceType.PC: 'pc'>, interfaces=[...], services=[], network=<backend.network.network.Network object at 0x7719e69a61b0>), arp=<backend.network.arp.ARP object at 0x7719e67f5430>)
+
+PC-02:
+NetworkInterface(name='eth0', mac='02:55:e2:41:b4:1b', ip='10.0.1.100', link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet='10.0.1.0/24', owner=Host(name='PC-02', device_type=<DeviceType.PC: 'pc'>, interfaces=[...], services=[], network=<backend.network.network.Network object at 0x7719e69a61b0>), arp=<backend.network.arp.ARP object at 0x7719e67f55b0>)
+
+RUT-01:
+NetworkInterface(name='eth0', mac='02:59:74:88:ac:42', ip='10.0.0.1', link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet='10.0.0.0/24', owner=<backend.network.router.Router object at 0x7719e67f5490>, arp=<backend.network.arp.ARP object at 0x7719e67f5760>)
+NetworkInterface(name='eth1', mac='02:af:c9:e9:18:3a', ip='10.0.1.1', link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet='10.0.1.0/24', owner=<backend.network.router.Router object at 0x7719e67f5490>, arp=<backend.network.arp.ARP object at 0x7719e67f5790>)
+
+--- GET INTERFACE ---
+NetworkInterface(name='eth0', mac='02:3c:2b:14:06:c4', ip='10.0.0.100', link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet='10.0.0.0/24', owner=Host(name='PC-01', device_type=<DeviceType.PC: 'pc'>, interfaces=[...], services=[], network=<backend.network.network.Network object at 0x7719e69a61b0>), arp=<backend.network.arp.ARP object at 0x7719e67f5430>)
+
+--- ADD HOST INTERFACE ---
+Created: NetworkInterface(name='eth1', mac='02:49:f8:48:08:a2', ip=None, link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet=None, owner=Host(name='PC-01', device_type=<DeviceType.PC: 'pc'>, interfaces=[NetworkInterface(name='eth0', mac='02:3c:2b:14:06:c4', ip='10.0.0.100', link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet='10.0.0.0/24', owner=..., arp=<backend.network.arp.ARP object at 0x7719e67f5430>), ...], services=[], network=<backend.network.network.Network object at 0x7719e69a61b0>), arp=<backend.network.arp.ARP object at 0x7719e67f58e0>)
+
+--- ADD ROUTER INTERFACE ---
+Created: NetworkInterface(name='eth2', mac='02:1f:dc:18:c5:e2', ip=None, link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet=None, owner=<backend.network.router.Router object at 0x7719e67f5490>, arp=<backend.network.arp.ARP object at 0x7719e67f5850>)
+
+--- INTERFACES AFTER CREATION ---
+
+PC-01:
+NetworkInterface(name='eth0', mac='02:3c:2b:14:06:c4', ip='10.0.0.100', link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet='10.0.0.0/24', owner=Host(name='PC-01', device_type=<DeviceType.PC: 'pc'>, interfaces=[..., NetworkInterface(name='eth1', mac='02:49:f8:48:08:a2', ip=None, link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet=None, owner=..., arp=<backend.network.arp.ARP object at 0x7719e67f58e0>)], services=[], network=<backend.network.network.Network object at 0x7719e69a61b0>), arp=<backend.network.arp.ARP object at 0x7719e67f5430>)
+NetworkInterface(name='eth1', mac='02:49:f8:48:08:a2', ip=None, link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet=None, owner=Host(name='PC-01', device_type=<DeviceType.PC: 'pc'>, interfaces=[NetworkInterface(name='eth0', mac='02:3c:2b:14:06:c4', ip='10.0.0.100', link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet='10.0.0.0/24', owner=..., arp=<backend.network.arp.ARP object at 0x7719e67f5430>), ...], services=[], network=<backend.network.network.Network object at 0x7719e69a61b0>), arp=<backend.network.arp.ARP object at 0x7719e67f58e0>)
+
+RUT-01:
+NetworkInterface(name='eth0', mac='02:59:74:88:ac:42', ip='10.0.0.1', link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet='10.0.0.0/24', owner=<backend.network.router.Router object at 0x7719e67f5490>, arp=<backend.network.arp.ARP object at 0x7719e67f5760>)
+NetworkInterface(name='eth1', mac='02:af:c9:e9:18:3a', ip='10.0.1.1', link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet='10.0.1.0/24', owner=<backend.network.router.Router object at 0x7719e67f5490>, arp=<backend.network.arp.ARP object at 0x7719e67f5790>)
+NetworkInterface(name='eth2', mac='02:1f:dc:18:c5:e2', ip=None, link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet=None, owner=<backend.network.router.Router object at 0x7719e67f5490>, arp=<backend.network.arp.ARP object at 0x7719e67f5850>)
+
+--- REMOVE HOST INTERFACE ---
+Removed: NetworkInterface(name='eth1', mac='02:49:f8:48:08:a2', ip=None, link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet=None, owner=Host(name='PC-01', device_type=<DeviceType.PC: 'pc'>, interfaces=[NetworkInterface(name='eth0', mac='02:3c:2b:14:06:c4', ip='10.0.0.100', link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet='10.0.0.0/24', owner=..., arp=<backend.network.arp.ARP object at 0x7719e67f5430>)], services=[], network=<backend.network.network.Network object at 0x7719e69a61b0>), arp=<backend.network.arp.ARP object at 0x7719e67f58e0>)
+
+--- REMOVE ROUTER INTERFACE ---
+Removed: NetworkInterface(name='eth2', mac='02:1f:dc:18:c5:e2', ip=None, link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet=None, owner=<backend.network.router.Router object at 0x7719e67f5490>, arp=<backend.network.arp.ARP object at 0x7719e67f5850>)
+
+--- FINAL INTERFACES ---
+
+PC-01:
+NetworkInterface(name='eth0', mac='02:3c:2b:14:06:c4', ip='10.0.0.100', link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet='10.0.0.0/24', owner=Host(name='PC-01', device_type=<DeviceType.PC: 'pc'>, interfaces=[...], services=[], network=<backend.network.network.Network object at 0x7719e69a61b0>), arp=<backend.network.arp.ARP object at 0x7719e67f5430>)
+
+RUT-01:
+NetworkInterface(name='eth0', mac='02:59:74:88:ac:42', ip='10.0.0.1', link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet='10.0.0.0/24', owner=<backend.network.router.Router object at 0x7719e67f5490>, arp=<backend.network.arp.ARP object at 0x7719e67f5760>)
+NetworkInterface(name='eth1', mac='02:af:c9:e9:18:3a', ip='10.0.1.1', link=None, network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet='10.0.1.0/24', owner=<backend.network.router.Router object at 0x7719e67f5490>, arp=<backend.network.arp.ARP object at 0x7719e67f5790>)
+
+=== CONNECTED INTERFACE DELETION TEST ===
+
+--- CONNECT PC-01 TO SW-01 ---
+NetworkInterface(name='eth0', mac='02:3c:2b:14:06:c4', ip='10.0.0.100', link=Link(PC-01:eth0 <---> SW-01:Port-1), network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet='10.0.0.0/24', owner=Host(name='PC-01', device_type=<DeviceType.PC: 'pc'>, interfaces=[...], services=[], network=<backend.network.network.Network object at 0x7719e69a61b0>), arp=<backend.network.arp.ARP object at 0x7719e67f5430>)
+
+--- ATTEMPT TO REMOVE CONNECTED INTERFACE ---
+EXPECTED ERROR: Cannot remove eth0: interface is connected to a link
+
+--- VERIFY INTERFACE STILL EXISTS ---
+NetworkInterface(name='eth0', mac='02:3c:2b:14:06:c4', ip='10.0.0.100', link=Link(PC-01:eth0 <---> SW-01:Port-1), network=<backend.network.network.Network object at 0x7719e69a61b0>, subnet='10.0.0.0/24', owner=Host(name='PC-01', device_type=<DeviceType.PC: 'pc'>, interfaces=[...], services=[], network=<backend.network.network.Network object at 0x7719e69a61b0>), arp=<backend.network.arp.ARP object at 0x7719e67f5430>)
+
+=== NCM INITIAL TEST COMPLETE ===
