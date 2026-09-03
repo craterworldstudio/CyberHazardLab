@@ -31,7 +31,6 @@ class NetworkConfigurationManager:
 
         return list(device.interfaces)
 
-
     def get_interface(self, device, interface):      # get the specific device
         device = self.get_device(device) if isinstance(device, str) else device
 
@@ -94,3 +93,7 @@ class NetworkConfigurationManager:
         raise ValueError(
             f"Interfaces cannot be removed from {device.name}"
         )
+
+
+
+    

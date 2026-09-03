@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyber Hazard Lab</title>
+    <link rel="stylesheet" href="css/wel_style.css">
+</head>
+
+<body>
+
+    <div class="grid"></div>
+    <div class="scanlines"></div>
+    <div class="telemetry-overlay">
+        <div class="telemetry-scanlines"></div>
+        <div class="telemetry-stream" id="telemetryStream"></div>
+    </div>
+
+    <main class="welcome">
+
+        <div class="status">
+            <!-- <span class="status-dot"></span> -->
+            <span class="status-dot static-cyan"></span>
+            <span class="status-dot cyan-pulse"></span>
+            <span class="status-dot blinking-red"></span>
+            
+            SYSTEM ONLINE
+        </div>
+
+        <h1>
+            CYBER<br>
+            <span>HAZARD LAB</span>
+        </h1>
+
+        <p class="subtitle">
+            INTERACTIVE NETWORK SECURITY SIMULATION
+        </p>
+
+        <div class="divider"></div>
+
+        <p class="description">
+            Build networks. Analyze traffic. Hunt threats.
+            <br>
+            Simulate the chaos.
+        </p>
+
+        <!-- DUAL ENTER LAB BUTTON CONTROLS -->
+        <div class="button-group">
+            
+            <!-- CREATE BUTTON SLOT -->
+            <div class="button-slot">
+                <button class="enter-button" data-mode="create" data-url="/lab">
+                    <span class="button-content">
+                        <span class="main-text">CREATE // LAB</span>
+                        <span class="arrow">→</span>
+                    </span>
+                    <span class="sub-text">Net.Creator</span>
+                </button>
+            </div>
+
+            <!-- OBSERVE BUTTON SLOT -->
+            <div class="button-slot">
+                <button class="enter-button" data-mode="observe" data-url="/soc">
+                    <span class="button-content">
+                        <span class="main-text">OBSERVE // LAB</span>
+                        <span class="arrow">→</span>
+                    </span>
+                    <span class="sub-text">Net.Observer</span>
+                </button>
+            </div>
+
+        </div>
+
+        <div class="footer">
+            <span>CHL // v0.1</span>
+            <span>LOCAL SIMULATION ENVIRONMENT</span>
+        </div>
+
+    </main>
+
+    <script src="js/wel_app.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,669 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --background: #05070a;
+    --cyan: #00e5ff;
+    --cyan-dark: #007f8f;
+    --text: #e8faff;
+    --muted: #6d8790;
+}
+
+body {
+    min-height: 100vh;
+    overflow: hidden;
+
+    background: var(--background);
+    color: var(--text);
+
+    font-family: "Courier New", monospace;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+
+/* ================================
+   BACKGROUND GRID
+   ================================ */
+
+.grid {
+    position: fixed;
+    inset: 0;
+
+    background-image:
+        linear-gradient(rgba(0, 229, 255, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 229, 255, 0.045) 1px, transparent 1px);
+
+    background-size: 50px 50px;
+
+    transform: perspective(500px) rotateX(55deg) scale(1.5);
+    transform-origin: center bottom;
+
+    opacity: 0.45;
+}
+
+
+/* ================================
+   SCANLINES
+   ================================ */
+
+.scanlines {
+    position: fixed;
+    inset: 0;
+
+    pointer-events: none;
+    z-index: 1; /* Keeps scanlines above grid background */
+
+    background: repeating-linear-gradient(
+        to bottom,
+        transparent 0px,
+        transparent 3px,
+        rgba(255, 255, 255, 0.06) 4px /* Increased opacity for visibility */
+    );
+}
+
+/* ================================
+   TELEMETRY BACKGROUND OVERLAY
+   ================================ */
+
+.telemetry-overlay {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    overflow: hidden;
+    opacity: 0.18; /* Keep subtle so UI content pops */
+    font-family: "Courier New", monospace;
+    font-size: 11px;
+    line-height: 1.4;
+    user-select: none;
+}
+
+/* Subtle CRT Scanline effect on top of text */
+.telemetry-scanlines {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    background: repeating-linear-gradient(
+        to bottom,
+        transparent 0px,
+        transparent 2px,
+        rgba(0, 229, 255, 0.08) 3px
+    );
+}
+
+.telemetry-stream {
+    position: absolute;
+    top: 0;
+    left: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    white-space: pre;
+    color: var(--cyan);
+    text-shadow: 0 0 4px rgba(0, 229, 255, 0.4);
+}
+
+/* Specific Event Color Highlighting */
+.telemetry-line .event-warn {
+    color: #ff304f;
+    font-weight: bold;
+}
+
+.telemetry-line .event-info {
+    color: #00e5ff;
+}
+
+.telemetry-line .event-muted {
+    color: var(--muted);
+}
+
+
+/* ================================
+   WELCOME CONTENT
+   ================================ */
+
+.welcome {
+    position: relative;
+
+    width: min(900px, 90vw);
+
+    text-align: center;
+
+    z-index: 2;
+}
+
+
+/* ================================
+   STATUS
+   ================================ */
+
+.status {
+    display: inline-flex;
+    align-items: center;
+
+    gap: 12px;
+
+    margin-bottom: 30px;
+
+    color: var(--cyan);
+
+    font-size: 12px;
+    letter-spacing: 4px;
+}
+
+
+/* ================================
+   STATUS PULSERS
+   ================================ */
+
+.status-pulsers {
+    display: inline-flex;
+    align-items: center;
+
+    gap: 7px;
+}
+
+
+/* Base dot */
+
+.status-dot {
+    width: 7px;
+    height: 7px;
+
+    border-radius: 50%;
+}
+
+
+/* ================================
+   BLUE
+   Static
+   ================================ */
+
+.static-cyan {
+    background: var(--cyan); /* #008cff; */
+
+    box-shadow:
+        0 0 7px  var(--cyan), /* #008cff,*/
+        0 0 14px var(--cyan); /* rgba(0, 140, 255, 0.7);*/
+}
+
+
+/* ================================
+   RED
+   Blinking
+   ================================ */
+
+.blinking-red {
+    background: #ff304f;
+
+    box-shadow:
+        0 0 7px #ff304f,
+        0 0 14px rgba(255, 48, 79, 0.7);
+
+    animation: redBlink 1.2s infinite;
+}
+
+@keyframes redBlink {
+
+    0%,
+    45%,
+    100% {
+        opacity: 1;
+    }
+
+    50%,
+    90% {
+        opacity: 0.2;
+    }
+}
+
+
+/* ================================
+   CYAN
+   Existing Pulse
+   ================================ */
+
+.cyan-pulse {
+    background: var(--cyan);
+
+    box-shadow:
+        0 0 8px var(--cyan),
+        0 0 18px var(--cyan);
+
+    animation: cyanPulse 2s infinite;
+}
+
+@keyframes cyanPulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.35;
+    }
+}
+
+
+
+/* ================================
+   TITLE
+   ================================ */
+
+h1 {
+    font-family: Arial, Helvetica, sans-serif;
+
+    font-size: clamp(55px, 10vw, 120px);
+    line-height: 0.82;
+
+    font-weight: 900;
+
+    letter-spacing: -6px;
+
+    color: white;
+
+    text-shadow:
+        0 0 20px rgba(0, 229, 255, 0.15);
+}
+
+h1 span {
+    color: var(--cyan);
+
+    text-shadow:
+        0 0 10px rgba(0, 229, 255, 0.7),
+        0 0 35px rgba(0, 229, 255, 0.25);
+}
+
+
+/* ================================
+   SUBTITLE
+   ================================ */
+
+.subtitle {
+    margin-top: 30px;
+
+    color: var(--muted);
+
+    font-size: 13px;
+    letter-spacing: 6px;
+}
+
+
+/* ================================
+   DIVIDER
+   ================================ */
+
+.divider {
+    width: 120px;
+    height: 1px;
+
+    margin: 35px auto;
+
+    background: var(--cyan);
+
+    box-shadow: 0 0 12px var(--cyan);
+}
+
+
+/* ================================
+   DESCRIPTION
+   ================================ */
+
+.description {
+    color: #9db1b7;
+
+    font-size: 15px;
+    line-height: 1.8;
+
+    letter-spacing: 1px;
+}
+
+
+/* ================================
+   DUAL ENTER BUTTON GROUP
+   ================================ */
+
+.button-group {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+
+    gap: 80px;
+
+    margin-top: 45px;
+
+    /*
+       This is the permanent footprint.
+       The actual buttons can grow inside it.
+    */
+    height: 110px;
+}
+
+
+/* ================================
+   BUTTON SLOT
+   ================================ */
+
+.button-slot {
+    position: relative;
+
+    width: 250px;
+    height: 110px;
+
+    flex: 0 0 250px;
+}
+
+
+/* ================================
+   ENTER BUTTON FIX
+   ================================ */
+
+.enter-button {
+    position: absolute;
+
+    top: 50%;
+    left: 50%;
+
+    transform: translate(-50%, -50%);
+
+    width: 250px;
+    height: 50px;
+
+    padding: 0 28px;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center; /* Enforces strict vertical centering */
+
+    border: 1px solid var(--cyan);
+
+    background: rgba(0, 229, 255, 0.04);
+
+    color: var(--cyan);
+
+    font-family: "Courier New", monospace;
+    font-size: 13px;
+    font-weight: bold;
+    letter-spacing: 2px;
+
+    cursor: pointer;
+    overflow: hidden;
+
+    transition:
+        height 0.25s ease,
+        background 0.25s ease,
+        color 0.25s ease,
+        border-color 0.25s ease,
+        box-shadow 0.25s ease;
+}
+
+.button-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    white-space: nowrap;
+    line-height: 1; /* Prevents font metric offset */
+}
+
+/* Ensure hidden arrow doesn't warp vertical flex height */
+.enter-button .arrow {
+    display: inline-flex;
+    align-items: center;
+
+    width: 0;
+    opacity: 0;
+    margin-left: 0;
+
+    transform: translateX(-8px);
+
+    transition:
+        width 0.25s ease,
+        opacity 0.25s ease,
+        margin-left 0.25s ease,
+        transform 0.25s ease;
+}
+
+/* ================================
+   SUBTEXT LAYOUT FIX
+   ================================ */
+
+.sub-text {
+    margin-top: 0;
+
+    color: var(--muted);
+
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+
+    opacity: 0;
+    max-height: 0; /* Prevents hidden element from taking vertical height */
+    overflow: hidden;
+
+    transform: translateY(-4px);
+
+    transition:
+        opacity 0.25s ease,
+        max-height 0.25s ease,
+        margin-top 0.25s ease,
+        transform 0.25s ease,
+        color 0.25s ease;
+}
+
+
+/* ================================
+   EXPANDED SUBTEXT STATE
+   ================================ */
+
+.enter-button:hover .sub-text,
+.enter-button.selected .sub-text {
+    opacity: 1;
+    max-height: 20px; /* Allows smooth expansion when hovered */
+    margin-top: 6px;
+
+    transform: translateY(0);
+}
+
+
+/* ================================
+   EXPANDED STATE
+   ================================ */
+
+/*
+   Both hover AND selected expand the
+   actual button to 80px.
+
+   Because the button is centered inside
+   its fixed slot, it grows equally upward
+   and downward.
+*/
+
+.enter-button:hover,
+.enter-button.selected {
+    height: 80px;
+}
+
+
+/* ================================
+   ARROW — HOVER + SELECTED
+   ================================ */
+
+.enter-button:hover .arrow,
+.enter-button.selected .arrow {
+    width: 20px;
+
+    opacity: 1;
+
+    margin-left: 10px;
+
+    transform: translateX(0);
+}
+
+
+/* ================================
+   SUBTEXT — HOVER + SELECTED
+   ================================ */
+
+.enter-button:hover .sub-text,
+.enter-button.selected .sub-text {
+    opacity: 1;
+
+    transform: translateY(0);
+}
+
+
+/* ================================
+   INVERTED HOVER STATE
+   ================================ */
+
+.enter-button:hover {
+    background: var(--cyan);
+
+    color: var(--background);
+
+    border-color: var(--cyan);
+
+    box-shadow:
+        0 0 25px rgba(0, 229, 255, 0.6),
+        0 0 50px rgba(0, 229, 255, 0.2);
+}
+
+
+/* Hover subtitle also becomes dark */
+
+.enter-button:hover .sub-text {
+    color: var(--background);
+
+    font-weight: bold;
+}
+
+
+/* ================================
+   SELECTED STATE
+   ================================ */
+
+.enter-button.selected {
+    background: var(--cyan);
+
+    color: var(--background);
+
+    border-color: var(--cyan);
+
+    box-shadow:
+        0 0 25px rgba(0, 229, 255, 0.6),
+        0 0 50px rgba(0, 229, 255, 0.2);
+}
+
+
+/* Selected subtitle */
+
+.enter-button.selected .sub-text {
+    color: var(--background);
+
+    font-weight: bold;
+}
+
+
+/* ================================
+   SELECTED + HOVER
+   ================================ */
+
+.enter-button.selected:hover {
+    background: var(--cyan);
+
+    color: var(--background);
+
+    border-color: var(--cyan);
+
+    box-shadow:
+        0 0 30px rgba(0, 229, 255, 0.7),
+        0 0 55px rgba(0, 229, 255, 0.25);
+}
+
+
+
+/* ================================
+   FOOTER
+   ================================ */
+
+.footer {
+    position: fixed;
+
+    left: 0;
+    right: 0;
+    bottom: 25px;
+
+    display: flex;
+    justify-content: space-between;
+
+    padding: 0 35px;
+
+    color: #35484e;
+
+    font-size: 10px;
+    letter-spacing: 2px;
+}
+
+
+/* ================================
+   MOBILE ADJUSTMENTS
+   ================================ */
+
+@media (max-width: 600px) {
+
+    body {
+        /* Allow scrolling on small screens if content overflows vertical height */
+        overflow-y: auto;
+    }
+
+    .button-group {
+        flex-direction: column;
+        align-items: center;
+        gap: 15px;
+        height: auto; /* Reset fixed height for column layout */
+    }
+
+    .button-slot {
+        width: 100%;
+        max-width: 280px;
+        height: 80px; /* Reduced slot height for mobile stacked layout */
+        flex: 0 0 80px;
+    }
+
+    .enter-button {
+        width: 100%;
+        max-width: 280px;
+    }
+
+    h1 {
+        letter-spacing: -3px;
+    }
+
+    .subtitle {
+        font-size: 10px;
+        letter-spacing: 3px;
+    }
+
+    .description {
+        font-size: 13px;
+    }
+
+    .footer {
+        position: relative; /* Prevent overlap with buttons on short viewports */
+        margin-top: 40px;
+        bottom: 0;
+        flex-direction: column;
+        gap: 8px;
+        text-align: center;
+    }
+}

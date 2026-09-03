@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CHL // Net.Creator</title>
+    <link rel="stylesheet" href="/css/lab_style.css">
+</head>
+
+<body>
+
+    <!-- MINIMAL TITLE BAR -->
+    <header class="title-bar">
+        <div class="brand">
+            <span class="brand-title">CYBER HAZARD LAB</span>
+            <span class="brand-separator">//</span>
+            <span class="brand-module">NET.CREATOR</span>
+        </div>
+    </header>
+
+
+    <!-- WORKSPACE WRAPPER -->
+    <div class="workspace-container">
+        
+        <!-- SIDEBAR PALETTE -->
+        <aside class="palette-sidebar" id="paletteSidebar">
+            <div class="sidebar-header">DEVICES</div>
+            <div class="palette-items">
+                
+                <div class="palette-item" data-type="PC" draggable="true">
+                    <img src="/static/assets/PC_off.png" alt="PC Host" class="palette-icon">
+                    <span class="palette-label">PC HOST</span>
+                </div>
+
+                <!-- Extensible slots for future devices -->
+                <div class="palette-item disabled" data-type="ROUTER">
+                    <span class="palette-label">ROUTER</span>
+                </div>
+
+                <div class="palette-item disabled" data-type="SWITCH">
+                    <span class="palette-label">SWITCH</span>
+                </div>
+
+            </div>
+        </aside>
+
+        <!-- TOPOLOGY FLOOR / CANVAS WORKSPACE -->
+        <main class="topology-floor" id="topologyFloor">
+            <!-- Dynamic devices will be mounted here -->
+        </main>
+
+    </div>
+
+
+
+
+
+    <!-- TOPOLOGY FLOOR / CANVAS WORKSPACE -->
+    <main class="topology-floor" id="topologyFloor">
+        <!-- Draggable devices & links will be dynamically mounted here -->
+    </main>
+
+    <!-- MINIMAL STATUS BAR -->
+    <footer class="status-bar">
+        <div class="status-group">
+            <span class="status-item highlight">NET.CREATOR</span>
+            <span class="status-item">READY</span>
+        </div>
+        <div class="status-group">
+            <span class="status-item">NODES: <span class="status-val">0</span></span>
+            <span class="status-item">LINKS: <span class="status-val">0</span></span>
+        </div>
+    </footer>
+
+    <script src="/js/lab_app.js"></script>
+</body>
+
+</html>
+
+
+
+<!-- 24 29 36 -->
