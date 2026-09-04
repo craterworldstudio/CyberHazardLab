@@ -1,3 +1,14 @@
+/* Prevent touch scrolling/panning on canvas and interactive nodes */
+.topology-floor,
+.device-node,
+.link-path,
+.segment-hitbox,
+.palette-item {
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
 /* ============================================
    RESET
    ============================================ */
@@ -23,6 +34,8 @@
 
     --text-primary: #d5ebf2;
     --text-muted: #526870;
+
+    --hover-highlight: rgba(25, 146, 148, 0.487);
 }
 
 
@@ -276,6 +289,7 @@ body {
     height: 64px;
 
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
 
@@ -285,6 +299,11 @@ body {
     -webkit-user-select: none;
 
     z-index: 2;
+
+    border-radius: 4px;
+    border: 1px solid transparent;
+
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 
@@ -313,15 +332,300 @@ body {
 /* --------------------------------------------
    Selected Device
    -------------------------------------------- */
-
-.device-node.selected {
-    outline: 1px solid var(--cyan);
+.device-node:hover {
+    outline: 1px solid var(--hover-highlight);
 
     outline-offset: 4px;
 
     box-shadow:
+        0 0 8px rgba(0, 229, 255, 0.082);
+}
+
+.device-node.selected {
+    outline: 1px solid var(--cyan);
+    outline-offset: 4px;
+    box-shadow:
         0 0 8px rgba(0, 229, 255, 0.15);
 }
+
+/* --------------------------------------------
+   Device Icon
+   -------------------------------------------- */
+
+.device-icon {
+    width: 44px;
+    height: 44px;
+
+    object-fit: contain;
+
+    pointer-events: none;
+
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+
+/* --------------------------------------------
+   Identity Tag Label
+   -------------------------------------------- */
+
+.device-label {
+    font-size: 8px;
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+    letter-spacing: 1px;
+
+    color: var(--text-primary);
+    background-color: rgba(5, 7, 10, 0.75);
+
+    padding: 1px 4px;
+    margin-top: 2px;
+    border-radius: 2px;
+
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+.device-node.selected .device-label {
+    color: var(--cyan);
+}
+
+
+
+
+
+/* ============================================
+   TOOLBOX SELECTOR
+   ============================================ */
+
+.toolbox-container {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.toolbox-label {
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+}
+
+.toolbox-select {
+    background: rgba(5, 7, 10, 0.9);
+    width: 110px;
+    border: 1px solid var(--border-color);
+    color: var(--cyan);
+    font-family: "Courier New", monospace;
+    font-size: 10px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    padding: 2px 6px;
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+
+.toolbox-select:hover,
+.toolbox-select:focus {
+    border-color: var(--cyan);
+}
+
+
+/* ============================================
+   SVG WIRE & SEGMENTS (NO BEND HANDLES)
+   ============================================ */
+
+.link-svg-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.link-group {
+    pointer-events: auto;
+}
+
+/* Base Wire Path */
+.link-path {
+    fill: none;
+    stroke: var(--text-muted);
+    stroke-width: 2.5px;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: stroke 0.15s ease, stroke-width 0.15s ease;
+}
+
+.link-group:hover .link-path {
+    stroke: rgba(0, 229, 255, 0.7);
+}
+
+/* Selected Wire Highlight (Pure Visual, No Handles) */
+.link-group.selected .link-path {
+    stroke: var(--cyan);
+    stroke-width: 3px;
+    filter: drop-shadow(0 0 4px rgba(0, 229, 255, 0.6));
+}
+
+/* Individual Segment Hitboxes for Direct Dragging */
+.segment-hitbox {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 12px;
+    stroke-linecap: square;
+}
+
+.segment-hitbox.horizontal {
+    cursor: ns-resize; /* Vertical arrows when dragging horizontal lines */
+}
+
+.segment-hitbox.vertical {
+    cursor: ew-resize; /* Horizontal arrows when dragging vertical lines */
+}
+
+
+
+/* ============================================
+   DEDICATED TOP TOOL RIBBON
+   ============================================ */
+
+.tool-ribbon {
+    display: flex;
+    flex-direction: column;
+    background-color: #0a0f18 !important; /* Forces dark workspace background */
+    border-bottom: 1px solid rgba(0, 229, 255, 0.2);
+    user-select: none;
+    z-index: 100;
+}
+
+/* Category Tabs (Home, Tools, View) */
+.ribbon-tabs {
+    display: flex;
+    background-color: #06090e !important;
+    padding-left: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ribbon-tab {
+    background: transparent;
+    border: none;
+    color: #5c6b73;
+    font-family: monospace;
+    font-size: 11px;
+    font-weight: bold;
+    padding: 6px 16px;
+    cursor: pointer;
+}
+
+.ribbon-tab.active {
+    color: #00e5ff;
+    background-color: #0a0f18 !important;
+    border-bottom: 2px solid #00e5ff;
+}
+
+.ribbon-tab:hover {
+    color: #fff;
+}
+
+/* Toolbar Controls Container */
+.ribbon-toolbar {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    gap: 12px;
+    height: 80px;
+    background-color: #0a0f18 !important;
+}
+
+.ribbon-toolbar[hidden] {
+    display: none !important;
+}
+
+/* Tool Sections */
+.ribbon-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    height: 100%;
+}
+
+.group-buttons {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-grow: 1;
+}
+
+.group-title {
+    font-family: "Segoe UI", Tahoma, sans-serif;
+    font-size: 9px;
+    font-weight: bold;
+    color: #666;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+}
+
+.ribbon-divider {
+    width: 1px;
+    height: 80%;
+    background: #333;
+}
+
+/* Individual Tool Action Buttons */
+.tool-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    /* width: 60 px; */
+    height: 48px;
+    background: #121824 !important; /* Clean dark blue-grey card */
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    cursor: pointer;
+    color: #8a9ba8;
+    transition: all 0.15s ease;
+    min-width: 60px;
+    padding: 6px 8px;
+    box-sizing: border-box;
+}
+
+.tool-btn:hover {
+    background: #1a2332 !important;
+    border-color: rgba(0, 229, 255, 0.4);
+    color: #fff;
+}
+
+.tool-btn.active {
+    background: rgba(0, 229, 255, 0.12) !important;
+    border-color: #00e5ff !important;
+    color: #00e5ff;
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.25);
+}
+
+.tool-icon {
+    font-size: 14px;
+    margin-bottom: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tool-icon i {
+    color: inherit; /* Inherits the active/hover cyan or muted grey color */
+    transition: color 0.15s ease;
+}
+.tool-label {
+    font-family: "Segoe UI", Tahoma, sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+
 
 
 /* ============================================
@@ -329,7 +633,7 @@ body {
    ============================================ */
 
 .status-bar {
-    height: 26px;
+    height: 40px;
 
     flex-shrink: 0;
 
@@ -360,7 +664,6 @@ body {
 .status-group {
     display: flex;
     align-items: center;
-
     gap: 16px;
 }
 
@@ -371,7 +674,6 @@ body {
 
 .status-item.highlight {
     color: var(--cyan);
-
     font-weight: bold;
 }
 
@@ -382,4 +684,99 @@ body {
 
 .status-val {
     color: var(--text-primary);
+}
+
+/* ============================================
+   SVG LINK OVERLAY LAYER
+   ============================================ */
+
+.link-svg-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Allows mouse clicks to pass through to floor/devices */
+    z-index: 1;           /* Sits behind .device-node (z-index: 2) */
+}
+
+
+/* ============================================
+   NETWORK LINKS / WIRES
+   ============================================ */
+
+.link-group {
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+/* Invisible wide path for easy clicking */
+.link-hitbox {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 14px;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    cursor: pointer;
+}
+
+/* Visible wire path */
+.link-path {
+    fill: none;
+    stroke: var(--text-muted);
+    stroke-width: 2.5px;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: stroke 0.15s ease, stroke-width 0.15s ease;
+}
+
+.link-group:hover .link-path {
+    stroke: rgba(0, 229, 255, 0.7);
+}
+
+.link-group.selected .link-path {
+    stroke: var(--cyan);
+    stroke-width: 3px;
+    filter: drop-shadow(0 0 3px rgba(0, 229, 255, 0.5));
+}
+
+
+/* ============================================
+   CONNECT TOOL BUTTON & ACTIVE DEVICE STATE
+   ============================================ */
+
+.tool-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 10px;
+    letter-spacing: 1px;
+    padding: 2px 8px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.15s ease;
+}
+
+.tool-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--cyan);
+}
+
+.tool-btn.active {
+    background-color: rgba(0, 229, 255, 0.15);
+    color: var(--cyan);
+    border-color: var(--cyan);
+    font-weight: bold;
+}
+
+.device-node.connect-pending {
+    outline: 2px dashed var(--cyan);
+    outline-offset: 4px;
+    animation: connectPulse 1.2s infinite ease-in-out;
+}
+
+@keyframes connectPulse {
+    0%, 100% { outline-color: rgba(0, 229, 255, 0.4); }
+    50%      { outline-color: rgba(0, 229, 255, 1.0); }
 }

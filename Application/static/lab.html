@@ -4,10 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>CHL // Net.Creator</title>
-
     <link rel="stylesheet" href="/css/lab_style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 
 <body>
@@ -26,6 +25,330 @@
 
     </header>
 
+    <!-- =========================================
+     TOOL RIBBON
+     ========================================= -->
+
+    <header class="tool-ribbon">
+
+        <!-- RIBBON TABS -->
+        <div class="ribbon-tabs">
+
+            <button class="ribbon-tab active" data-tab="home">HOME</button>
+            <button class="ribbon-tab" data-tab="tools">TOOLS</button>
+            <button class="ribbon-tab" data-tab="view">VIEW</button>
+
+        </div>
+
+
+        <!-- =====================================
+             HOME TAB
+             ===================================== -->
+
+        <div class="ribbon-toolbar" data-panel="home">
+
+            <!-- FILE -->
+            <div class="ribbon-group">
+
+                <span class="group-title">FILE</span>
+                <div class="group-buttons">
+                    <button class="tool-btn" data-action="new">
+                        <span class="tool-icon">
+                            <i class="fa-solid fa-file"></i>
+                        </span>
+                        <span class="tool-label">New</span>
+                    </button>
+
+                    <button class="tool-btn disabled" data-action="open">
+                        <span class="tool-icon">
+                            <i class="fa-solid fa-folder-open"></i>
+                        </span>
+                        <span class="tool-label">Open</span>
+                    </button>
+
+                    <button class="tool-btn disabled" data-action="save">
+                        <span class="tool-icon">
+                            <i class="fa-solid fa-floppy-disk"></i>
+                        </span>
+                        <span class="tool-label">Save</span>
+                    </button>
+
+                </div>
+            </div>
+
+
+            <div class="ribbon-divider"></div>
+
+
+            <!-- EDIT -->
+            <div class="ribbon-group">
+
+                <span class="group-title">EDIT</span>
+                <div class="group-buttons">
+
+                    <button class="tool-btn disabled" data-action="undo">
+                        <span class="tool-icon">
+                            <i class="fa-solid fa-rotate-left"></i>
+                        </span>
+                        <span class="tool-label">Undo</span>
+                    </button>
+
+                    <button class="tool-btn disabled" data-action="redo">
+                        <span class="tool-icon">
+                            <i class="fa-solid fa-rotate-right"></i>
+                        </span>
+                        <span class="tool-label">Redo</span>
+                    </button>
+
+                    <button class="tool-btn" data-action="delete">
+                        <span class="tool-icon">
+                            <i class="fa-solid fa-trash"></i>
+                        </span>
+                        <span class="tool-label">Delete</span>
+                    </button>
+
+                </div>
+
+            </div>
+
+
+            <div class="ribbon-divider"></div>
+
+
+            <!-- NETWORK -->
+            <div class="ribbon-group">
+
+                <span class="group-title">NETWORK</span>
+
+                <div class="group-buttons">
+
+                    <button class="tool-btn" data-action="validate">
+                        <span class="tool-icon">
+                            <i class="fa-solid fa-network-wired"></i>
+                        </span>
+                        <span class="tool-label">Validate</span>
+                    </button>
+
+                    <button class="tool-btn" data-action="clear">
+                        <span class="tool-icon">
+                            <i class="fa-solid fa-eraser"></i>
+                        </span>
+                        <span class="tool-label">Clear</span>
+                    </button>
+
+                </div>
+
+            </div>
+
+
+            <div class="ribbon-divider"></div>
+
+
+            <!-- SIMULATION -->
+            <div class="ribbon-group">
+
+                <span class="group-title">SIMULATION</span>
+
+                <div class="group-buttons">
+
+                    <button class="tool-btn" data-action="run">
+                        <span class="tool-icon">
+                            <i class="fa-solid fa-play"></i>
+                        </span>
+                        <span class="tool-label">Run</span>
+                    </button>
+
+                    <button class="tool-btn" data-action="stop">
+                        <span class="tool-icon">
+                            <i class="fa-solid fa-stop"></i>
+                        </span>
+                        <span class="tool-label">Stop</span>
+                    </button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- =====================================
+             TOOLS TAB
+             ===================================== -->
+
+        <div class="ribbon-toolbar" data-panel="tools" hidden>
+
+            <!-- MODE -->
+            <div class="ribbon-group">
+
+                <span class="group-title">MODE</span>
+
+                <div class="group-buttons">
+                    <button class="tool-btn active" data-tool="SELECT" title="Select Tool (S)" >
+                        <span class="tool-icon"> <i class="fa-solid fa-arrow-pointer"></i> </span>
+                        <span class="tool-label"> Select </span>
+                    </button>
+
+                    <button class="tool-btn" data-tool="PLIERS" title="Pliers Tool (P)" >
+                        <span class="tool-icon"> <i class="fa-solid fa-wrench"></i> </span>
+                        <span class="tool-label"> Pliers </span>
+                    </button>
+
+                </div>
+            </div>
+
+
+            <div class="ribbon-divider"></div>
+
+
+            <!-- CONNECTION -->
+            <div class="ribbon-group">
+
+                <span class="group-title">CONNECTION</span>
+
+                <div class="group-buttons">
+
+                    <button class="tool-btn" data-tool="CONNECT" title="Connect Wire (C)" >
+                        <span class="tool-icon"> <i class="fa-solid fa-plug"></i> </span>
+                        <span class="tool-label"> Connect </span>
+                    </button>
+
+                    <button class="tool-btn disabled" data-tool="DISCONNECT" title="Disconnect Wire" >
+                        <span class="tool-icon"> <i class="fa-solid fa-link-slash"></i> </span>
+                        <span class="tool-label"> Disconnect </span>
+                    </button>
+
+                </div>
+            </div>
+
+
+            <div class="ribbon-divider"></div>
+
+
+            <!-- INSPECTION -->
+            <div class="ribbon-group">
+
+                <span class="group-title">INSPECTION</span>
+
+                <div class="group-buttons">
+
+                    <button class="tool-btn" data-tool="LAPTOP" title="Inspect Device (L)" >
+                        <span class="tool-icon"> <i class="fa-solid fa-laptop"></i> </span>
+                        <span class="tool-label"> Inspect </span>
+                    </button>
+
+                </div>
+            </div>
+
+
+            <div class="ribbon-divider"></div>
+
+
+            <!-- MANIPULATION -->
+            <div class="ribbon-group">
+
+                <span class="group-title">MANIPULATION</span>
+                <div class="group-buttons">
+
+                    <button class="tool-btn disabled" data-tool="MOVE" title="Move Device" >
+                        <span class="tool-icon"> <i class="fa-solid fa-up-down-left-right"></i> </span>
+                        <span class="tool-label"> Move </span>
+                    </button>
+
+                    <button class="tool-btn disabled" data-tool="DUPLICATE" title="Duplicate Device" >
+                        <span class="tool-icon"> <i class="fa-solid fa-copy"></i> </span>
+                        <span class="tool-label"> Duplicate </span>
+                    </button>
+
+                </div>
+            </div>
+        </div>
+
+
+        <!-- =====================================
+             VIEW TAB
+             ===================================== -->
+
+        <div class="ribbon-toolbar" data-panel="view" hidden>
+
+            <!-- DISPLAY -->
+            <div class="ribbon-group">
+                <span class="group-title">DISPLAY</span>
+                <div class="group-buttons">
+
+                    <button class="tool-btn" data-view="grid" >
+                        <span class="tool-icon"> <i class="fa-solid fa-table-cells"></i> </span>
+                        <span class="tool-label"> Grid </span>
+                    </button>
+
+                    <button class="tool-btn" data-view="labels" >
+                        <span class="tool-icon"> <i class="fa-solid fa-tag"></i> </span>
+                        <span class="tool-label"> Labels </span>
+                    </button>
+
+                    <button class="tool-btn disabled" data-view="link-labels" >
+                        <span class="tool-icon"> <i class="fa-solid fa-tags"></i> </span>
+                        <span class="tool-label"> Link Labels </span>
+                    </button>
+
+                </div>
+            </div>
+
+
+            <div class="ribbon-divider"></div>
+
+
+            <!-- ZOOM -->
+            <div class="ribbon-group">
+                <span class="group-title">ZOOM</span>
+                <div class="group-buttons">
+
+                    <button class="tool-btn disabled" data-view="zoom-in" >
+                        <span class="tool-icon"> <i class="fa-solid fa-magnifying-glass-plus"></i> </span>
+                        <span class="tool-label"> Zoom In </span>
+                    </button>
+
+                    <button class="tool-btn disabled" data-view="zoom-out" >
+                        <span class="tool-icon"> <i class="fa-solid fa-magnifying-glass-minus"></i> </span>
+                        <span class="tool-label"> Zoom Out </span>
+                    </button>
+
+                    <button class="tool-btn disabled" data-view="reset" >
+                        <span class="tool-icon"> <i class="fa-solid fa-expand"></i> </span>
+
+                        <span class="tool-label"> Reset </span>
+                    </button>
+
+                </div>
+            </div>
+
+
+            <div class="ribbon-divider"></div>
+
+
+            <!-- LAYOUT -->
+            <div class="ribbon-group">
+
+                <span class="group-title">LAYOUT</span>
+                <div class="group-buttons">
+
+                    <button class="tool-btn disabled" data-view="center" >
+                        <span class="tool-icon"> <i class="fa-solid fa-crosshairs"></i> </span>
+                        <span class="tool-label"> Center </span>
+                    </button>
+
+                    <button class="tool-btn disabled" data-view="fit" >
+                        <span class="tool-icon"> <i class="fa-solid fa-maximize"></i> </span>
+                        <span class="tool-label"> Fit Network </span>
+                    </button>
+
+                </div>
+            </div>
+        </div>
+
+    </header>
+
+
 
     <!-- =========================================
          MAIN WORKSPACE
@@ -33,72 +356,48 @@
 
     <div class="workspace-container">
 
+        
         <!-- DEVICE PALETTE -->
-
         <aside class="palette-sidebar" id="paletteSidebar">
-
             <div class="sidebar-header">
                 DEVICES
             </div>
-
             <div class="palette-items">
-
                 <!-- PC -->
 
-                <div
-                    class="palette-item"
-                    data-type="PC"
-                >
-
-                    <img
-                        src="/static/assets/PC_off.png"
-                        alt="PC Host"
-                        class="palette-icon"
-                    >
-
-                    <span class="palette-label">
-                        PC HOST
-                    </span>
-
+                <div class="palette-item" data-type="PC">
+                    <img src="/static/assets/PC_off.png" alt="PC Host" class="palette-icon" >
+                    <span class="palette-label"> PC HOST </span>
                 </div>
 
 
                 <!-- ROUTER -->
 
-                <div
-                    class="palette-item disabled"
-                    data-type="ROUTER"
-                >
+                <div class="palette-item disabled" data-type="ROUTER" >
 
-                    <span class="palette-label">
-                        ROUTER
-                    </span>
 
+                    <span class="palette-label"> ROUTER </span>
                 </div>
 
 
                 <!-- SWITCH -->
 
-                <div
-                    class="palette-item disabled"
-                    data-type="SWITCH"
-                >
+                <div class="palette-item disabled" data-type="SWITCH" >
 
-                    <span class="palette-label">
-                        SWITCH
-                    </span>
 
+                    <span class="palette-label"> SWITCH </span>
                 </div>
 
             </div>
 
         </aside>
 
+         
 
         <!-- =====================================
              TOPOLOGY FLOOR
              ===================================== -->
-
+        
         <main
             class="topology-floor"
             id="topologyFloor"
@@ -107,6 +406,10 @@
                 Network devices and links
                 are dynamically created here.
             -->
+
+            <svg id="linkSvgLayer" class="link-svg-layer">
+                <!-- Dynamic <g> elements for wires and handles append here -->
+            </svg>
         </main>
 
     </div>
@@ -117,44 +420,23 @@
          ========================================= -->
 
     <footer class="status-bar">
-
         <div class="status-group">
-
-            <span class="status-item highlight">
-                NET.CREATOR
-            </span>
-
-            <span class="status-item">
-                READY
-            </span>
-
+            <span class="status-item highlight"> NET.CREATOR </span>
+            <!-- <span class="status-item"> READY </span> -->
+            
         </div>
 
 
         <div class="status-group">
-
             <span class="status-item">
                 NODES:
-                <span
-                    class="status-val"
-                    id="nodeCount"
-                >
-                    0
-                </span>
+                <span class="status-val" id="nodeCount" > 0 </span>
             </span>
 
-            <span class="status-item">
-                LINKS:
-                <span
-                    class="status-val"
-                    id="linkCount"
-                >
-                    0
-                </span>
+            <span class="status-item">LINKS:
+                <span class="status-val" id="linkCount" > 0 </span>
             </span>
-
         </div>
-
     </footer>
 
 
@@ -165,7 +447,6 @@
     <script src="/js/lab_app.js"></script>
 
 </body>
-
 </html>
 
 <!-- 24 29 36 -->
