@@ -1,12 +1,10 @@
-
 document.addEventListener("DOMContentLoaded", () => {
 
     /* =========================================
-       ELEMENT REFERENCES
+       ELEMENTS
        ========================================= */
 
     const floor = document.getElementById("topologyFloor");
-
     const paletteItems = document.querySelectorAll(
         ".palette-item:not(.disabled)"
     );
@@ -20,9 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
 
-    console.log(
-        "[CHL] Net.Creator workspace initialized."
-    );
+    console.log("[CHL] Net.Creator workspace initialized.");
 
 
     /* =========================================
@@ -32,17 +28,19 @@ document.addEventListener("DOMContentLoaded", () => {
     const devices = [];
 
     let selectedDeviceId = null;
-
     let hostCounter = 1;
 
-    let activeDragDevice = null;
+    let activeDevice = null;
+
+    let draggingFromPalette = false;
+    let paletteDeviceType = null;
 
     let dragOffsetX = 0;
     let dragOffsetY = 0;
 
 
     /* =========================================
-       NETWORK DEVICE CLASS
+       NETWORK DEVICE
        ========================================= */
 
     class NetworkDevice {
@@ -50,68 +48,63 @@ document.addEventListener("DOMContentLoaded", () => {
         constructor(id, type, iconPath, x, y) {
 
             this.id = id;
-
             this.type = type;
-
-            this.state = "OFF";
 
             this.position = {
                 x: x,
                 y: y
             };
 
+            this.element = document.createElement("div");
 
-            /* -------------------------------
-               Root element
-               ------------------------------- */
+            this.element.className = "device-node";
 
-            this.element =
-                document.createElement("div");
+            this.element.dataset.id = this.id;
 
-            this.element.className =
-                "device-node";
+            this.img = document.createElement("img");
 
-            this.element.dataset.id =
-                this.id;
+            this.img.className = "device-icon";
 
-            this.element.style.left =
-                `${x}px`;
+            this.img.src = iconPath;
 
-            this.element.style.top =
-                `${y}px`;
-
-
-            /* -------------------------------
-               Device image
-               ------------------------------- */
-
-            this.img =
-                document.createElement("img");
-
-            this.img.src =
-                iconPath;
-
-            this.img.alt =
-                `${type} Host`;
-
-            this.img.className =
-                "device-icon";
+            this.img.alt = `${type} Host`;
 
             this.img.draggable = false;
 
-
-            this.element.appendChild(
-                this.img
-            );
+            this.element.appendChild(this.img);
 
 
-            /* -------------------------------
-               Mouse interaction
-               ------------------------------- */
+            this.updatePosition(x, y);
+
+
+            /* Device dragging */
 
             this.element.addEventListener(
                 "mousedown",
-                (event) => this.onMouseDown(event)
+                (event) => {
+
+                    if (event.button !== 0) {
+                        return;
+                    }
+
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    selectDevice(this.id);
+
+                    const rect =
+                        this.element.getBoundingClientRect();
+
+                    dragOffsetX =
+                        event.clientX - rect.left;
+
+                    dragOffsetY =
+                        event.clientY - rect.top;
+
+                    activeDevice = this;
+
+                    draggingFromPalette = false;
+                }
             );
         }
 
@@ -139,58 +132,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
         setSelected(selected) {
 
-            if (selected) {
-
-                this.element.classList.add(
-                    "selected"
-                );
-
-            } else {
-
-                this.element.classList.remove(
-                    "selected"
-                );
-            }
-        }
-
-
-        /* =====================================
-           DEVICE MOUSE DOWN
-           ===================================== */
-
-        onMouseDown(event) {
-
-            if (event.button !== 0) {
-                return;
-            }
-
-
-            event.preventDefault();
-
-            event.stopPropagation();
-
-
-            selectDevice(this.id);
-
-
-            const rect =
-                this.element.getBoundingClientRect();
-
-
-            dragOffsetX =
-                event.clientX - rect.left;
-
-            dragOffsetY =
-                event.clientY - rect.top;
-
-
-            activeDragDevice = this;
+            this.element.classList.toggle(
+                "selected",
+                selected
+            );
         }
     }
 
 
     /* =========================================
-       DEVICE SELECTION
+       SELECTION
        ========================================= */
 
     function selectDevice(id) {
@@ -199,8 +150,6 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-
-        /* Deselect previous device */
 
         if (selectedDeviceId !== null) {
 
@@ -216,8 +165,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
 
-        /* Select new device */
-
         selectedDeviceId = id;
 
 
@@ -227,16 +174,11 @@ document.addEventListener("DOMContentLoaded", () => {
                     device.id === selectedDeviceId
             );
 
-
         if (current) {
             current.setSelected(true);
         }
     }
 
-
-    /* =========================================
-       DESELECT EVERYTHING
-       ========================================= */
 
     function deselectAll() {
 
@@ -251,7 +193,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     device.id === selectedDeviceId
             );
 
-
         if (current) {
             current.setSelected(false);
         }
@@ -262,69 +203,51 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
     /* =========================================
-       NODE COUNTER
+       NODE COUNT
        ========================================= */
 
     function updateNodeCount() {
 
-        if (!nodeCountEl) {
-            return;
+        if (nodeCountEl) {
+            nodeCountEl.textContent =
+                devices.length;
         }
-
-
-        nodeCountEl.textContent =
-            devices.length;
     }
 
 
     /* =========================================
-       HOST SPAWN
+       CREATE HOST
        ========================================= */
 
-    function spawnHostAt(x, y) {
+    function createHost() {
 
-        const paddedId =
-            String(hostCounter)
-                .padStart(2, "0");
-
-
-        const hostId =
-            `HOST-${paddedId}`;
-
+        const id =
+            `HOST-${String(hostCounter).padStart(2, "0")}`;
 
         hostCounter++;
 
 
-        const iconPath =
-            "/static/assets/PC_off.png";
-
-
         const host =
             new NetworkDevice(
-                hostId,
+                id,
                 "PC",
-                iconPath,
-                x,
-                y
+                "/static/assets/PC_off.png",
+                0,
+                0
             );
 
 
         devices.push(host);
 
+        floor.appendChild(host.element);
 
-        floor.appendChild(
-            host.element
-        );
-
-
-        selectDevice(hostId);
-
+        selectDevice(id);
 
         updateNodeCount();
 
 
         console.log(
-            `[CHL] Created ${hostId}`
+            `[CHL] Created ${id}`
         );
 
 
@@ -333,7 +256,79 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
     /* =========================================
-       PALETTE DRAG
+       CALCULATE FLOOR POSITION
+       ========================================= */
+
+    function getFloorPosition(clientX, clientY) {
+
+        const floorRect =
+            floor.getBoundingClientRect();
+
+
+        /*
+         * Convert browser coordinates
+         * into coordinates relative to
+         * the topology floor.
+         */
+
+        let x =
+            clientX -
+            floorRect.left -
+            dragOffsetX;
+
+
+        let y =
+            clientY -
+            floorRect.top -
+            dragOffsetY;
+
+
+        /*
+         * Keep device inside the floor.
+         */
+
+        const deviceWidth =
+            activeDevice
+                ? activeDevice.element.offsetWidth
+                : 64;
+
+        const deviceHeight =
+            activeDevice
+                ? activeDevice.element.offsetHeight
+                : 64;
+
+
+        const maxX =
+            floor.clientWidth -
+            deviceWidth;
+
+
+        const maxY =
+            floor.clientHeight -
+            deviceHeight;
+
+
+        x = Math.max(
+            0,
+            Math.min(x, maxX)
+        );
+
+
+        y = Math.max(
+            0,
+            Math.min(y, maxY)
+        );
+
+
+        return {
+            x,
+            y
+        };
+    }
+
+
+    /* =========================================
+       PALETTE DRAG START
        ========================================= */
 
     paletteItems.forEach(item => {
@@ -350,157 +345,177 @@ document.addEventListener("DOMContentLoaded", () => {
                 event.preventDefault();
 
 
-                const deviceType =
+                const type =
                     item.dataset.type;
 
 
-                if (deviceType !== "PC") {
+                /*
+                 * At the moment only PC
+                 * is implemented.
+                 */
+
+                if (type !== "PC") {
                     return;
                 }
 
 
-                const floorRect =
-                    floor.getBoundingClientRect();
+                draggingFromPalette = true;
+
+                paletteDeviceType = type;
 
 
                 /*
-                    Spawn the device centered
-                    under the cursor.
-                */
-
-                let x =
-                    event.clientX -
-                    floorRect.left -
-                    32;
-
-
-                let y =
-                    event.clientY -
-                    floorRect.top -
-                    32;
-
-
-                /*
-                    Keep the device inside
-                    the topology floor.
-                */
-
-                const maxX =
-                    floorRect.width - 64;
-
-                const maxY =
-                    floorRect.height - 64;
-
-
-                x =
-                    Math.max(
-                        0,
-                        Math.min(x, maxX)
-                    );
-
-
-                y =
-                    Math.max(
-                        0,
-                        Math.min(y, maxY)
-                    );
-
-
-                const device =
-                    spawnHostAt(x, y);
-
-
-                /*
-                    Continue dragging the
-                    newly created device.
-                */
-
-                activeDragDevice =
-                    device;
-
+                 * The device follows the
+                 * cursor from its center.
+                 */
 
                 dragOffsetX = 32;
                 dragOffsetY = 32;
+
+
+                /*
+                 * We do NOT create the device
+                 * yet.
+                 *
+                 * It will be created once the
+                 * cursor reaches the floor.
+                 */
+
+                activeDevice = null;
+
+
+                console.log(
+                    `[CHL] Started palette drag: ${type}`
+                );
             }
         );
     });
 
 
     /* =========================================
-       DEVICE MOVEMENT
+       GLOBAL MOUSE MOVEMENT
        ========================================= */
 
     window.addEventListener(
         "mousemove",
         (event) => {
 
-            if (!activeDragDevice) {
+            /*
+             * ----------------------------------
+             * PALETTE → FLOOR
+             * ----------------------------------
+             */
+
+            if (draggingFromPalette) {
+
+                const floorRect =
+                    floor.getBoundingClientRect();
+
+
+                const insideFloor =
+                    event.clientX >= floorRect.left &&
+                    event.clientX <= floorRect.right &&
+                    event.clientY >= floorRect.top &&
+                    event.clientY <= floorRect.bottom;
+
+
+                /*
+                 * Create the device when the
+                 * cursor first enters the floor.
+                 */
+
+                if (
+                    insideFloor &&
+                    activeDevice === null
+                ) {
+
+                    if (paletteDeviceType === "PC") {
+
+                        activeDevice =
+                            createHost();
+                    }
+                }
+
+
+                /*
+                 * If the device now exists,
+                 * move it with the cursor.
+                 */
+
+                if (activeDevice) {
+
+                    const position =
+                        getFloorPosition(
+                            event.clientX,
+                            event.clientY
+                        );
+
+
+                    activeDevice.updatePosition(
+                        position.x,
+                        position.y
+                    );
+                }
+
+
                 return;
             }
 
 
-            const floorRect =
-                floor.getBoundingClientRect();
+            /*
+             * ----------------------------------
+             * EXISTING DEVICE DRAG
+             * ----------------------------------
+             */
+
+            if (activeDevice) {
+
+                const position =
+                    getFloorPosition(
+                        event.clientX,
+                        event.clientY
+                    );
 
 
-            let x =
-                event.clientX -
-                floorRect.left -
-                dragOffsetX;
-
-
-            let y =
-                event.clientY -
-                floorRect.top -
-                dragOffsetY;
-
-
-            const maxX =
-                floorRect.width - 64;
-
-            const maxY =
-                floorRect.height - 64;
-
-
-            x =
-                Math.max(
-                    0,
-                    Math.min(x, maxX)
+                activeDevice.updatePosition(
+                    position.x,
+                    position.y
                 );
-
-
-            y =
-                Math.max(
-                    0,
-                    Math.min(y, maxY)
-                );
-
-
-            activeDragDevice.updatePosition(
-                x,
-                y
-            );
+            }
         }
     );
 
 
     /* =========================================
-       RELEASE DEVICE
+       GLOBAL MOUSE RELEASE
        ========================================= */
 
     window.addEventListener(
         "mouseup",
         () => {
 
-            if (activeDragDevice) {
+            if (draggingFromPalette) {
 
-                console.log(
-                    `[CHL] Released ${activeDragDevice.id}`
-                );
+                if (activeDevice) {
+
+                    console.log(
+                        `[CHL] Placed ${activeDevice.id}`
+                    );
+
+                } else {
+
+                    console.log(
+                        "[CHL] Palette drag cancelled."
+                    );
+                }
             }
 
 
-            activeDragDevice = null;
+            activeDevice = null;
+
+            draggingFromPalette = false;
+
+            paletteDeviceType = null;
         }
     );
 

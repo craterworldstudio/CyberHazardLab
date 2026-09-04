@@ -284,10 +284,7 @@ body {
     user-select: none;
     -webkit-user-select: none;
 
-    /*
-        Prevent browser image dragging.
-    */
-    -webkit-user-drag: none;
+    z-index: 2;
 }
 
 
@@ -308,6 +305,7 @@ body {
 
     pointer-events: none;
 
+    user-select: none;
     -webkit-user-drag: none;
 }
 
