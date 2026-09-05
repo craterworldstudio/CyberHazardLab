@@ -486,7 +486,16 @@ body {
     cursor: ew-resize; /* Horizontal arrows when dragging vertical lines */
 }
 
+/* Cut / Severed Physical Wire Appearance */
+.link-path.physical-cut {
+    stroke-dasharray: 6 3;
+    stroke: rgba(255, 170, 0, 0.75) !important;
+}
 
+.link-group.selected .link-path.physical-cut {
+    stroke: #ffaa00 !important;
+    filter: drop-shadow(0 0 4px rgba(255, 170, 0, 0.5));
+}
 
 /* ============================================
    DEDICATED TOP TOOL RIBBON

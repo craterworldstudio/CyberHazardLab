@@ -194,28 +194,9 @@
                         <span class="tool-label"> Pliers </span>
                     </button>
 
-                </div>
-            </div>
-
-
-            <div class="ribbon-divider"></div>
-
-
-            <!-- CONNECTION -->
-            <div class="ribbon-group">
-
-                <span class="group-title">CONNECTION</span>
-
-                <div class="group-buttons">
-
                     <button class="tool-btn" data-tool="CONNECT" title="Connect Wire (C)" >
                         <span class="tool-icon"> <i class="fa-solid fa-plug"></i> </span>
                         <span class="tool-label"> Connect </span>
-                    </button>
-
-                    <button class="tool-btn disabled" data-tool="DISCONNECT" title="Disconnect Wire" >
-                        <span class="tool-icon"> <i class="fa-solid fa-link-slash"></i> </span>
-                        <span class="tool-label"> Disconnect </span>
                     </button>
 
                 </div>
@@ -250,12 +231,12 @@
                 <span class="group-title">MANIPULATION</span>
                 <div class="group-buttons">
 
-                    <button class="tool-btn disabled" data-tool="MOVE" title="Move Device" >
-                        <span class="tool-icon"> <i class="fa-solid fa-up-down-left-right"></i> </span>
-                        <span class="tool-label"> Move </span>
+                    <button class="tool-btn" data-tool="REMOVE" title="Remove Device (X)" >
+                        <span class="tool-icon"> <i class="fa-solid fa-trash-can" aria-hidden="true"></i></i> </span>
+                        <span class="tool-label"> Remove </span>
                     </button>
 
-                    <button class="tool-btn disabled" data-tool="DUPLICATE" title="Duplicate Device" >
+                    <button class="tool-btn" data-tool="DUPLICATE" title="Duplicate Device (D)" >
                         <span class="tool-icon"> <i class="fa-solid fa-copy"></i> </span>
                         <span class="tool-label"> Duplicate </span>
                     </button>
@@ -370,6 +351,11 @@
                     <span class="palette-label"> PC HOST </span>
                 </div>
 
+                <div class="palette-item" data-type="PC">
+                    <img src="/static/assets/SERV_off.png" alt="SERVER HOST" class="palette-icon" >
+                    <span class="palette-label"> SERVER HOST</span>
+                </div>
+
 
                 <!-- ROUTER -->
 
@@ -444,7 +430,7 @@
          APPLICATION JAVASCRIPT
          ========================================= -->
 
-    <script src="/js/lab_app.js"></script>
+    <script src="/js/lab_app.js?v=2"></script>
 
 </body>
 </html>

@@ -29,13 +29,27 @@ document.addEventListener("DOMContentLoaded", () => {
     let selectedLinkId = null;
 
     let hostCounter = 1;
+    let serverCounter = 1;
+
+    // Device visual asset mapping
+    const DEVICE_CONFIG = {
+        PC: {
+            prefix: "HOST",
+            icon: "/static/assets/PC_off.png"
+        },
+        SERVER: {
+            prefix: "SERV",
+            icon: "/static/assets/server_off.png"
+        }
+    };
     let linkCounter = 1;
 
     let activeDevice = null;
     let activeSegmentDrag = null; // { link, segmentIndex, orientation, initialMouseX, initialMouseY, initialOffset }
 
-    // Current Active Tool: "SELECT" | "PLIERS" | "CONNECT" | "INSPECT"
+    // Tools: "SELECT" | "PLIERS" | "CONNECT" | "DISCONNECT" | "INSPECT" | "REMOVE" | "DUPLICATE"
     let currentTool = "SELECT";
+    let pendingCutLink = null;
     let connectionSourceDevice = null;
 
     let draggingFromPalette = false;
@@ -85,10 +99,18 @@ document.addEventListener("DOMContentLoaded", () => {
         document.querySelectorAll(".tool-btn").forEach(btn => {
             btn.classList.toggle("active", btn.dataset.tool === tool);
         });
+
+        if (toolSelect) {
+            toolSelect.value = tool;
+        }
     
         if (currentTool !== "CONNECT" && connectionSourceDevice) {
             connectionSourceDevice.setPendingConnect(false);
             connectionSourceDevice = null;
+        }
+
+        if (currentTool !== "PLIERS" && pendingCutLink) {
+            pendingCutLink = null;
         }
     
         console.log(`[CHL] Active Tool switched to: ${currentTool}`);
@@ -113,6 +135,8 @@ document.addEventListener("DOMContentLoaded", () => {
         if (key === "P") setTool("PLIERS");
         if (key === "C") setTool("CONNECT");
         if (key === "L") setTool("INSPECT");
+        if (key === "X") setTool("REMOVE");
+        if (key === "D") setTool("DUPLICATE");
         if (e.key === "Escape") {
             setTool("SELECT");
             deselectAll();
@@ -143,7 +167,7 @@ document.addEventListener("DOMContentLoaded", () => {
             this.label = document.createElement("span");
             this.label.className = "device-label";
             this.label.textContent = this.id;
-            this.element.appendChild(this.label);
+            this.element.appendChild(this.label);    
 
             this.updatePosition(x, y);
 
@@ -195,7 +219,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 this.element.setPointerCapture(event.pointerId);
             } catch (err) {}
         
-            handleDeviceClick(this, event);
+            //handleDeviceClick(this, event);
+            handleDeviceInteraction(this, event);
         }
 
         /* onMouseDown(event) {
@@ -232,6 +257,18 @@ document.addEventListener("DOMContentLoaded", () => {
             this.segmentsGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
             this.segmentsGroup.setAttribute("class", "segments-group");
 
+            this.breakpoints = [];
+            this.isPhysicallyCut = false;
+            this.cutRatio = null;
+            this.retainedEnd = "source";
+                    
+            // Add right-click listener to group:
+            this.group.addEventListener("contextmenu", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                inspectLinkDetails(this);
+            });
+
             this.group.appendChild(this.path);
             this.group.appendChild(this.segmentsGroup);
 
@@ -239,36 +276,62 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         // Calculate orthogonal sequence of points: start -> corner1 -> corner2 -> end
-        getPoints() {
+        getFullOrderedPoints() {
             const start = this.source.getCenter();
-            const end = this.target.getCenter();
+            
+            const end = this.cutTargetPos ? this.cutTargetPos : this.target.getCenter();
+            let midX = this.middleSegmentOffset !== null ? this.middleSegmentOffset : Math.round((start.x + end.x) / 2);
 
-            // Default middle split point
-            let midX = Math.round((start.x + end.x) / 2);
-
-            if (this.middleSegmentOffset !== null) {
-                midX = this.middleSegmentOffset;
-            }
-
-            return [
+            const basePoints = [
                 start,
                 { x: midX, y: start.y },
                 { x: midX, y: end.y },
                 end
             ];
+        
+            if (this.breakpoints.length === 0) return basePoints;
+        
+            const combined = [start, ...this.breakpoints, end];
+            const route = [];
+            for (let i = 0; i < combined.length - 1; i++) {
+                const pA = combined[i];
+                const pB = combined[i + 1];
+                const mX = Math.round((pA.x + pB.x) / 2);
+                route.push(pA);
+                route.push({ x: mX, y: pA.y });
+                route.push({ x: mX, y: pB.y });
+            }
+            route.push(end);
+            return route;
+        }
+
+        getRenderPoints() {
+            const points = this.getFullOrderedPoints();
+            if (!this.isPhysicallyCut) return points;
+        
+            if (this.retainedEnd === "source") {
+                const cutLength = Math.max(2, Math.floor(points.length * (this.cutRatio || 0.5)));
+                return points.slice(0, cutLength);
+            } else {
+                const startIdx = Math.min(points.length - 2, Math.floor(points.length * (1 - (this.cutRatio || 0.5))));
+                return points.slice(startIdx);
+            }
         }
 
         updatePath() {
-            const points = this.getPoints();
+            const points = this.getRenderPoints();
+            if (points.length < 2) return;
 
             let d = `M ${points[0].x} ${points[0].y}`;
             for (let i = 1; i < points.length; i++) {
                 d += ` L ${points[i].x} ${points[i].y}`;
             }
             this.path.setAttribute("d", d);
-
+            this.path.classList.toggle("physical-cut", this.isPhysicallyCut);
+        
             this.renderSegmentHitboxes(points);
         }
+
 
         renderSegmentHitboxes(points) {
             this.segmentsGroup.innerHTML = "";
@@ -298,7 +361,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     e.preventDefault();
                     e.stopPropagation();
 
-                    handleWireSegmentClick(this, i, orientation, e);
+                    //handleWireSegmentClick(this, i, orientation, e);
+                    handleWireInteraction(this, i, orientation, e);
                 });
 
                 /* line.addEventListener("mousedown", (e) => {
@@ -344,54 +408,186 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    function handleWireSegmentClick(link, segmentIndex, orientation, event) {
+    /* =========================================
+        INTERACTION ROUTING ENGINE
+       ========================================= */
 
-        if (currentTool === "PLIERS") {
-            deselectAll();
-            deleteLink(link.id);
-            return;
-        }
-
-
-        deselectAll();
-        selectLink(link.id);
-
-        if (currentTool === "SELECT") {
-            deselectAll();
-            selectLink(link.id);
-
-            const floorRect = floor.getBoundingClientRect();
-            const points = link.getPoints();
-
-            activeSegmentDrag = {
-                link: link,
-                segmentIndex: segmentIndex,
-                orientation: orientation,
-                initialMouseX: event.clientX - floorRect.left,
-                initialMouseY: event.clientY - floorRect.top,
-                initialOffset: link.middleSegmentOffset !== null ? link.middleSegmentOffset : points[1].x
-            };
+    function handleDeviceInteraction(device, event) {
+        switch (currentTool) {
+            case "SELECT":
+                executeSelectDevice(device, event);
+                break;
+            case "CONNECT":
+                executeConnectDevice(device);
+                break;
+            case "INSPECT":
+                executeInspectDevice(device);
+                break;
+            case "REMOVE":
+                executeRemoveDevice(device);
+                break;
+            case "DUPLICATE":
+                executeDuplicateDevice(device);
+                break;
+            case "PLIERS":
+                // Reconnecting a cut wire to this device:
+                if (pendingCutLink) {
+                    executePliersReconnect(device);
+                }
+                break;
         }
     }
 
-    function handleConnectClick(device) {
+    function handleWireInteraction(link, segmentIndex, orientation, event) {
+        switch (currentTool) {
+            case "SELECT":
+                executeSelectWire(link, segmentIndex, orientation, event);
+                break;
+            case "PLIERS":
+                executePliersCut(link, segmentIndex, event);
+                break;
+            case "INSPECT":
+                inspectLinkDetails(link);
+                break;
+            case "REMOVE":
+                deselectAll();
+                deleteLink(link.id);
+                console.log(`[CHL:REMOVE] Wire ${link.id} removed.`);
+                break;
+        }
+    }
+
+    function executeSelectDevice(device, event) {
+        deselectAll();
+        selectDevice(device.id);
+
+        const rect = device.element.getBoundingClientRect();
+        dragOffsetX = event.clientX - rect.left;
+        dragOffsetY = event.clientY - rect.top;
+
+        activeDevice = device;
+        draggingFromPalette = false;
+    }
+
+    function executeSelectWire(link, segmentIndex, orientation, event) {
+        deselectAll();
+        selectLink(link.id);
+
+        const floorRect = floor.getBoundingClientRect();
+        const points = link.getFullOrderedPoints();
+
+        activeSegmentDrag = {
+            link: link,
+            segmentIndex: segmentIndex,
+            orientation: orientation,
+            initialMouseX: event.clientX - floorRect.left,
+            initialMouseY: event.clientY - floorRect.top,
+            initialOffset: link.middleSegmentOffset !== null ? link.middleSegmentOffset : points[1].x
+        };
+    }
+
+    function executePliersCut(link, segmentIndex, event) {
+        deselectAll();
+        selectLink(link.id);
+
+        const floorRect = floor.getBoundingClientRect();
+        const clickX = Math.round(event.clientX - floorRect.left);
+        const clickY = Math.round(event.clientY - floorRect.top);
+
+        link.isPhysicallyCut = true;
+        link.cutTargetPos = { x: clickX, y: clickY };
+        link.updatePath();
+
+        pendingCutLink = link;
+        console.log(`[CHL:PLIERS] Wire severed. Click any device to connect the loose end.`);
+    }
+
+    function executeConnectDevice(device) {
         if (!connectionSourceDevice) {
             connectionSourceDevice = device;
             connectionSourceDevice.setPendingConnect(true);
-            console.log(`[CHL] CONNECT Tool: Source selected (${device.id})`);
         } else {
-            if (connectionSourceDevice.id === device.id) {
-                console.warn("[CHL] CONNECT Tool: Cannot connect device to itself.");
-                return;
-            }
-
+            if (connectionSourceDevice.id === device.id) return;
             createConnection(connectionSourceDevice, device);
-
             connectionSourceDevice.setPendingConnect(false);
             connectionSourceDevice = null;
             //setTool("SELECT");
         }
     }
+    
+    function executeInspectDevice(device) {
+        deselectAll();
+        selectDevice(device.id);
+        console.log(`%c[CHL:INSPECT] Device: ${device.id}`, "color: #00e5ff; font-weight: bold;");
+        console.table({ ID: device.id, Type: device.type, Position: `X: ${device.position.x}, Y: ${device.position.y}` });
+    }
+
+    function inspectLinkDetails(link) {
+        console.log(`%c[CHL:INSPECT] NetworkLink: ${link.id}`, "color: #00e5ff; font-weight: bold;");
+        console.table({
+            ID: link.id,
+            Source: link.source.id,
+            Target: link.target.id,
+            Cut: link.isPhysicallyCut,
+            Retained: link.retainedEnd,
+            Breakpoints: link.breakpoints.length
+        });
+        console.log("Ordered Points:", link.getFullOrderedPoints());
+    }
+
+    function executePliersReconnect(device) {
+        if (!pendingCutLink) return;
+
+        if (device.id === pendingCutLink.source.id) {
+            console.warn("[CHL:PLIERS] Cannot connect wire back to its own source.");
+            return;
+        }
+
+        pendingCutLink.target = device;
+        pendingCutLink.cutTargetPos = null;
+        pendingCutLink.isPhysicallyCut = false;
+        pendingCutLink.middleSegmentOffset = null;
+        pendingCutLink.updatePath();
+
+        console.log(`[CHL:PLIERS] Reconnected wire to ${device.id}`);
+        pendingCutLink = null;
+        setTool("SELECT");
+    }
+    function executeRemoveDevice(device) {
+        deselectAll();
+        
+        // 1. Remove all connected links safely
+        const connected = links.filter(l => l.source.id === device.id || l.target.id === device.id);
+        connected.forEach(l => deleteLink(l.id));
+        
+        // 2. Remove DOM element
+        if (device.element && device.element.parentNode) {
+            device.element.parentNode.removeChild(device.element);
+        }
+    
+        // 3. Remove from internal devices array
+        const idx = devices.findIndex(d => d.id === device.id);
+        if (idx !== -1) {
+            devices.splice(idx, 1);
+        }
+    
+        updateCounts();
+        console.log(`[CHL:REMOVE] Device ${device.id} removed.`);
+    }
+    
+    function executeDuplicateDevice(device) {
+        deselectAll();
+    
+        // Offset position by +40px so duplicate is visible
+        const newX = device.position.x + 40;
+        const newY = device.position.y + 40;
+    
+        const dup = createHost(newX, newY);
+        selectDevice(dup.id);
+        console.log(`[CHL:DUPLICATE] Created duplicate ${dup.id} from ${device.id}`);
+        //setTool("SELECT");
+    }
+
 
     // =========================================
     // SELECTION
@@ -444,8 +640,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function createConnection(sourceDevice, targetDevice) {
         const exists = links.some(l =>
-            (l.source.id === sourceDevice.id && l.target.id === targetDevice.id) ||
-            (l.source.id === targetDevice.id && l.target.id === sourceDevice.id)
+            !l.isPhysicallyCut && (
+                (l.source.id === sourceDevice.id && l.target.id === targetDevice.id) ||
+                (l.source.id === targetDevice.id && l.target.id === sourceDevice.id)
+            )
         );
 
         if (exists) {
@@ -481,6 +679,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (selectedLinkId === linkId) {
             selectedLinkId = null;
+        }
+
+        if (typeof pendingCutLink !== "undefined" && pendingCutLink && pendingCutLink.id === linkId) {
+            pendingCutLink = null;
         }
 
         links.splice(index, 1);
