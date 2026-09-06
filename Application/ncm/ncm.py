@@ -94,6 +94,69 @@ class NetworkConfigurationManager:
             f"Interfaces cannot be removed from {device.name}"
         )
 
+    # ========================================================
+    # NETWORK / SUBNET MANAGEMENT
+    # ========================================================
+
+    def add_subnet(self, subnet, gateway=None):
+
+        return self.simulation.add_subnet(
+            subnet,
+            gateway
+        )
+
+    def get_subnets(self):
+
+        return self.simulation.network.subnets
+
+    def get_subnet(self, ip):
+
+        return self.simulation.network.get_subnet(ip)
+
+    def get_gateway(self, ip):
+
+        return self.simulation.network.get_gateway(ip)
+
+
+    # ========================================================
+    # SERVICE MANAGEMENT
+    # ========================================================
+
+    def add_service( self, device, name, protocol, port, status="stopped"
+    ):
+
+        device = self.get_device(device)
+
+        if device not in self.simulation.hosts.values():
+            raise ValueError(
+                f"Services cannot be added to {device.name}"
+            )
+
+        return self.simulation.add_service( device, name, protocol, port, status
+        )
+
+    def start_service(self, device, service_name):
+
+        device = self.get_device(device)
+
+        return self.simulation.start_service(
+            device,
+            service_name
+        )
+
+    def stop_service(self, device, service_name):
+
+        device = self.get_device(device)
+
+        return self.simulation.stop_service(
+            device,
+            service_name
+        )
+
+
+
+
+
 
 
     

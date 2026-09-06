@@ -1,3 +1,5 @@
+import ipaddress
+
 from backend.core.host import Host
 from backend.core.interface import NetworkInterface
 from backend.core.mac import generate_mac
@@ -36,8 +38,7 @@ class Simulation:
     # ========================================================
 
     def add_subnet(self, subnet, gateway):
-
-        self.network.add_subnet(
+        return self.network.add_subnet(
             subnet,
             gateway
         )

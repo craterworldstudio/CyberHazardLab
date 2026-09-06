@@ -37,6 +37,8 @@ class Network:
 			"gateway": gateway
 		}
 
+		return network
+
 	def get_subnet(self, ip):
 		ip = ipaddress.ip_address(ip)
 
