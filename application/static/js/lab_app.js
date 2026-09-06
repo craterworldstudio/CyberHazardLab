@@ -1,3 +1,25 @@
+const CHL = {
+    floor: null,
+    svgLayer: null,
+
+    devices: [],
+    links: [],
+
+    NetworkDevice: null,
+    NetworkLink: null,
+
+    DEVICE_CONFIG: {
+        PC: {
+            prefix: "HOST",
+            icon: "/static/assets/PC_off.png"
+        },
+        SERVER: {
+            prefix: "SERV",
+            icon: "/static/assets/SERV_off.png"
+        }
+    }
+};
+
 
 document.addEventListener("DOMContentLoaded", () => {
 
@@ -7,6 +29,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const floor = document.getElementById("topologyFloor");
     const svgLayer = document.getElementById("linkSvgLayer");
+
+    CHL.floor = floor;
+    CHL.svgLayer = svgLayer;
+
     const paletteItems = document.querySelectorAll(".palette-item:not(.disabled)");
     const nodeCountEl = document.getElementById("nodeCount");
     const linkCountEl = document.getElementById("linkCount");
@@ -21,27 +47,12 @@ document.addEventListener("DOMContentLoaded", () => {
     // =========================================
     // STATE
     // =========================================
-
-    const devices = [];
-    const links = [];
-
     let selectedDeviceId = null;
     let selectedLinkId = null;
 
     let hostCounter = 1;
     let serverCounter = 1;
 
-    // Device visual asset mapping
-    const DEVICE_CONFIG = {
-        PC: {
-            prefix: "HOST",
-            icon: "/static/assets/PC_off.png"
-        },
-        SERVER: {
-            prefix: "SERV",
-            icon: "/static/assets/SERV_off.png"
-        }
-    };
     let linkCounter = 1;
 
     let activeDevice = null;
@@ -54,9 +65,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let draggingFromPalette = false;
     let paletteDeviceType = null;
+    let creatingPaletteDevice = false;
     let dragOffsetX = 0;
     let dragOffsetY = 0;
 
+
+
+    const devices = CHL.devices;
+    const links = CHL.links;
+    const DEVICE_CONFIG = CHL.DEVICE_CONFIG;
     // =========================================
     // RIBBON TAB SWITCHING
     // =========================================
@@ -143,7 +160,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // =========================================
+        // =========================================
     // NETWORK DEVICE
     // =========================================
 
@@ -382,6 +399,11 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+
+
+
+    CHL.NetworkDevice = NetworkDevice;
+    CHL.NetworkLink = NetworkLink;
     /* =========================================
        CENTRAL INTERACTION HANDLERS
        ========================================= */
@@ -503,12 +525,25 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function executeConnectDevice(device) {
+
+        
+
         if (!connectionSourceDevice) {
             connectionSourceDevice = device;
             connectionSourceDevice.setPendingConnect(true);
         } else {
             if (connectionSourceDevice.id === device.id) return;
-            createConnection(connectionSourceDevice, device);
+            const sourceDevice = connectionSourceDevice;
+            const targetDevice = device;
+            connectDevices( connectionSourceDevice, device ).then(() => {
+            
+                createConnection( sourceDevice, targetDevice );
+                connectionSourceDevice = null;
+            }).catch(error => {
+            
+                console.error( "[CHL] Failed to connect devices:", error );
+            });
+
             connectionSourceDevice.setPendingConnect(false);
             connectionSourceDevice = null;
             //setTool("SELECT");
@@ -700,10 +735,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Generalized Device Factory
-    function createDevice(type = "PC", x = 0, y = 0) {
+    async function createDevice(type = "PC", x = 0, y = 0) {
+
         const config = DEVICE_CONFIG[type] || DEVICE_CONFIG.PC;
-    
         let id;
+
         if (type === "SERVER") {
             id = `${config.prefix}-${String(serverCounter).padStart(2, "0")}`;
             serverCounter++;
@@ -712,17 +748,35 @@ document.addEventListener("DOMContentLoaded", () => {
             hostCounter++;
         }
 
-        const device = new NetworkDevice(id, type, config.icon, x, y);
+        const backendDevice = await apiRequest(
+            "POST",
+            "/api/ntm/devices",
+            {
+                name: id,
+                type: type.toLowerCase()
+            }
+        );
+
+        console.log(
+            `[CHL] Backend created ${backendDevice.name} (${backendDevice.type})`
+        );
+
+        const device = new NetworkDevice( backendDevice.name, type, config.icon, x, y
+        );
+
         devices.push(device);
         floor.appendChild(device.element);
-
         updateCounts();
-        console.log(`[CHL] Created ${id} (${type})`);
+
+        console.log(
+            `[CHL] Created visual device ${device.id} (${type})`
+        );
+
         return device;
     }
 
     // Preserve createHost for existing prototype scene initialization
-    function createHost(x = 0, y = 0) {
+    async function createHost(x = 0, y = 0) {
         return createDevice("PC", x, y);
     }
 
@@ -818,66 +872,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
-    // =========================================
-    // GLOBAL MOUSE MOVEMENT
-    // =========================================
-
- /*    window.addEventListener("mousemove", (event) => {
-        // ----------------------------------
-        // PALETTE → FLOOR
-        // ----------------------------------
-
-        if (activeSegmentDrag) {
-            const floorRect = floor.getBoundingClientRect();
-            let mouseX = Math.round(event.clientX - floorRect.left);
-            let mouseY = Math.round(event.clientY - floorRect.top);
-
-            const deltaX = mouseX - activeSegmentDrag.initialMouseX;
-            let newMidX = activeSegmentDrag.initialOffset + deltaX;
-
-            newMidX = Math.max(10, Math.min(newMidX, floor.clientWidth - 10));
-
-            activeSegmentDrag.link.middleSegmentOffset = newMidX;
-            activeSegmentDrag.link.updatePath();
-            return;
-        }
-
-
-        if (draggingFromPalette) {
-            const floorRect = floor.getBoundingClientRect();
-
-            const insideFloor =
-                event.clientX >= floorRect.left &&
-                event.clientX <= floorRect.right &&
-                event.clientY >= floorRect.top &&
-                event.clientY <= floorRect.bottom;
-
-            // Create device when cursor first enters floor.
-            if (insideFloor && activeDevice === null) {
-                if (paletteDeviceType === "PC") {
-                    activeDevice = createHost();
-                }
-            }
-
-            // Move device with cursor.
-            if (activeDevice) {
-                const position = getFloorPosition( event.clientX, event.clientY );
-                activeDevice.updatePosition(position.x, position.y);
-            }
-
-            return;
-        }
-
-        // ----------------------------------
-        // EXISTING DEVICE DRAG
-        // ----------------------------------
-
-        if (activeDevice) {
-            const position = getFloorPosition( event.clientX, event.clientY );
-
-            activeDevice.updatePosition(position.x, position.y);
-        }
-    }); */
 
     window.addEventListener("pointermove", (event) => {
         if (activeSegmentDrag) {
@@ -900,9 +894,21 @@ document.addEventListener("DOMContentLoaded", () => {
                 event.clientY >= floorRect.top &&
                 event.clientY <= floorRect.bottom;
 
-            if (insideFloor && activeDevice === null) {
-                activeDevice = createDevice(paletteDeviceType);
-            }
+            if ( insideFloor && activeDevice === null && !creatingPaletteDevice) {
+                
+                    creatingPaletteDevice = true;
+                    createDevice(paletteDeviceType).then(device => {    
+                        
+                            activeDevice = device;
+                            const position = getFloorPosition( event.clientX, event.clientY );
+                            activeDevice.updatePosition( position.x, position.y );
+                        
+                        }).catch(error => {
+                        
+                            console.error( "[CHL] Failed to create device:", error );
+                        
+                        }).finally(() => { creatingPaletteDevice = false; });
+                }
 
             if (activeDevice) {
                 const position = getFloorPosition(event.clientX, event.clientY);
@@ -942,6 +948,7 @@ document.addEventListener("DOMContentLoaded", () => {
         activeSegmentDrag = null;
         draggingFromPalette = false;
         paletteDeviceType = null;
+        creatingPaletteDevice = false;
     }
 
     // REPLACE window.addEventListener("mouseup") WITH:
@@ -986,23 +993,32 @@ document.addEventListener("DOMContentLoaded", () => {
        INITIALIZATION: PROTOTYPE SCENE
        ========================================= */
 
-    function initPrototypeScene() {
+    async function initPrototypeScene() {
+
         const floorWidth = floor.clientWidth || 800;
         const floorHeight = floor.clientHeight || 500;
 
-        // Position initial hosts with comfortable separation
         const host1X = Math.floor(floorWidth * 0.25) - 32;
         const host1Y = Math.floor(floorHeight * 0.4) - 32;
 
         const host2X = Math.floor(floorWidth * 0.70) - 32;
         const host2Y = Math.floor(floorHeight * 0.6) - 32;
 
-        const host1 = createHost(host1X, host1Y);
-        const host2 = createHost(host2X, host2Y);
+        const host1 = await createHost(host1X,host1Y);
 
-        // Pre-connect prototype wire
-        createConnection(host1, host2);
+        const host2 = await createHost(host2X,host2Y);
+
+        createConnection( host1, host2 );
     }
 
-    initPrototypeScene();
+    //initPrototypeScene();
+
+    loadDevices()
+    .then(() => loadLinks())
+    .catch(error => {
+        console.error(
+            "[CHL] Failed to load topology:",
+            error
+        );
+    });
 });

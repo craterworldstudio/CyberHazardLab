@@ -1,6 +1,6 @@
 from backend import Simulation
 from backend.core.interface import NetworkInterface
-from Application.ntm import NetworkTopologyManager
+from application.ntm import NetworkTopologyManager
 
 
 # ============================================================

@@ -1,5 +1,5 @@
 from backend import Simulation
-from Application.ncm.ncm import NetworkConfigurationManager
+from application.ncm.ncm import NetworkConfigurationManager
 
 
 # ============================================================

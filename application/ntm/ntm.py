@@ -1,3 +1,5 @@
+from backend.core.device import DeviceType
+
 class NetworkTopologyManager:
 
     def __init__(self, simulation):
@@ -151,3 +153,22 @@ class NetworkTopologyManager:
             f"{device_a.name} and {device_b.name}"
         )
 
+    # ========================================================
+    # DEVICE MANAGEMENT
+    # ========================================================
+
+    def create_device(self, name, device_type="pc", subnet=None):
+    
+        device_type = device_type.lower()
+    
+        if device_type == "switch":
+            return self.simulation.add_switch(name)
+    
+        if device_type == "router":
+            return self.simulation.add_router(name)
+    
+        return self.simulation.add_host(
+            name,
+            subnet=subnet,
+            device=self.simulation.get_device_type(device_type)
+        )

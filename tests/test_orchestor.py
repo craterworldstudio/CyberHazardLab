@@ -2,7 +2,7 @@ from backend import Simulation
 import pprint
 
 from backend.network.packet import ICMPPacket, Packet
-from Application.ntm import NetworkTopologyManager
+from application.ntm import NetworkTopologyManager
 
 
 
