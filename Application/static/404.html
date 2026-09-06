@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 // CYBER HAZARD LAB</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background-color: #0a0f18;
+            color: #5c6b73;
+            font-family: monospace;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .error-container {
+            text-align: center;
+            border: 1px solid rgba(0, 229, 255, 0.2);
+            background: #06090e;
+            padding: 40px 60px;
+            box-shadow: 0 0 20px rgba(0, 229, 255, 0.05);
+        }
+        h1 {
+            color: #ffaa00;
+            font-size: 48px;
+            margin-bottom: 10px;
+            letter-spacing: 2px;
+        }
+        p {
+            font-size: 14px;
+            margin-bottom: 30px;
+            color: #8a9ba8;
+        }
+        .console-text {
+            color: #00e5ff;
+            margin-bottom: 30px;
+            font-size: 12px;
+            text-align: left;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 15px;
+            border-left: 2px solid #00e5ff;
+        }
+        .return-btn {
+            display: inline-block;
+            background: rgba(0, 229, 255, 0.1);
+            color: #00e5ff;
+            text-decoration: none;
+            padding: 10px 24px;
+            border: 1px solid #00e5ff;
+            font-weight: bold;
+            text-transform: uppercase;
+            transition: all 0.2s ease;
+        }
+        .return-btn:hover {
+            background: #00e5ff;
+            color: #06090e;
+            box-shadow: 0 0 15px rgba(0, 229, 255, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <h1>404 // NOT FOUND</h1>
+        <p>The requested endpoint does not exist in the current topology.</p>
+        
+        <div class="console-text">
+            > ERR_CONNECTION_REFUSED<br>
+            > TRACE_ROUTE: FAILED<br>
+            > RECOMMENDATION: RETURN TO ROOT NODE
+        </div>
+
+        <a href="/" class="return-btn">Return to Root</a>
+    </div>
+</body>
+</html>

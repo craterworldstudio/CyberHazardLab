@@ -33,19 +33,26 @@
 
         <!-- RIBBON TABS -->
         <div class="ribbon-tabs">
+            <div style="display: flex;">
+                <button class="ribbon-tab" data-tab="home">HOME</button>
+                <button class="ribbon-tab active" data-tab="tools">TOOLS</button>
+                <button class="ribbon-tab" data-tab="view">VIEW</button>
+            </div>    
 
-            <button class="ribbon-tab active" data-tab="home">HOME</button>
-            <button class="ribbon-tab" data-tab="tools">TOOLS</button>
-            <button class="ribbon-tab" data-tab="view">VIEW</button>
-
+            <!-- SYSTEM SWITCHER -->
+            <a href="/soc" style="text-decoration: none; align-items: right; margin-right: 24px;">
+                <button class="ribbon-tab" style="color: #ffaa00; border: 1px solid rgba(255,255,255,0.05);">
+                    <i class="fa-solid fa-shield-halved"></i> TO SOC
+                </button>
+            </a>
+        
         </div>
-
 
         <!-- =====================================
              HOME TAB
              ===================================== -->
 
-        <div class="ribbon-toolbar" data-panel="home">
+        <div class="ribbon-toolbar" data-panel="home" hidden>
 
             <!-- FILE -->
             <div class="ribbon-group">
@@ -176,7 +183,7 @@
              TOOLS TAB
              ===================================== -->
 
-        <div class="ribbon-toolbar" data-panel="tools" hidden>
+        <div class="ribbon-toolbar" data-panel="tools">
 
             <!-- MODE -->
             <div class="ribbon-group">

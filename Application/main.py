@@ -26,7 +26,7 @@ class CustomHandler(SimpleHTTPRequestHandler):
             pass
 
         else:
-            self.path = "/static/page404.html"
+            self.path = "/static/404.html"
 
         return super().do_GET()
 
