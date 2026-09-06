@@ -39,7 +39,7 @@ document.addEventListener("DOMContentLoaded", () => {
         },
         SERVER: {
             prefix: "SERV",
-            icon: "/static/assets/server_off.png"
+            icon: "/static/assets/SERV_off.png"
         }
     };
     let linkCounter = 1;
@@ -582,7 +582,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const newX = device.position.x + 40;
         const newY = device.position.y + 40;
     
-        const dup = createHost(newX, newY);
+        const dup = createDevice(device.type, newX, newY);
         selectDevice(dup.id);
         console.log(`[CHL:DUPLICATE] Created duplicate ${dup.id} from ${device.id}`);
         //setTool("SELECT");
@@ -699,7 +699,34 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    // Generalized Device Factory
+    function createDevice(type = "PC", x = 0, y = 0) {
+        const config = DEVICE_CONFIG[type] || DEVICE_CONFIG.PC;
+    
+        let id;
+        if (type === "SERVER") {
+            id = `${config.prefix}-${String(serverCounter).padStart(2, "0")}`;
+            serverCounter++;
+        } else {
+            id = `${config.prefix}-${String(hostCounter).padStart(2, "0")}`;
+            hostCounter++;
+        }
+
+        const device = new NetworkDevice(id, type, config.icon, x, y);
+        devices.push(device);
+        floor.appendChild(device.element);
+
+        updateCounts();
+        console.log(`[CHL] Created ${id} (${type})`);
+        return device;
+    }
+
+    // Preserve createHost for existing prototype scene initialization
     function createHost(x = 0, y = 0) {
+        return createDevice("PC", x, y);
+    }
+
+    /* function createHost(x = 0, y = 0) {
         const id = `HOST-${String(hostCounter).padStart(2, "0")}`;
         hostCounter++;
 
@@ -710,7 +737,7 @@ document.addEventListener("DOMContentLoaded", () => {
         updateCounts();
         console.log(`[CHL] Created ${id}`);
         return host;
-    }
+    } */
 
 
 
@@ -781,7 +808,7 @@ document.addEventListener("DOMContentLoaded", () => {
             event.preventDefault();
             
             const type = item.dataset.type;
-            if (type !== "PC") return;
+            if (type !== "PC" && type !== "SERVER") return;
             
             draggingFromPalette = true;
             paletteDeviceType = type;
@@ -874,9 +901,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 event.clientY <= floorRect.bottom;
 
             if (insideFloor && activeDevice === null) {
-                if (paletteDeviceType === "PC") {
-                    activeDevice = createHost();
-                }
+                activeDevice = createDevice(paletteDeviceType);
             }
 
             if (activeDevice) {
