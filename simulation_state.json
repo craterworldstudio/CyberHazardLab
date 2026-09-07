@@ -1,0 +1,95 @@
+{
+    "version": 1,
+    "simulation": {
+        "devices": [
+            {
+                "name": "HOST-01",
+                "type": "pc"
+            },
+            {
+                "name": "HOST-02",
+                "type": "pc"
+            },
+            {
+                "name": "SERV-01",
+                "type": "server"
+            }
+        ],
+        "links": [
+            {
+                "endpoint_a": "HOST-01",
+                "endpoint_b": "HOST-02"
+            },
+            {
+                "endpoint_a": "SERV-01",
+                "endpoint_b": "HOST-01"
+            },
+            {
+                "endpoint_a": "SERV-01",
+                "endpoint_b": "HOST-02"
+            },
+            {
+                "endpoint_a": "HOST-01",
+                "endpoint_b": "HOST-02"
+            },
+            {
+                "endpoint_a": "HOST-01",
+                "endpoint_b": "HOST-02"
+            }
+        ],
+        "interfaces": {
+            "HOST-01": [
+                {
+                    "name": "eth0",
+                    "mac": "02:53:0a:db:d6:31",
+                    "ip": null,
+                    "subnet": null
+                }
+            ],
+            "HOST-02": [
+                {
+                    "name": "eth0",
+                    "mac": "02:bb:de:c0:a8:b4",
+                    "ip": null,
+                    "subnet": null
+                },
+                {
+                    "name": "eth1",
+                    "mac": "02:8d:97:61:3e:8d",
+                    "ip": null,
+                    "subnet": null
+                },
+                {
+                    "name": "eth2",
+                    "mac": "02:a5:ea:ef:77:b2",
+                    "ip": null,
+                    "subnet": null
+                },
+                {
+                    "name": "eth3",
+                    "mac": "02:35:c5:b0:8f:5d",
+                    "ip": null,
+                    "subnet": null
+                }
+            ],
+            "SERV-01": [
+                {
+                    "name": "eth0",
+                    "mac": "02:a7:7a:33:68:a6",
+                    "ip": null,
+                    "subnet": null
+                },
+                {
+                    "name": "eth1",
+                    "mac": "02:73:c5:f2:a2:00",
+                    "ip": null,
+                    "subnet": null
+                }
+            ]
+        },
+        "subnets": {},
+        "routes": {},
+        "services": {}
+    },
+    "layout": {}
+}

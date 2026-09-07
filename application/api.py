@@ -1,8 +1,9 @@
 class API:
 
-    def __init__(self, ntm, ncm):
+    def __init__(self, ntm, ncm, state_manager):
         self.ntm = ntm
         self.ncm = ncm
+        self.state_manager = state_manager
 
     # ========================================================
     # REQUEST DISPATCH
@@ -118,6 +119,7 @@ class API:
                 ),
                 subnet=body.get("subnet")
             )
+            self.state_manager.save()
 
             return self._serialize_device(
                 device
@@ -132,6 +134,7 @@ class API:
                 body["device_a"],
                 body["device_b"]
             )
+            self.state_manager.save()
 
             return self._serialize_link(
                 link
@@ -146,6 +149,7 @@ class API:
                 body["device_a"],
                 body["device_b"]
             )
+            self.state_manager.save()
 
             return self._serialize_link(
                 link

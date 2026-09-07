@@ -13,6 +13,7 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 import json
 
 from backend.orchestrator import Simulation
+from backend.state.manager import StateManager
 from application.ntm.ntm import NetworkTopologyManager
 from application.ncm.ncm import NetworkConfigurationManager
 from application.api import API
@@ -24,10 +25,12 @@ PORT = 8000
 
 simulation = Simulation()
 
+state_manager = StateManager(simulation)
+
 ntm = NetworkTopologyManager(simulation)
 ncm = NetworkConfigurationManager(simulation)
 
-api = API(ntm, ncm)
+api = API(ntm, ncm, state_manager)
 
 class CustomHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
