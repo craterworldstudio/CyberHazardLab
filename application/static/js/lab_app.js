@@ -588,26 +588,44 @@ document.addEventListener("DOMContentLoaded", () => {
         pendingCutLink = null;
         setTool("SELECT");
     }
-    function executeRemoveDevice(device) {
+    async function executeRemoveDevice(device) {
         deselectAll();
         
-        // 1. Remove all connected links safely
-        const connected = links.filter(l => l.source.id === device.id || l.target.id === device.id);
-        connected.forEach(l => deleteLink(l.id));
+        try {
+            //const response = await fetch(`/api/ntm/devices/${encodeURIComponent(device.id)}`, {
+            //    method: "DELETE"
+            //});
+
+            
+            const response = await apiRequest(
+                "DELETE",
+                "/api/ntm/devices",
+                {
+                    name: device.name,
+                }
+            );
+            
+
+            // 1. Remove all connected links safely
+            const connected = links.filter(l => l.source.id === device.id || l.target.id === device.id);
+            connected.forEach(l => deleteLink(l.id));
+            
+            // 2. Remove DOM element
+            if (device.element && device.element.parentNode) {
+                device.element.parentNode.removeChild(device.element);
+            }
         
-        // 2. Remove DOM element
-        if (device.element && device.element.parentNode) {
-            device.element.parentNode.removeChild(device.element);
-        }
+            // 3. Remove from internal devices array
+            const idx = devices.findIndex(d => d.id === device.id);
+            if (idx !== -1) {
+                devices.splice(idx, 1);
+            }
     
-        // 3. Remove from internal devices array
-        const idx = devices.findIndex(d => d.id === device.id);
-        if (idx !== -1) {
-            devices.splice(idx, 1);
+            updateCounts();
+            console.log(`[CHL:REMOVE] Device ${device.id} removed.`);
+        } catch (error) {
+            console.error(`[CHL:REMOVE] Failed to remove ${device.id}:`, error);
         }
-    
-        updateCounts();
-        console.log(`[CHL:REMOVE] Device ${device.id} removed.`);
     }
     
     function executeDuplicateDevice(device) {
@@ -780,20 +798,6 @@ document.addEventListener("DOMContentLoaded", () => {
         return createDevice("PC", x, y);
     }
 
-    /* function createHost(x = 0, y = 0) {
-        const id = `HOST-${String(hostCounter).padStart(2, "0")}`;
-        hostCounter++;
-
-        const host = new NetworkDevice(id, "PC", "/static/assets/PC_off.png", x, y);
-        devices.push(host);
-        floor.appendChild(host.element);
-
-        updateCounts();
-        console.log(`[CHL] Created ${id}`);
-        return host;
-    } */
-
-
 
     // =========================================
     // NODE COUNT
@@ -836,27 +840,6 @@ document.addEventListener("DOMContentLoaded", () => {
     // =========================================
 
     paletteItems.forEach(item => {
-        /* item.addEventListener("mousedown", (event) => {
-            if (event.button !== 0) return;
-
-            event.preventDefault();
-            const type = item.dataset.type;
-            // At the moment only PC is implemented.
-            if (type !== "PC") return;
-
-            draggingFromPalette = true;
-            paletteDeviceType = type;
-
-            // Device follows cursor from its center.
-            dragOffsetX = 32;
-            dragOffsetY = 32;
-
-            // Device is created when cursor reaches the floor.
-            activeDevice = null;
-
-            console.log(`[CHL] Started palette drag: ${type}`);
-        }); */
-
         item.addEventListener("pointerdown", (event) => {
             if (event.button !== 0 && event.pointerType === "mouse") return;
             event.preventDefault();

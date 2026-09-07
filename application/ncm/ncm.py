@@ -117,6 +117,8 @@ class NetworkConfigurationManager:
 
         return self.simulation.network.get_gateway(ip)
 
+    def remove_subnet(self, subnet):
+        return self.simulation.remove_subnet(subnet)
 
     # ========================================================
     # SERVICE MANAGEMENT

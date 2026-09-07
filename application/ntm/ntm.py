@@ -172,3 +172,17 @@ class NetworkTopologyManager:
             subnet=subnet,
             device=self.simulation.get_device_type(device_type)
         )
+
+    def remove_device(self, name):
+        device = self.get_device(name)
+    
+        if device in self.simulation.hosts.values():
+            return self.simulation.remove_host(name)
+    
+        if device in self.simulation.switches.values():
+            return self.simulation.remove_switch(name)
+    
+        if device in self.simulation.routers.values():
+            return self.simulation.remove_router(name)
+    
+        raise ValueError(f"Cannot remove device: {name}")

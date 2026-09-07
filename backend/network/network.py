@@ -39,6 +39,17 @@ class Network:
 
 		return network
 
+
+	def remove_subnet(self, subnet):
+		network = ipaddress.ip_network(subnet)
+
+		if network not in self.subnets:
+			raise ValueError(
+				f"Subnet doesn't exists: {network}"
+			)
+
+		return self.subnets.pop(network)
+
 	def get_subnet(self, ip):
 		ip = ipaddress.ip_address(ip)
 

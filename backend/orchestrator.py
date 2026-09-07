@@ -52,6 +52,8 @@ class Simulation:
             gateway=gateway
         )
 
+    def remove_subnet(self, subnet):
+        return self.network.remove_subnet(subnet)
     # ========================================================
     # HOSTS
     # ========================================================
@@ -150,6 +152,21 @@ class Simulation:
 
         return interface
 
+    def remove_host(self, name):
+        host = self.get_host(name)
+
+        for interface in host.interfaces:
+            if interface.link is not None:
+                self.disconnect(interface.link)
+
+        if host.get_ip() in self.network.hosts:
+            del self.network.hosts[host.get_ip()]
+
+        del self.hosts[name]
+
+        return host
+
+
     # ========================================================
     # SERVICES
     # ========================================================
@@ -232,6 +249,20 @@ class Simulation:
             switch = self.switches[switch]
 
         return switch.remove_port(port_number)
+
+    def remove_switch(self, name):
+        if name not in self.switches:
+            raise ValueError(f"Unknown switch: {name}")
+
+        switch = self.switches[name]
+
+        for port in list(switch.ports.values()):
+            if port.link is not None:
+                self.disconnect(port.link)
+
+        del self.switches[name]
+
+        return switch
     # ========================================================
     # ROUTERS
     # ========================================================
@@ -341,6 +372,22 @@ class Simulation:
         router.interfaces.remove(interface)
 
         return interface
+
+    def remove_router(self, name):
+        if name not in self.routers:
+            raise ValueError(f"Unknown router: {name}")
+
+        router = self.routers[name]
+
+        for interface in router.interfaces:
+            if interface.link is not None:
+                self.disconnect(interface.link)
+
+        del self.routers[name]
+
+        return router
+
+
 
 
     # ========================================================
