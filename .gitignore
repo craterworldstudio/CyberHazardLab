@@ -4,3 +4,4 @@ __pycache__
 *.pyc
 __pycache__/
 tests/output.txt
+simulation_state.json
