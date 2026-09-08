@@ -314,7 +314,16 @@ document.addEventListener("DOMContentLoaded", () => {
         getFullOrderedPoints() {
             const start = this.source.getCenter();
             
-            const end = this.cutTargetPos ? this.cutTargetPos : this.target.getCenter();
+            const end = this.target.getCenter(); //const end = this.cutTargetPos ? this.cutTargetPos : this.target.getCenter();
+
+            if (this.isPhysicallyCut && this.cutTargetPos) {
+                if (this.retainedEnd === "target") {
+                    start = this.cutTargetPos; // Loose end is at the source side
+                } else {
+                    end = this.cutTargetPos;   // Loose end is at the target side
+                }
+            }
+
             let midX = this.middleSegmentOffset !== null ? this.middleSegmentOffset : Math.round((start.x + end.x) / 2);
 
             const basePoints = [
@@ -425,7 +434,7 @@ document.addEventListener("DOMContentLoaded", () => {
     /* =========================================
        CENTRAL INTERACTION HANDLERS
        ========================================= */
-
+    // not in use
     function handleDeviceClick(device, event) {
         if (currentTool === "SELECT" || currentTool === "PLIERS") {
             deselectAll();
@@ -534,12 +543,33 @@ document.addEventListener("DOMContentLoaded", () => {
         const clickX = Math.round(event.clientX - floorRect.left);
         const clickY = Math.round(event.clientY - floorRect.top);
 
+        const start = link.source.getCenter();
+        const end = link.target.getCenter();
+        const distSource = Math.hypot(start.x - clickX, start.y - clickY);
+        const distTarget = Math.hypot(end.x - clickX, end.y - clickY);
+
+        link.retainedEnd = distSource < distTarget ? "target" : "source";
         link.isPhysicallyCut = true;
         link.cutTargetPos = { x: clickX, y: clickY };
         link.updatePath();
 
         pendingCutLink = link;
         console.log(`[CHL:PLIERS] Wire severed. Click any device to connect the loose end.`);
+
+        fetch("/api/ntm/disconnect", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                device_a: link.source.id,
+                device_b: link.target.id
+            })
+        })
+        .then(res => {
+            if (!res.ok) throw new Error("Backend disconnect failed");
+            return res.json();
+        })
+        .then(data => console.log("[CHL:API] Backend disconnected:", data))
+        .catch(err => console.error("[CHL:API] API Error:", err));
     }
 
     function executeConnectDevice(device) {
@@ -598,6 +628,12 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
+        if (pendingCutLink.retainedEnd === "target") {
+            pendingCutLink.source = device;
+        } else {
+            pendingCutLink.target = device
+        }
+
         pendingCutLink.target = device;
         pendingCutLink.cutTargetPos = null;
         pendingCutLink.isPhysicallyCut = false;
@@ -605,6 +641,23 @@ document.addEventListener("DOMContentLoaded", () => {
         pendingCutLink.updatePath();
 
         console.log(`[CHL:PLIERS] Reconnected wire to ${device.id}`);
+        
+
+        fetch("/api/ntm/connect", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                device_a: pendingCutLink.source.id,
+                device_b: pendingCutLink.target.id
+            })
+        })
+        .then(res => {
+            if (!res.ok) throw new Error("Backend connect failed");
+            return res.json();
+        })
+        .then(data => console.log("[CHL:API] Backend connected:", data))
+        .catch(err => console.error("[CHL:API] API Error:", err));
+
         pendingCutLink = null;
         setTool("SELECT");
     }
