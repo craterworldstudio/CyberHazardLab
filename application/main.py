@@ -19,8 +19,8 @@ from application.ncm.ncm import NetworkConfigurationManager
 from application.api import API
 
 
-HOST = "localhost"
-PORT = 8000
+HOST = "0.0.0.0"
+PORT = int(os.environ.get("PORT", 8000))
 
 
 simulation = Simulation()
