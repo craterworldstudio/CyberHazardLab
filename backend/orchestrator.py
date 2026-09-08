@@ -200,6 +200,11 @@ class Simulation:
             service_name
         )
 
+    def remove_service(self, host, service_name):
+        if isinstance(host, str):
+            host = self.get_host(host)
+        self.network.remove_service(host, service_name)
+
     def stop_service( self, host, service_name):
 
         if isinstance(host, str):

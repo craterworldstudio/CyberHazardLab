@@ -132,6 +132,23 @@ class NetworkConfigurationManager:
             f"Interfaces cannot be removed from {device.name}"
         )
 
+    def update_interface(self, device, interface_name, ip=None, subnet=None):
+        device_obj = self.get_device(device)
+        for intf in getattr(device_obj, 'interfaces', []):
+            if intf.name == interface_name:
+                if ip is not None:
+                    # Remove old IP from network hosts mapping if it's a Host
+                    old_ip = intf.ip
+                    if old_ip and old_ip in self.simulation.network.hosts and self.simulation.network.hosts[old_ip] == device_obj:
+                        del self.simulation.network.hosts[old_ip]
+                    intf.ip = ip
+                    if ip and device_obj in self.simulation.hosts.values():
+                        self.simulation.network.hosts[ip] = device_obj
+                if subnet is not None:
+                    intf.subnet = subnet
+                return intf
+        raise ValueError(f"Interface {interface_name} not found on {device_obj.name}")
+
     # ========================================================
     # NETWORK / SUBNET MANAGEMENT
     # ========================================================
@@ -174,6 +191,14 @@ class NetworkConfigurationManager:
 
         return self.simulation.add_service( device, name, protocol, port, status
         )
+
+    def get_services(self, device):
+        device = self.get_device(device)
+        return getattr(device, 'services', [])
+
+    def remove_service(self, device, service_name):
+        device = self.get_device(device)
+        return self.simulation.remove_service(device, service_name)
 
     def start_service(self, device, service_name):
 

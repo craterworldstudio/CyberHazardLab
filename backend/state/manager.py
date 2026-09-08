@@ -18,10 +18,18 @@ class StateManager:
         return self.path.exists()
 
     def save(self, layout=None):
+        if layout is None:
+            # Try to preserve existing layout
+            existing = self.load()
+            if existing and "layout" in existing:
+                layout = existing["layout"]
+            else:
+                layout = {}
+
         state = {
             "version": 1,
             "simulation": self.serialize_simulation(),
-            "layout": layout or {}
+            "layout": layout
         }
 
         self.path.write_text(
@@ -187,6 +195,7 @@ class StateManager:
             if not host.services:
                 continue
 
+            print(host)
             services[host.name] = self.serialize_value(
                 host.services
             )

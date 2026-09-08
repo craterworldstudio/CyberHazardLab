@@ -5,15 +5,19 @@ async function loadDevices() {
             "/api/ntm/devices"
         );
 
+        let layout = {};
+        try {
+            layout = await apiRequest("GET", "/api/ntm/layout");
+        } catch (e) {
+            console.warn("[CHL] Could not load layout", e);
+        }
+
         for (const backendDevice of backendDevices) {
-
             const type = backendDevice.type.toUpperCase();
-
-            const config =
-                CHL.DEVICE_CONFIG[type] || CHL.DEVICE_CONFIG.PC;
-
-            const device = new CHL.NetworkDevice( backendDevice.name, type, backendDevice.status, 0, 0
-            );
+            const config = CHL.DEVICE_CONFIG[type] || CHL.DEVICE_CONFIG.PC;
+            
+            const pos = layout[backendDevice.name] || {x: 0, y: 0};
+            const device = new CHL.NetworkDevice( backendDevice.name, type, backendDevice.status, pos.x, pos.y );
 
             CHL.devices.push(device);
             CHL.floor.appendChild(device.element);

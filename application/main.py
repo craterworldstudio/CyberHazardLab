@@ -107,7 +107,6 @@ class CustomHandler(SimpleHTTPRequestHandler):
             raw_body = self.rfile.read(length)
 
             body = ( json.loads(raw_body) if raw_body else {} )
-
             result = api.handle( "DELETE", self.path, body )
 
             self.send_json( result, status=200 )
@@ -117,7 +116,31 @@ class CustomHandler(SimpleHTTPRequestHandler):
 
         except Exception as error:
             self.send_json( {"error": str(error)}, status=500 )
+        
 
+    def do_PUT(self):
+        content_length = int(self.headers.get("Content-Length", 0))
+        body = {}
+
+        if content_length > 0:
+            raw_body = self.rfile.read(content_length)
+            try:
+                body = json.loads(raw_body.decode("utf-8"))
+            except json.JSONDecodeError:
+                self.send_json({"error": "Invalid JSON"}, status=400)
+                return
+
+        try:
+            result = api.handle("PUT", self.path, body)
+            self.send_json(result, status=200)
+
+        except ValueError as error:
+            self.send_json({"error": str(error)}, status=400)
+
+        except Exception as error:
+            self.send_json({"error": str(error)}, status=500)
+
+        
 
 
     def send_json(self, data, status=200):

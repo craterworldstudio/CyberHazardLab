@@ -136,6 +136,16 @@ class API:
                 link
             )
 
+        # GET /api/ntm/layout
+        if method == "GET" and resource == ["layout"]:
+            state = self.state_manager.load()
+            return state.get("layout", {}) if state else {}
+
+        # POST /api/ntm/layout
+        if method == "POST" and resource == ["layout"]:
+            self.state_manager.save(layout=body)
+            return {"status": "success"}
+
         raise ValueError(
             "Unknown NTM endpoint"
         )
@@ -185,6 +195,41 @@ class API:
 
             return self._serialize(health)
 
+        # SERVICES API
+        # GET /api/ncm/devices/<device>/services
+        if method == "GET" and len(resource) == 3 and resource[0] == "devices" and resource[2] == "services":
+            services = self.ncm.get_services(resource[1])
+            return [self._serialize(s) for s in services]
+
+        # POST /api/ncm/devices/<device>/services
+        if method == "POST" and len(resource) == 3 and resource[0] == "devices" and resource[2] == "services":
+            service = self.ncm.add_service(
+                resource[1],
+                body["name"],
+                body["protocol"],
+                int(body["port"])
+            )
+            self.state_manager.save()
+            return self._serialize(service)
+
+        # DELETE /api/ncm/devices/<device>/services/<service>
+        if method == "DELETE" and len(resource) == 4 and resource[0] == "devices" and resource[2] == "services":
+            self.ncm.remove_service(resource[1], resource[3])
+            self.state_manager.save()
+            return {"status": "success"}
+
+        # POST /api/ncm/devices/<device>/services/<service>/start
+        if method == "POST" and len(resource) == 5 and resource[0] == "devices" and resource[2] == "services" and resource[4] == "start":
+            self.ncm.start_service(resource[1], resource[3])
+            self.state_manager.save()
+            return {"status": "started"}
+
+        # POST /api/ncm/devices/<device>/services/<service>/stop
+        if method == "POST" and len(resource) == 5 and resource[0] == "devices" and resource[2] == "services" and resource[4] == "stop":
+            self.ncm.stop_service(resource[1], resource[3])
+            self.state_manager.save()
+            return {"status": "stopped"}
+
         # POST /api/ncm/interfaces
         if (
             method == "POST"
@@ -201,6 +246,17 @@ class API:
             return self._serialize_interface(
                 interface
             )
+
+        # PUT /api/ncm/devices/<device>/interfaces/<interface>
+        if method == "PUT" and len(resource) == 4 and resource[0] == "devices" and resource[2] == "interfaces":
+            interface = self.ncm.update_interface(
+                resource[1],
+                resource[3],
+                ip=body.get("ip"),
+                subnet=body.get("subnet")
+            )
+            self.state_manager.save()
+            return self._serialize_interface(interface)
 
         # DELETE /api/ncm/interfaces
         if (
@@ -356,6 +412,14 @@ class API:
 
         return getattr( endpoint, "name", str(endpoint))
 
+    def _serialize_service(self, service):
+        return {
+            "name": service.name,
+            "protocol": service.protocol,
+            "port": service.port,
+            "status": getattr(service, "status", "stopped")
+        }
+
     def _serialize(self, value):
 
         if value is None:
@@ -372,6 +436,9 @@ class API:
 
         if isinstance( value, (list, tuple, set) ):
             return [ self._serialize(item) for item in value ]
+
+        if value.__class__.__name__ == "Service":
+            return self._serialize_service(value)
 
         if hasattr(value, "value"):
             return value.value

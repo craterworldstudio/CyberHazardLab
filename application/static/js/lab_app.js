@@ -26,6 +26,15 @@ const CHL = {
                 ERROR: "/static/assets/SERV_Err.png"
             },
             icon: "/static/assets/SERV_off.png" // fallback
+        },
+        SWITCH: {
+            prefix: "SWT",
+            icons: {
+                OFFLINE: "/static/assets/SWITCH_off.png",
+                ONLINE: "/static/assets/SWITCH_on.png",
+                ERROR: "/static/assets/SWITCH_Err.png"
+            },
+            icon: "/static/assets/SWITCH_off.png" // fallback
         }
     }
 };
@@ -1018,11 +1027,28 @@ document.addEventListener("DOMContentLoaded", () => {
             } catch (err) {}
         }
 
+        if (activeDevice) {
+            saveLayout();
+        }
+
         activeDevice = null;
         activeSegmentDrag = null;
         draggingFromPalette = false;
         paletteDeviceType = null;
         creatingPaletteDevice = false;
+    }
+
+    async function saveLayout() {
+        const layout = {};
+        devices.forEach(d => {
+            layout[d.id] = { x: d.position.x, y: d.position.y };
+        });
+        try {
+            await apiRequest("POST", "/api/ntm/layout", layout);
+            console.log("[CHL:API] Layout saved.");
+        } catch (e) {
+            console.error("[CHL:API] Failed to save layout", e);
+        }
     }
 
     // REPLACE window.addEventListener("mouseup") WITH:

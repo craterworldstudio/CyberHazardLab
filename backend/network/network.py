@@ -233,6 +233,25 @@ class Network:
 					}
 				))
 		
+	def remove_service(self, host: Host, service_name: str):
+		service = self.get_services(host, service_name)
+		if service is None:
+			raise ValueError(f"{host.name} does not have service {service_name}")
+		
+		host.services.remove(service)
+		
+		self.add_event(Event(
+			type="SERVICE_REMOVED",
+			source="SYSTEM",
+			destination=host.get_ip(),
+			protocol=service.protocol,
+			port=service.port,
+			metadata={
+				"host": host.name,
+				"service": service.name
+			}
+		))
+
 	def stop_services(self, host: Host, service_name: str):
 
 		service = self.get_services(host, service_name)
