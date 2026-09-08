@@ -58,10 +58,40 @@ class NetworkTopologyManager:
     # ========================================================
     # CONNECTION MANAGEMENT
     # ========================================================
+    def _are_connected(self, device_a, device_b):
+
+        for link in self.get_links():
+
+            endpoint_a = link.endpointA
+            endpoint_b = link.endpointB
+
+            owner_a = getattr(endpoint_a, "owner", None)
+            if owner_a is None:
+                owner_a = getattr(endpoint_a, "switch", None)
+
+            owner_b = getattr(endpoint_b, "owner", None)
+            if owner_b is None:
+                owner_b = getattr(endpoint_b, "switch", None)
+
+            if owner_a and owner_b:
+                if (
+                    (owner_a.name == device_a.name and owner_b.name == device_b.name)
+                    or
+                    (owner_a.name == device_b.name and owner_b.name == device_a.name)
+                ):
+                    return True
+
+        return False
 
     def connect(self, device_a, device_b):
         device_a = self.get_device(device_a)
         device_b = self.get_device(device_b)
+
+        if self._are_connected(device_a, device_b):
+            raise ValueError(
+                f"{device_a.name} is already connected to {device_b.name}"
+            )
+
 
         # Host/Router -> Switch
         if hasattr(device_a, "interfaces") and device_b in self.simulation.switches.values():
@@ -93,7 +123,7 @@ class NetworkTopologyManager:
                 interface
             )
 
-        # Router <-> Router
+        # Router/Host <-> Router/Host 
         if hasattr(device_a, "interfaces") and hasattr(device_b, "interfaces"):
             interface_a = self._get_free_interface(device_a)
             interface_b = self._get_free_interface(device_b)
@@ -175,14 +205,14 @@ class NetworkTopologyManager:
 
     def remove_device(self, name):
         device = self.get_device(name)
-    
+
         if device in self.simulation.hosts.values():
             return self.simulation.remove_host(name)
-    
+
         if device in self.simulation.switches.values():
             return self.simulation.remove_switch(name)
-    
+
         if device in self.simulation.routers.values():
             return self.simulation.remove_router(name)
-    
+
         raise ValueError(f"Cannot remove device: {name}")

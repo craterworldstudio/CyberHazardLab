@@ -23,6 +23,44 @@ class NetworkConfigurationManager:
         return devices[name]
 
     # ========================================================
+    # HEALTH HELPERS
+    # ========================================================
+
+    def get_device_health(self, device):
+        import time
+        device = self.get_device(device)
+
+        # Count interfaces
+        total_interfaces = len(device.interfaces) if hasattr(device, 'interfaces') else 0
+        up_interfaces = sum(1 for i in device.interfaces if getattr(i, 'link', None) is not None) if total_interfaces > 0 else 0
+
+        # Count services
+        services = getattr(device, 'services', [])
+        total_services = len(services)
+        running_services = sum(1 for s in services if getattr(s, 'status', '').lower() == 'running')
+
+        # Status and Uptime
+        status = getattr(device, "status", "OFF").upper()
+        boot_time = getattr(device, "boot_time", None)
+        
+        if status == "ONLINE" and boot_time:
+            uptime_sec = int(time.time() - boot_time)
+            m, s = divmod(uptime_sec, 60)
+            h, m = divmod(m, 60)
+            uptime_str = f"{h:02d}:{m:02d}:{s:02d}"
+        else:
+            uptime_str = "00:00:00"
+
+        return {
+            "status": status,
+            "uptime": uptime_str,
+            "interfaces_active": up_interfaces,
+            "interfaces_total": total_interfaces,
+            "services_total": total_services,
+            "services_running": running_services
+        }
+
+    # ========================================================
     # INTERFACE HELPERS
     # ========================================================
 

@@ -16,6 +16,8 @@ class Host:
     interfaces: list[NetworkInterface] = field(default_factory=list)
     services: list[Service] = field(default_factory=list)
     network: Any = None
+    status: str = "OFFLINE"
+    boot_time: float = None
 
     def __post_init__(self):
         self.tcp_connections = {}

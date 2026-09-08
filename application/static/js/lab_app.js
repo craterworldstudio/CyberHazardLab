@@ -11,11 +11,21 @@ const CHL = {
     DEVICE_CONFIG: {
         PC: {
             prefix: "HOST",
-            icon: "/static/assets/PC_off.png"
+            icons: {
+                OFFLINE: "/static/assets/PC_off.png",
+                ONLINE: "/static/assets/PC_on.png",
+                ERROR: "/static/assets/PC_Err.png"
+            },
+            icon: "/static/assets/PC_off.png" // fallback
         },
         SERVER: {
             prefix: "SERV",
-            icon: "/static/assets/SERV_off.png"
+            icons: {
+                OFFLINE: "/static/assets/SERV_off.png",
+                ONLINE: "/static/assets/SERV_on.png",
+                ERROR: "/static/assets/SERV_Err.png"
+            },
+            icon: "/static/assets/SERV_off.png" // fallback
         }
     }
 };
@@ -165,9 +175,10 @@ document.addEventListener("DOMContentLoaded", () => {
     // =========================================
 
     class NetworkDevice {
-        constructor(id, type, iconPath, x, y) {
+        constructor(id, type, status, x, y) {
             this.id = id;
             this.type = type;
+            this.status = status || "OFFLINE";
             this.position = { x, y };
 
             this.element = document.createElement("div");
@@ -176,7 +187,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
             this.img = document.createElement("img");
             this.img.className = "device-icon";
-            this.img.src = iconPath;
             this.img.alt = `${type} Host`;
             this.img.draggable = false;
             this.element.appendChild(this.img);
@@ -187,6 +197,7 @@ document.addEventListener("DOMContentLoaded", () => {
             this.element.appendChild(this.label);    
 
             this.updatePosition(x, y);
+            this.updateStatus(this.status);
 
             // Device dragging
             this.element.addEventListener("pointerdown", (event) => this.onPointerDown(event));
@@ -205,6 +216,13 @@ document.addEventListener("DOMContentLoaded", () => {
             this.element.style.top = `${y}px`;
 
             updateDeviceConnectedLinks(this.id);
+        }
+
+        updateStatus(status) {
+            this.status = status;
+            const config = CHL.DEVICE_CONFIG[this.type] || CHL.DEVICE_CONFIG.PC;
+            const iconPath = config.icons ? (config.icons[this.status] || config.icons.OFFLINE) : config.icon;
+            if (iconPath) this.img.src = iconPath;
         }
 
         getCenter() {
@@ -550,11 +568,13 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
     
-    function executeInspectDevice(device) {
+    async function executeInspectDevice(device) {
         deselectAll();
         selectDevice(device.id);
-        console.log(`%c[CHL:INSPECT] Device: ${device.id}`, "color: #00e5ff; font-weight: bold;");
-        console.table({ ID: device.id, Type: device.type, Position: `X: ${device.position.x}, Y: ${device.position.y}` });
+        //console.log(`%c[CHL:INSPECT] Device: ${device.id}`, "color: #00e5ff; font-weight: bold;");
+        //console.table({ ID: device.id, Type: device.type, Position: `X: ${device.position.x}, Y: ${device.position.y}` });
+        openNCM(device);
+
     }
 
     function inspectLinkDetails(link) {
@@ -588,6 +608,7 @@ document.addEventListener("DOMContentLoaded", () => {
         pendingCutLink = null;
         setTool("SELECT");
     }
+
     async function executeRemoveDevice(device) {
         deselectAll();
         
@@ -601,7 +622,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 "DELETE",
                 "/api/ntm/devices",
                 {
-                    name: device.name,
+                    name: device.name || device.id,
                 }
             );
             
@@ -779,7 +800,7 @@ document.addEventListener("DOMContentLoaded", () => {
             `[CHL] Backend created ${backendDevice.name} (${backendDevice.type})`
         );
 
-        const device = new NetworkDevice( backendDevice.name, type, config.icon, x, y
+        const device = new NetworkDevice( backendDevice.name, type, backendDevice.status, x, y
         );
 
         devices.push(device);
@@ -995,6 +1016,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     //initPrototypeScene();
+    hostCounter = getNextDeviceNumber("HOST-", devices);
+    serverCounter = getNextDeviceNumber("SERV-", devices);
 
     loadDevices()
     .then(() => loadLinks())

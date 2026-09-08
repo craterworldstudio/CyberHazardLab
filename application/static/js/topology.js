@@ -12,7 +12,7 @@ async function loadDevices() {
             const config =
                 CHL.DEVICE_CONFIG[type] || CHL.DEVICE_CONFIG.PC;
 
-            const device = new CHL.NetworkDevice( backendDevice.name, type, config.icon, 0, 0
+            const device = new CHL.NetworkDevice( backendDevice.name, type, backendDevice.status, 0, 0
             );
 
             CHL.devices.push(device);
@@ -100,7 +100,21 @@ function getPixelPosition(normalizedPosition) {
     };
 }
 
+window._deviceCounters = window._deviceCounters || {};
 
+function getNextDeviceNumber(prefix, devices) {
+    if (window._deviceCounters[prefix] === undefined) {
+        let max = -1;
+        devices.forEach(device => {
+            if (!device.id.startsWith(prefix)) return;
+            const number = Number(device.id.slice(prefix.length));
+            if (!Number.isNaN(number)) max = Math.max(max, number);
+        });
+        window._deviceCounters[prefix] = max;
+    }
+    window._deviceCounters[prefix] += 1;
+    return window._deviceCounters[prefix];
+}
 
 
 

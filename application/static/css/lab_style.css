@@ -791,3 +791,349 @@ body {
     0%, 100% { outline-color: rgba(0, 229, 255, 0.4); }
     50%      { outline-color: rgba(0, 229, 255, 1.0); }
 }
+
+
+
+
+
+
+
+/* ============================================
+   NCM CONFIGURATION WINDOW
+   ============================================ */
+
+.ncm-window {
+    position: absolute;
+    top: 80px;
+    left: 220px;
+    width: 620px;
+    height: 430px;
+    min-width: 420px;
+    min-height: 280px;
+    resize: both;
+    overflow: hidden;
+    background: rgba(5, 7, 10, 0.98);
+    border: 1px solid var(--border-color);
+    box-shadow:
+        0 0 30px rgba(0, 0, 0, 0.6),
+        0 0 12px rgba(0, 229, 255, 0.08);
+    display: flex;
+    flex-direction: column;
+}
+
+.ncm-window[hidden] {
+    display: none;
+}
+
+
+/* --------------------------------------------
+   Header
+   -------------------------------------------- */
+
+.ncm-header {
+    height: 38px;
+
+    flex-shrink: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    padding: 0 12px;
+
+    background: #0a0f18;
+
+    border-bottom: 1px solid var(--border-color);
+}
+
+
+.ncm-title {
+    display: flex;
+    align-items: center;
+
+    gap: 8px;
+
+    color: var(--cyan);
+
+    font-size: 11px;
+    font-weight: bold;
+    letter-spacing: 2px;
+}
+
+
+.ncm-close {
+    width: 28px;
+    height: 26px;
+
+    border: 1px solid rgba(255, 255, 255, 0.08);
+
+    background: transparent;
+
+    color: var(--text-muted);
+
+    cursor: pointer;
+}
+
+
+.ncm-close:hover {
+    color: #fff;
+    border-color: var(--cyan);
+}
+
+
+/* --------------------------------------------
+   Body
+   -------------------------------------------- */
+
+.ncm-body {
+    flex: 1;
+
+    display: flex;
+
+    min-height: 0;
+}
+
+
+/* --------------------------------------------
+   Device List
+   -------------------------------------------- */
+
+.ncm-device-list {
+    width: 190px;
+
+    flex-shrink: 0;
+
+    border-right: 1px solid var(--border-color);
+
+    background: rgba(8, 12, 16, 0.8);
+
+    overflow-y: auto;
+}
+
+
+.ncm-section-title {
+    padding: 9px 12px;
+
+    font-size: 9px;
+    font-weight: bold;
+    letter-spacing: 2px;
+
+    color: var(--text-muted);
+
+    border-bottom: 1px solid rgba(0, 229, 255, 0.08);
+}
+
+
+.ncm-device-items {
+    display: flex;
+    flex-direction: column;
+}
+
+
+.ncm-device-item {
+    padding: 9px 12px;
+
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+
+    color: var(--text-primary);
+
+    font-size: 10px;
+    font-weight: bold;
+
+    letter-spacing: 1px;
+
+    cursor: pointer;
+}
+
+
+.ncm-device-item:hover {
+    background: rgba(0, 229, 255, 0.05);
+}
+
+
+.ncm-device-item.selected {
+    color: var(--cyan);
+
+    background: rgba(0, 229, 255, 0.1);
+
+    border-left: 2px solid var(--cyan);
+}
+
+
+/* --------------------------------------------
+   Configuration Area
+   -------------------------------------------- */
+
+.ncm-config {
+    flex: 1;
+
+    min-width: 0;
+
+    overflow-y: auto;
+
+    padding: 18px;
+}
+
+
+.ncm-empty-state {
+    height: 100%;
+
+    display: flex;
+    flex-direction: column;
+
+    align-items: center;
+    justify-content: center;
+
+    gap: 10px;
+
+    color: var(--text-muted);
+
+    font-size: 10px;
+    letter-spacing: 2px;
+}
+
+
+.ncm-empty-state i {
+    font-size: 24px;
+    opacity: 0.5;
+}
+
+
+.ncm-device-header {
+    padding-bottom: 14px;
+
+    margin-bottom: 16px;
+
+    border-bottom: 1px solid var(--border-color);
+}
+
+
+.ncm-device-name {
+    color: var(--cyan);
+
+    font-size: 16px;
+    font-weight: bold;
+
+    letter-spacing: 2px;
+}
+
+
+.ncm-device-type {
+    margin-top: 4px;
+
+    color: var(--text-muted);
+
+    font-size: 9px;
+
+    letter-spacing: 1px;
+}
+
+
+/* --------------------------------------------
+   Configuration Sections
+   -------------------------------------------- */
+
+.ncm-config-section {
+    margin-bottom: 20px;
+}
+
+
+.ncm-interface-list,
+.ncm-services-list {
+    display: flex;
+    flex-direction: column;
+
+    gap: 6px;
+
+    padding-top: 8px;
+}
+
+
+.ncm-interface {
+    display: grid;
+
+    grid-template-columns: 90px 1fr 1fr 1fr;
+
+    gap: 10px;
+
+    padding: 9px 10px;
+
+    background: rgba(8, 12, 16, 0.7);
+
+    border: 1px solid rgba(0, 229, 255, 0.08);
+}
+
+
+.ncm-interface-name {
+    color: var(--cyan);
+
+    font-size: 10px;
+    font-weight: bold;
+}
+
+
+.ncm-interface-value {
+    color: var(--text-primary);
+
+    font-size: 9px;
+
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+
+.ncm-tabs {
+    display: flex;
+    flex-shrink: 0;
+    height: 34px;
+    background: #080c10;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.ncm-tab {
+    height: 100%;
+    padding: 0 14px;
+    border: none;
+    border-right: 1px solid rgba(255, 255, 255, 0.04);
+    background: transparent;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 9px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    cursor: pointer;
+}
+
+.ncm-tab:hover {
+    color: var(--text-primary);
+    background: rgba(0, 229, 255, 0.04);
+}
+
+.ncm-tab.active {
+    color: var(--cyan);
+    background: rgba(0, 229, 255, 0.08);
+    border-bottom: 2px solid var(--cyan);
+}
+
+.ncm-content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 16px;
+}
+
+.ncm-tab-content {
+    display: none;
+}
+
+.ncm-tab-content.active {
+    display: block;
+}
+
+.ncm-config-placeholder {
+    margin-top: 20px;
+    color: var(--text-muted);
+    font-size: 10px;
+    letter-spacing: 2px;
+}

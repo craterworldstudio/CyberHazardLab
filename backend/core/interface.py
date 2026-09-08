@@ -19,6 +19,8 @@ class NetworkInterface:
     arp: ARP | None = None
 
     def connect_link(self, link):
+        if self.link is not None:
+            raise ValueError(f"{self.name} is already connected to a link.")
         self.link = link
 
     def attach_network(self, network):

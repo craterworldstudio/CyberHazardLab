@@ -3,67 +3,20 @@
     "simulation": {
         "devices": [
             {
-                "name": "SERV-01",
-                "type": "server"
-            },
-            {
                 "name": "HOST-00",
                 "type": "pc"
             },
             {
                 "name": "HOST-01",
                 "type": "pc"
-            },
-            {
-                "name": "HOST-03",
-                "type": "pc"
             }
         ],
-        "links": [
-            {
-                "endpoint_a": "HOST-00",
-                "endpoint_b": "SERV-01"
-            },
-            {
-                "endpoint_a": "HOST-01",
-                "endpoint_b": "SERV-01"
-            },
-            {
-                "endpoint_a": "HOST-03",
-                "endpoint_b": "SERV-01"
-            }
-        ],
+        "links": [],
         "interfaces": {
-            "SERV-01": [
-                {
-                    "name": "eth0",
-                    "mac": "02:a7:b0:78:6c:99",
-                    "ip": null,
-                    "subnet": null
-                },
-                {
-                    "name": "eth1",
-                    "mac": "02:6e:b5:59:59:55",
-                    "ip": null,
-                    "subnet": null
-                },
-                {
-                    "name": "eth2",
-                    "mac": "02:75:f7:e7:82:c2",
-                    "ip": null,
-                    "subnet": null
-                },
-                {
-                    "name": "eth3",
-                    "mac": "02:c6:97:28:89:b2",
-                    "ip": null,
-                    "subnet": null
-                }
-            ],
             "HOST-00": [
                 {
                     "name": "eth0",
-                    "mac": "02:01:23:a0:92:74",
+                    "mac": "02:ad:f5:ca:c1:19",
                     "ip": null,
                     "subnet": null
                 }
@@ -71,15 +24,7 @@
             "HOST-01": [
                 {
                     "name": "eth0",
-                    "mac": "02:68:73:b0:f5:7b",
-                    "ip": null,
-                    "subnet": null
-                }
-            ],
-            "HOST-03": [
-                {
-                    "name": "eth0",
-                    "mac": "02:1c:49:6e:78:60",
+                    "mac": "02:30:2e:e6:96:cf",
                     "ip": null,
                     "subnet": null
                 }

@@ -172,6 +172,19 @@ class API:
                 for interface in interfaces
             ]
 
+        # GET /api/ncm/devices/HOST-01/health
+        if (
+            method == "GET"
+            and len(resource) == 3
+            and resource[0] == "devices"
+            and resource[2] == "health"
+        ):
+            health = self.ncm.get_device_health(
+                resource[1]
+            )
+
+            return self._serialize(health)
+
         # POST /api/ncm/interfaces
         if (
             method == "POST"
@@ -287,7 +300,8 @@ class API:
 
         result = {
             "name": device.name,
-            "type": device_type
+            "type": device_type,
+            "status": getattr(device, "status", "OFFLINE")
         }
 
         if hasattr(device, "interfaces"):

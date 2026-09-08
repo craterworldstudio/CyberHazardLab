@@ -8,6 +8,8 @@ class StateManager:
         self.simulation = simulation
         self.path = Path(path)
 
+        self.reset()
+
     # ========================================================
     # FILE MANAGEMENT
     # ========================================================
@@ -38,6 +40,30 @@ class StateManager:
             self.path.read_text(
                 encoding="utf-8"
             )
+        )
+
+
+
+    def reset(self):
+        state = {
+            "version": 1,
+            "simulation": {
+                "devices": [],
+                "links": [],
+                "interfaces": {},
+                "subnets": {},
+                "routes": {},
+                "services": {}
+            },
+            "layout": {}
+        }
+
+        self.path.write_text(
+            json.dumps(
+                state,
+                indent=4
+            ),
+            encoding="utf-8"
         )
 
     # ========================================================
