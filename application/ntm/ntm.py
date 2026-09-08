@@ -172,9 +172,9 @@ class NetworkTopologyManager:
                 owner_b = getattr(endpoint_b, "switch", None)
 
             if (
-                (owner_a is device_a and owner_b is device_b)
+                (owner_a.name == device_a.name and owner_b.name == device_b.name)
                 or
-                (owner_a is device_b and owner_b is device_a)
+                (owner_a.name == device_b.name and owner_b.name == device_a.name)
             ):
                 return self.simulation.disconnect(link)
 

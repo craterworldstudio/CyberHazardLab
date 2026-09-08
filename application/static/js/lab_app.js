@@ -137,6 +137,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (currentTool !== "PLIERS" && pendingCutLink) {
+            deleteLink(pendingCutLink.id);
             pendingCutLink = null;
         }
     
@@ -312,9 +313,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Calculate orthogonal sequence of points: start -> corner1 -> corner2 -> end
         getFullOrderedPoints() {
-            const start = this.source.getCenter();
+            let start = this.source.getCenter();
             
-            const end = this.target.getCenter(); //const end = this.cutTargetPos ? this.cutTargetPos : this.target.getCenter();
+            let end = this.target.getCenter(); //const end = this.cutTargetPos ? this.cutTargetPos : this.target.getCenter();
 
             if (this.isPhysicallyCut && this.cutTargetPos) {
                 if (this.retainedEnd === "target") {
@@ -499,9 +500,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 inspectLinkDetails(link);
                 break;
             case "REMOVE":
-                deselectAll();
-                deleteLink(link.id);
-                console.log(`[CHL:REMOVE] Wire ${link.id} removed.`);
+                executeRemoveLink(link);
                 break;
         }
     }
@@ -666,11 +665,6 @@ document.addEventListener("DOMContentLoaded", () => {
         deselectAll();
         
         try {
-            //const response = await fetch(`/api/ntm/devices/${encodeURIComponent(device.id)}`, {
-            //    method: "DELETE"
-            //});
-
-            
             const response = await apiRequest(
                 "DELETE",
                 "/api/ntm/devices",
@@ -679,7 +673,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             );
             
-
             // 1. Remove all connected links safely
             const connected = links.filter(l => l.source.id === device.id || l.target.id === device.id);
             connected.forEach(l => deleteLink(l.id));
@@ -700,6 +693,30 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (error) {
             console.error(`[CHL:REMOVE] Failed to remove ${device.id}:`, error);
         }
+    }
+    
+    function executeRemoveLink(link) {
+        deselectAll();
+        
+        if (!link.isPhysicallyCut) {
+            fetch("/api/ntm/disconnect", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    device_a: link.source.id,
+                    device_b: link.target.id
+                })
+            })
+            .then(res => {
+                if (!res.ok) throw new Error("Backend disconnect failed");
+                return res.json();
+            })
+            .then(data => console.log("[CHL:API] Backend disconnected:", data))
+            .catch(err => console.error("[CHL:API] API Error:", err));
+        }
+
+        deleteLink(link.id);
+        console.log(`[CHL:REMOVE] Wire ${link.id} removed.`);
     }
     
     function executeDuplicateDevice(device) {
@@ -1013,10 +1030,14 @@ document.addEventListener("DOMContentLoaded", () => {
     window.addEventListener("pointercancel", handlePointerRelease);
 
     // 3. FLOOR DESELECTION
-    // REPLACE floor.addEventListener("mousedown") WITH:
     floor.addEventListener("pointerdown", (event) => {
         if (event.target === floor || event.target === svgLayer) {
             deselectAll();
+            if (typeof pendingCutLink !== 'undefined' && pendingCutLink) {
+                deleteLink(pendingCutLink.id);
+                pendingCutLink = null;
+                setTool("SELECT");
+            }
         }
     });
 
