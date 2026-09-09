@@ -195,10 +195,14 @@ class StateManager:
             if not host.services:
                 continue
 
-            print(host)
-            services[host.name] = self.serialize_value(
-                host.services
-            )
+            services[host.name] = []
+            for svc in host.services:
+                services[host.name].append({
+                    "name": svc.name,
+                    "protocol": svc.protocol,
+                    "port": svc.port,
+                    "status": svc.status
+                })
 
         return services
 

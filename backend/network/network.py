@@ -110,6 +110,7 @@ class Network:
 			self.add_event(Event(
 				type = 'NETWORK_CONNECTION',
 				source=src_ip,
+				severity="WARNING",
 				destination=dst_ip,
 				protocol=protocol.upper(),
 				port = port,
@@ -150,6 +151,7 @@ class Network:
 		self.add_event( Event(
 				type = 'NETWORK_CONNECTION',
 				source=src_ip,
+				severity="INFO",
 				destination=dst_ip,
 				protocol=protocol.upper(),
 				port = port,
@@ -197,6 +199,7 @@ class Network:
 
 		self.add_event(Event(
 			type="SERVICE_CREATED",
+            severity="INFO",
 			source="SYSTEM",
 			destination=host.get_ip(),
 			protocol=service.protocol,
@@ -222,16 +225,17 @@ class Network:
 		service.status = "running"
 
 		self.add_event(Event(
-					type="SERVICE_STARTED",
-					source="SYSTEM",
-					destination=host.get_ip(),
-					protocol=service.protocol,
-					port=service.port,
-					metadata={
-						"host": host.name,
-						"service": service.name
-					}
-				))
+				type="SERVICE_STARTED",
+                severity="INFO",
+				source="SYSTEM",
+				destination=host.get_ip(),
+				protocol=service.protocol,
+				port=service.port,
+				metadata={
+					"host": host.name,
+					"service": service.name
+				}
+			))
 		
 	def remove_service(self, host: Host, service_name: str):
 		service = self.get_services(host, service_name)
@@ -242,6 +246,7 @@ class Network:
 		
 		self.add_event(Event(
 			type="SERVICE_REMOVED",
+            severity="INFO",
 			source="SYSTEM",
 			destination=host.get_ip(),
 			protocol=service.protocol,
@@ -267,16 +272,17 @@ class Network:
 		service.status = "stopped"
 
 		self.add_event(Event(
-						type="SERVICE_STOPPED",
-						source="SYSTEM",
-						destination=host.get_ip(),
-						protocol=service.protocol,
-						port=service.port,
-						metadata={
-							"host": host.name,
-							"service": service.name
-						}
-					))
+				type="SERVICE_STOPPED",
+                severity="INFO",
+				source="SYSTEM",
+				destination=host.get_ip(),
+				protocol=service.protocol,
+				port=service.port,
+				metadata={
+					"host": host.name,
+					"service": service.name
+				}
+			))
 
 	def add_link(self, link):
 		if link in self.links:
@@ -307,9 +313,9 @@ class Network:
 		dest_intf = destination.interfaces[0]
 
 		if frame.destination_mac != dest_intf.mac:
-			self.add_event(
-			Event(
+			self.add_event(Event(
 				type="FRAME_DROPPED",
+                severity="HIGH",
 				source=frame.source_mac,
 				destination=frame.destination_mac,
 				protocol="ETHERNET",
@@ -321,9 +327,9 @@ class Network:
 			return False
 
 
-		self.add_event(
-			Event(
+		self.add_event(Event(
 				type="FRAME_DELIVERED",
+                severity="INFO",
 				source=frame.source_mac,
 				destination=frame.destination_mac,
 				protocol="ETHERNET",

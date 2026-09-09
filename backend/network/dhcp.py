@@ -90,9 +90,9 @@ class DHCP:
         interface.ip = ip
         interface.subnet = str(scope.network)
 
-        self.network.add_event(
-            Event(
+        self.network.add_event(Event(
                 type="DHCP_LEASE",
+                severity="INFO",
                 source="DHCP",
                 protocol="DHCP",
                 destination=ip,
@@ -122,9 +122,9 @@ class DHCP:
                 interface.ip = ip
 
 
-                self.network.add_event(
-                    Event(
+                self.network.add_event(Event(
                         type="DHCP_LEASE",
+                severity="INFO",
                         source="DHCP",
                         protocol="DHCP",
 

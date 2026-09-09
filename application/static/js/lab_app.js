@@ -156,9 +156,94 @@ document.addEventListener("DOMContentLoaded", () => {
     // Bind button clicks inside the horizontal ribbon
     document.querySelectorAll(".tool-btn").forEach(btn => {
         btn.addEventListener("click", () => {
-            setTool(btn.dataset.tool);
+            if (btn.dataset.tool) {
+                setTool(btn.dataset.tool);
+            } else if (btn.dataset.action) {
+                handleRibbonAction(btn.dataset.action);
+            }
         });
     });
+
+    async function handleRibbonAction(action) {
+        if (action === "network_config") {
+            if (typeof openGlobalNCM === "function") {
+                openGlobalNCM();
+            }
+            return;
+        }
+
+        if (action === "save") {
+            try {
+                const state = await apiRequest("GET", "/api/simulation/export");
+                const blob = new Blob([JSON.stringify(state, null, 4)], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `network_state_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                console.error("Failed to save", e);
+            }
+            return;
+        }
+
+        if (action === "open") {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'application/json';
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    try {
+                        const json = JSON.parse(event.target.result);
+                        await apiRequest("POST", "/api/simulation/import", json);
+                        window.location.reload();
+                    } catch (err) {
+                        console.error("Failed to import", err);
+                        alert("Invalid simulation state file.");
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+            return;
+        }
+
+        if (action === "new" || action === "clear") {
+            if (confirm("Are you sure you want to reset the simulation? All unsaved data will be lost.")) {
+                try {
+                    await apiRequest("POST", "/api/simulation/reset");
+                    window.location.reload();
+                } catch (e) {
+                    console.error("Failed to reset", e);
+                }
+            }
+            return;
+        }
+
+        if (["run", "stop", "validate"].includes(action)) {
+            try {
+                const response = await apiRequest("POST", `/api/simulation/${action}`);
+                console.log(`[CHL:SIM] ${action.toUpperCase()} action completed.`, response);
+                
+                // Refresh all devices from backend so statuses update visually
+                const backendDevices = await apiRequest("GET", "/api/ntm/devices");
+                for (const backendDevice of backendDevices) {
+                    const localDevice = devices.find(d => d.id === backendDevice.name);
+                    if (localDevice && backendDevice.status !== localDevice.status) {
+                        localDevice.updateStatus(backendDevice.status);
+                    }
+                }
+            } catch (error) {
+                console.error(`[CHL:SIM] Failed to execute ${action}:`, error);
+            }
+        }
+    }
 
     if (toolSelect) {
         toolSelect.addEventListener("change", (e) => setTool(e.target.value));

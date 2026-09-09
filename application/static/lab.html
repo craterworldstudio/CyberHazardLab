@@ -3,9 +3,9 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>CHL // Net.Creator</title>
-    <link rel="stylesheet" href="/css/lab_style.css">
+    <link rel="stylesheet" href="/css/lab_style.css?v=11">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 
@@ -66,14 +66,14 @@
                         <span class="tool-label">New</span>
                     </button>
 
-                    <button class="tool-btn disabled" data-action="open">
+                    <button class="tool-btn" data-action="open">
                         <span class="tool-icon">
                             <i class="fa-solid fa-folder-open"></i>
                         </span>
                         <span class="tool-label">Open</span>
                     </button>
 
-                    <button class="tool-btn disabled" data-action="save">
+                    <button class="tool-btn" data-action="save">
                         <span class="tool-icon">
                             <i class="fa-solid fa-floppy-disk"></i>
                         </span>
@@ -128,21 +128,24 @@
                 <span class="group-title">NETWORK</span>
 
                 <div class="group-buttons">
-
                     <button class="tool-btn" data-action="validate">
                         <span class="tool-icon">
                             <i class="fa-solid fa-network-wired"></i>
                         </span>
                         <span class="tool-label">Validate</span>
                     </button>
-
+                    <button class="tool-btn" data-action="network_config">
+                        <span class="tool-icon">
+                            <i class="fa-solid fa-globe"></i>
+                        </span>
+                        <span class="tool-label">Net.Config</span>
+                    </button>
                     <button class="tool-btn" data-action="clear">
                         <span class="tool-icon">
                             <i class="fa-solid fa-eraser"></i>
                         </span>
                         <span class="tool-label">Clear</span>
                     </button>
-
                 </div>
 
             </div>
@@ -428,15 +431,26 @@
     </footer>
 
 
-    <!-- =========================================
-         APPLICATION JAVASCRIPT
-         ========================================= -->
-    <script src="/js/api.js"></script>
+    <!-- SHORTCUT PANEL -->
+    <div id="shortcut-panel" style="position: fixed; bottom: 20px; right: 20px; background: rgba(15, 23, 42, 0.9); border: 1px solid #1e293b; padding: 15px; border-radius: 8px; color: #8a9ba8; font-size: 12px; z-index: 9999; box-shadow: 0 4px 6px rgba(0,0,0,0.3); pointer-events: none;">
+        <div style="color: #00e5ff; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #1e293b; padding-bottom: 5px; text-align: center; letter-spacing: 1px;">
+            QUICK SHORTCUTS
+        </div>
+        <div style="display: grid; grid-template-columns: 35px 1fr; gap: 8px; align-items: center;">
+            <div style="color: #fff; background: #334155; border-radius: 4px; padding: 2px 0; text-align: center; font-family: monospace;">S</div> <div>Select</div>
+            <div style="color: #fff; background: #334155; border-radius: 4px; padding: 2px 0; text-align: center; font-family: monospace;">P</div> <div>Pliers (Disconnect)</div>
+            <div style="color: #fff; background: #334155; border-radius: 4px; padding: 2px 0; text-align: center; font-family: monospace;">C</div> <div>Connect</div>
+            <div style="color: #fff; background: #334155; border-radius: 4px; padding: 2px 0; text-align: center; font-family: monospace;">L</div> <div>Inspect</div>
+            <div style="color: #fff; background: #334155; border-radius: 4px; padding: 2px 0; text-align: center; font-family: monospace;">X</div> <div>Remove</div>
+            <div style="color: #fff; background: #334155; border-radius: 4px; padding: 2px 0; text-align: center; font-family: monospace;">D</div> <div>Duplicate</div>
+            <div style="color: #fff; background: #334155; border-radius: 4px; padding: 2px 0; text-align: center; font-family: monospace; font-size: 10px;">ESC</div> <div>Reset Tool</div>
+        </div>
+    </div>
 
-    <script src="/js/ncm_app.js"></script>
-    <script src="/js/topology.js"></script>
-    
-    <script src="/js/lab_app.js?v=3"></script>
+    <script src="/js/api.js?v=12"></script>
+    <script src="/js/ncm_app.js?v=12"></script>
+    <script src="/js/topology.js?v=12"></script>
+    <script src="/js/lab_app.js?v=12"></script>
 
 </body>
 </html>

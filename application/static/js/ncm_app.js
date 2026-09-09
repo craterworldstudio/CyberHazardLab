@@ -266,7 +266,7 @@ function renderNCMInterfaces(window, deviceName, interfaces) {
                             </div>
                         </div>
                         <div style="display: flex; gap: 6px;">
-                            <button style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #8a9ba8; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#fff'; this.style.borderColor='rgba(255,255,255,0.3)';" onmouseout="this.style.color='#8a9ba8'; this.style.borderColor='rgba(255,255,255,0.1)';" title="Edit" onclick="document.getElementById('add-intf-form-${deviceName}').style.display='block'; document.getElementById('cfg-intf-name-${deviceName}').value='${intf.name}'; document.getElementById('cfg-intf-ip-${deviceName}').value='${intf.ip || ''}'; document.getElementById('cfg-intf-sub-${deviceName}').value='${intf.subnet || ''}';">[ EDIT ]</button>
+                            <button style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #8a9ba8; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#fff'; this.style.borderColor='rgba(255,255,255,0.3)';" onmouseout="this.style.color='#8a9ba8'; this.style.borderColor='rgba(255,255,255,0.1)';" title="Edit" onclick="const form = document.getElementById('add-intf-form-${deviceName}'); form.style.display='block'; form.dataset.editing='${intf.name}'; document.getElementById('cfg-intf-name-${deviceName}').value='${intf.name}'; document.getElementById('cfg-intf-name-${deviceName}').readOnly=true; document.getElementById('cfg-intf-name-${deviceName}').style.opacity='0.5'; document.getElementById('cfg-intf-ip-${deviceName}').value='${intf.ip || ''}'; document.getElementById('cfg-intf-sub-${deviceName}').value='${intf.subnet || ''}';">[ EDIT ]</button>
                             
                             <button style="background: rgba(255, 51, 51, 0.05); border: 1px solid rgba(255, 51, 51, 0.2); color: #ff3333; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(255, 51, 51, 0.2)'; this.style.borderColor='#ff3333';" onmouseout="this.style.background='rgba(255, 51, 51, 0.05)'; this.style.borderColor='rgba(255, 51, 51, 0.2)';" title="Delete" onclick="deleteNCMInterface('${deviceName}', '${intf.name}', this.closest('.ncm-window'))">[ DEL ]</button>
                         </div>
@@ -283,14 +283,24 @@ function renderNCMInterfaces(window, deviceName, interfaces) {
 async function updateNCMInterface(deviceName, interfaceName, win) {
     const ipInput = document.getElementById(`cfg-intf-ip-${deviceName}`);
     const subInput = document.getElementById(`cfg-intf-sub-${deviceName}`);
+    const form = document.getElementById(`add-intf-form-${deviceName}`);
     
-    if (!interfaceName) return;
+    // Use the original name we're editing, or the field value if it's a new interface
+    const targetName = form.dataset.editing || interfaceName;
+    
+    if (!targetName) return;
 
     try {
-        await apiRequest("PUT", `/api/ncm/devices/${encodeURIComponent(deviceName)}/interfaces/${encodeURIComponent(interfaceName)}`, {
+        await apiRequest("PUT", `/api/ncm/devices/${encodeURIComponent(deviceName)}/interfaces/${encodeURIComponent(targetName)}`, {
             ip: ipInput.value || null,
             subnet: subInput.value || null
         });
+        
+        // Reset form state
+        delete form.dataset.editing;
+        document.getElementById(`cfg-intf-name-${deviceName}`).readOnly = false;
+        document.getElementById(`cfg-intf-name-${deviceName}`).style.opacity = '1';
+        
         loadNCMDevice(deviceName, win);
     } catch (error) {
         console.error("[CHL:NCM] Failed to update interface", error);
@@ -307,6 +317,39 @@ async function deleteNCMInterface(deviceName, interfaceName, win) {
     } catch (error) {
         console.error("[CHL:NCM] Failed to delete interface", error);
     }
+}
+
+async function refreshNCMHealth(deviceName, window) {
+    try {
+        const health = await apiRequest("GET", `/api/ncm/devices/${encodeURIComponent(deviceName)}/health`);
+        renderNCMHealth(window, health);
+    } catch (e) {
+        // Silent catch for background polling
+    }
+}
+
+// Global polling to keep Health/Uptime/Status live
+let pollTick = 0;
+setInterval(() => {
+    pollTick++;
+    if (typeof ncmWindows !== 'undefined') {
+        ncmWindows.forEach((win, deviceName) => {
+            if (!win.hidden) {
+                if (deviceName !== "GLOBAL_NETWORK") {
+                    refreshNCMHealth(deviceName, win);
+                } else if (pollTick % 2 === 0) {
+                    refreshGlobalAlerts(win);
+                }
+            }
+        });
+    }
+}, 1000);
+
+async function refreshGlobalAlerts(win) {
+    try {
+        const events = await apiRequest("GET", "/api/simulation/events");
+        renderGlobalAlerts(win, events.filter(e => e.severity === "HIGH" || e.severity === "WARNING"));
+    } catch(e) {}
 }
 
 function renderNCMHealth(window, health) {
@@ -448,3 +491,294 @@ async function addNCMService(deviceName, win) {
         console.error("[CHL:NCM] Failed to add service", error);
     }
 }
+// ========================================================
+// GLOBAL NETWORK NCM
+// ========================================================
+
+function openGlobalNCM() {
+    const deviceName = "GLOBAL_NETWORK";
+    if (ncmWindows.has(deviceName)) {
+        const existingWindow = ncmWindows.get(deviceName);
+        existingWindow.hidden = false;
+        existingWindow.style.zIndex = ++ncmWindowZIndex;
+        loadGlobalNCM(existingWindow);
+        return;
+    }
+
+    const window = document.createElement("section");
+    window.className = "ncm-window";
+    window.dataset.device = deviceName;
+    window.style.zIndex = ++ncmWindowZIndex;
+
+    window.innerHTML = `
+        <div class="ncm-header" style="background: #05070a; border-bottom: 1px solid rgba(0, 229, 255, 0.2);">
+            <div class="ncm-title" style="color: #00e5ff; font-family: monospace; letter-spacing: 2px;">
+                <i class="fa-solid fa-globe" style="margin-right: 8px; opacity: 0.8;"></i>
+                <span>NETWORK CONTROLLER</span>
+            </div>
+            <button class="ncm-close" type="button"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="ncm-tabs">
+            <button class="ncm-tab active" data-tab="settings">SETTINGS</button>
+            <button class="ncm-tab" data-tab="subnets">SUBNETS</button>
+            <button class="ncm-tab" data-tab="alerts">ALERTS (HIGH)</button>
+        </div>
+        <div class="ncm-content">
+            <div class="ncm-tab-content active" data-content="settings">
+                <div class="ncm-settings-list"></div>
+            </div>
+            <div class="ncm-tab-content" data-content="subnets">
+                <div class="ncm-subnets-list"></div>
+            </div>
+            <div class="ncm-tab-content" data-content="alerts">
+                <div class="ncm-alerts-list"></div>
+            </div>
+        </div>
+    `;
+
+    // Make Draggable
+    const header = window.querySelector(".ncm-header");
+    let isDragging = false, currentX, currentY, initialX, initialY;
+    let xOffset = window.getBoundingClientRect().left;
+    let yOffset = window.getBoundingClientRect().top;
+    
+    header.addEventListener("pointerdown", e => {
+        initialX = e.clientX - xOffset;
+        initialY = e.clientY - yOffset;
+        isDragging = true;
+        window.style.zIndex = ++ncmWindowZIndex;
+        e.preventDefault();
+    });
+    document.addEventListener("pointermove", e => {
+        if (!isDragging) return;
+        currentX = e.clientX - initialX;
+        currentY = e.clientY - initialY;
+        xOffset = currentX;
+        yOffset = currentY;
+        window.style.transform = `translate3d(${currentX}px, ${currentY}px, 0)`;
+    });
+    document.addEventListener("pointerup", () => {
+        isDragging = false;
+    });
+
+    // Close Button
+    window.querySelector(".ncm-close").addEventListener("click", () => {
+        window.remove();
+        ncmWindows.delete(deviceName);
+    });
+
+    // Tab Switching
+    const tabs = window.querySelectorAll(".ncm-tab");
+    tabs.forEach(tab => {
+        tab.addEventListener("click", () => {
+            tabs.forEach(t => t.classList.remove("active"));
+            tab.classList.add("active");
+            window.querySelectorAll(".ncm-tab-content").forEach(c => c.classList.remove("active"));
+            window.querySelector(`[data-content="${tab.dataset.tab}"]`).classList.add("active");
+        });
+    });
+
+    ncmWindows.set(deviceName, window);
+    document.getElementById("topologyFloor").appendChild(window);
+    
+    // Position it center-ish
+    window.style.transform = `translate3d(${window.innerWidth / 2 - 200}px, 100px, 0)`;
+
+    loadGlobalNCM(window);
+}
+
+async function loadGlobalNCM(win) {
+    try {
+        const settings = await apiRequest("GET", "/api/simulation/settings");
+        renderGlobalSettings(win, settings);
+
+        const subnets = await apiRequest("GET", "/api/ncm/subnets");
+        renderGlobalSubnets(win, subnets);
+        
+        const events = await apiRequest("GET", "/api/simulation/events");
+        renderGlobalAlerts(win, events.filter(e => e.severity === "HIGH" || e.severity === "WARNING"));
+    } catch (error) {
+        console.error("[CHL:NCM] Error loading global NCM:", error);
+    }
+}
+
+function renderGlobalSettings(win, settings) {
+    const container = win.querySelector(".ncm-settings-list");
+    let html = `
+        <div class="ncm-config-section">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(0, 229, 255, 0.15); padding-bottom: 8px; margin-bottom: 15px;">
+                <div class="ncm-section-title" style="color: #00e5ff; font-weight: bold; letter-spacing: 2px;">>_ NETWORK IDENTITY</div>
+            </div>
+            
+            <div style="background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); padding: 15px;">
+                <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 8px; font-weight: bold;">// TOPOLOGY ALIAS</div>
+                <input type="text" id="cfg-net-name" value="${settings.network_name || 'Cyber Hazard Network'}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+            </div>
+        </div>
+
+        <div class="ncm-config-section" style="margin-top: 25px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(0, 229, 255, 0.15); padding-bottom: 8px; margin-bottom: 15px;">
+                <div class="ncm-section-title" style="color: #00e5ff; font-weight: bold; letter-spacing: 2px;">>_ INFRASTRUCTURE ROUTINES</div>
+            </div>
+            
+            <div style="background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); padding: 15px;">
+                
+                <!-- DHCP CONFIG -->
+                <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 8px; font-weight: bold;">// DHCP ALLOCATION MODE</div>
+                <select id="cfg-dhcp-mode" style="width: 100%; margin-bottom: 8px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s; cursor: pointer;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+                    <option value="auto" ${settings.dhcp_mode === 'auto' ? 'selected' : ''}>AUTO (ORCHESTRATOR LEVEL)</option>
+                    <option value="manual" ${settings.dhcp_mode === 'manual' ? 'selected' : ''}>MANUAL (DEPLOY DHCP DAEMONS)</option>
+                </select>
+                <div style="font-size: 10px; color: #5c6b73; margin-bottom: 20px; line-height: 1.4; border-left: 2px solid rgba(0, 229, 255, 0.2); padding-left: 8px;">
+                    <strong style="color: #8a9ba8;">[ AUTO ]</strong> Simulation engine assigns IPs to hosts instantly.<br>
+                    <strong style="color: #8a9ba8;">[ MANUAL ]</strong> Must configure a Server node with 'DHCP' service on port 67.
+                </div>
+
+                <!-- DNS CONFIG -->
+                <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 8px; font-weight: bold;">// DNS RESOLUTION MODE</div>
+                <select id="cfg-dns-mode" style="width: 100%; margin-bottom: 8px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s; cursor: pointer;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+                    <option value="auto" ${settings.dns_mode === 'auto' ? 'selected' : ''}>AUTO (MAGIC RESOLUTION)</option>
+                    <option value="manual" ${settings.dns_mode === 'manual' ? 'selected' : ''}>MANUAL (DEPLOY DNS DAEMONS)</option>
+                </select>
+                <div style="font-size: 10px; color: #5c6b73; margin-bottom: 20px; line-height: 1.4; border-left: 2px solid rgba(0, 229, 255, 0.2); padding-left: 8px;">
+                    <strong style="color: #8a9ba8;">[ AUTO ]</strong> Hostnames map to IPs automatically.<br>
+                    <strong style="color: #8a9ba8;">[ MANUAL ]</strong> Must configure a Server node with 'DNS' service on port 53.
+                </div>
+                
+                <!-- TTL CONFIG -->
+                <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 8px; font-weight: bold;">// PACKET LIFESPAN (TTL / MAX HOPS)</div>
+                <input type="number" id="cfg-ttl" value="${settings.default_ttl || 64}" style="width: 100%; margin-bottom: 8px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+                <div style="font-size: 10px; color: #5c6b73; margin-bottom: 10px; border-left: 2px solid rgba(0, 229, 255, 0.2); padding-left: 8px;">
+                    Limits routing loops by terminating packets after threshold hops.
+                </div>
+            </div>
+            
+            <button style="width: 100%; margin-top: 15px; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; color: #00e5ff; padding: 10px; font-family: monospace; font-weight: bold; letter-spacing: 2px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0, 229, 255, 0.1)'; this.style.color='#00e5ff';" onclick="saveGlobalSettings(this.closest('.ncm-window'))">[ OVERRIDE SETTINGS ]</button>
+        </div>
+    `;
+    container.innerHTML = html;
+}
+
+async function saveGlobalSettings(win) {
+    const settings = {
+        network_name: document.getElementById("cfg-net-name").value,
+        dhcp_mode: document.getElementById("cfg-dhcp-mode").value,
+        dns_mode: document.getElementById("cfg-dns-mode").value,
+        default_ttl: parseInt(document.getElementById("cfg-ttl").value) || 64
+    };
+    try {
+        await apiRequest("POST", "/api/simulation/settings", settings);
+        console.log("[CHL:NCM] Network settings applied.");
+    } catch (e) {
+        console.error("Failed to save network settings", e);
+    }
+}
+
+function renderGlobalSubnets(win, subnets) {
+    const container = win.querySelector(".ncm-subnets-list");
+    let html = `
+        <div class="ncm-config-section">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(0, 229, 255, 0.15); padding-bottom: 8px;">
+                <div class="ncm-section-title" style="color: #00e5ff; font-weight: bold; letter-spacing: 2px;">>_ SUBNET ALLOCATION</div>
+                <button style="background: rgba(0,229,255,0.1); border: 1px solid #00e5ff; color: #00e5ff; font-family: monospace; font-weight: bold; padding: 2px 10px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0,229,255,0.1)'; this.style.color='#00e5ff';" onclick="const f = document.getElementById('add-subnet-form'); f.style.display = f.style.display === 'none' ? 'block' : 'none';">+</button>
+            </div>
+
+            <div id="add-subnet-form" style="display: none; margin-top: 15px; border: 1px dashed rgba(0, 229, 255, 0.3); background: rgba(0, 0, 0, 0.2); padding: 15px;">
+                <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 10px; font-weight: bold;">// DEFINE NETWORK BLOCK</div>
+                
+                <input type="text" id="new-subnet-cidr" placeholder="CIDR (e.g. 10.0.0.0/24)" style="width: 100%; margin-bottom: 8px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+                
+                <input type="text" id="new-subnet-gw" placeholder="GATEWAY IP (OPTIONAL)" style="width: 100%; margin-bottom: 12px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+                
+                <button style="width: 100%; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; color: #00e5ff; padding: 8px; font-family: monospace; font-weight: bold; letter-spacing: 2px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0, 229, 255, 0.1)'; this.style.color='#00e5ff';" onclick="addGlobalSubnet(this.closest('.ncm-window'))">EXECUTE ALLOCATION</button>
+            </div>
+            
+            <div style="margin-top: 15px;">
+    `;
+
+    const subnetKeys = Object.keys(subnets);
+    if (subnetKeys.length === 0) {
+        html += `<div style="color: #5c6b73; font-style: italic; text-align: center; padding: 20px 0;">>_ NO SUBNETS CONFIGURED</div>`;
+    } else {
+        subnetKeys.forEach(cidr => {
+            const sn = subnets[cidr];
+            const dhcpColor = sn.dhcp_enabled ? '#00e5ff' : '#5c6b73';
+            
+            html += `
+                <div style="border: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.02); padding: 12px; margin-bottom: 8px; transition: border 0.2s;" onmouseover="this.style.borderColor='rgba(0,229,255,0.3)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.05)'">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div>
+                            <strong style="color: #fff; font-size: 12px; letter-spacing: 1px;">${cidr}</strong>
+                            <div style="font-size: 11px; margin-top: 8px; color: #8a9ba8; display: grid; grid-template-columns: 40px 1fr; gap: 4px;">
+                                <div style="color: #5c6b73;">GW</div><div style="color: #00e5ff;">${sn.gateway || "UNASSIGNED"}</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: flex-start;">
+                            <button style="background: rgba(255, 51, 51, 0.05); border: 1px solid rgba(255, 51, 51, 0.2); color: #ff3333; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(255, 51, 51, 0.2)'; this.style.borderColor='#ff3333';" onmouseout="this.style.background='rgba(255, 51, 51, 0.05)'; this.style.borderColor='rgba(255, 51, 51, 0.2)';" title="Delete" onclick="removeGlobalSubnet('${cidr}', this.closest('.ncm-window'))">[ DEL ]</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+    html += `</div></div>`;
+    container.innerHTML = html;
+}
+
+function renderGlobalAlerts(win, events) {
+    const container = win.querySelector(".ncm-alerts-list");
+    let html = `<div class="ncm-config-section">
+        <div class="ncm-section-title">HIGH SEVERITY ALERTS</div>
+        <div style="margin-top: 15px;">
+    `;
+
+    if (events.length === 0) {
+        html += `<div style="color: #4ade80; padding: 10px 0;">NO CRITICAL ALERTS</div>`;
+    } else {
+        // Reverse to show newest first
+        events.reverse().forEach(evt => {
+            html += `
+                <div style="border-bottom: 1px solid #333; padding: 10px 0;">
+                    <div style="color: #ef4444; font-weight: bold; margin-bottom: 5px;">
+                        [${evt.type}]
+                    </div>
+                    <div style="font-size: 12px; color: #ccc;">
+                        <div>Time: ${new Date(evt.timestamp).toLocaleTimeString()}</div>
+                        <div>Source: ${evt.source || "System"}</div>
+                        ${evt.metadata && evt.metadata.error ? `<div style="color: #ffaa00; margin-top: 5px;">${evt.metadata.error}</div>` : ""}
+                        ${evt.metadata && evt.metadata.reason ? `<div style="color: #ffaa00; margin-top: 5px;">${evt.metadata.reason}</div>` : ""}
+                    </div>
+                </div>
+            `;
+        });
+    }
+    
+    html += `</div></div>`;
+    container.innerHTML = html;
+}
+
+async function addGlobalSubnet(win) {
+    const cidrInput = document.getElementById("new-subnet-cidr");
+    const gwInput = document.getElementById("new-subnet-gw");
+    if (!cidrInput.value) return;
+
+    try {
+        await apiRequest("POST", "/api/ncm/subnets", {
+            subnet: cidrInput.value,
+            gateway: gwInput.value || null
+        });
+        loadGlobalNCM(win);
+    } catch (e) {
+        console.error("Failed to add subnet", e);
+    }
+}
+
+async function removeGlobalSubnet(cidr, win) {
+    try {
+        await apiRequest("DELETE", "/api/ncm/subnets", { subnet: cidr });
+        loadGlobalNCM(win);
+    } catch (e) {
+        console.error("Failed to remove subnet", e);
+    }
+}
+

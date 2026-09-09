@@ -55,6 +55,7 @@ class Switch:
 
         self.add_event(Event(
             type="FRAME_RECEIVED",
+            severity="INFO",
             source=frame.source_mac,
             destination=frame.destination_mac,
             protocol="ETHERNET",
@@ -75,6 +76,7 @@ class Switch:
 
             self.network.add_event(Event(
                     type="FRAME_BROADCAST",
+                    severity="INFO",
                     source=frame.source_mac,
                     destination=frame.destination_mac,
                     protocol="ETHERNET",
@@ -100,15 +102,16 @@ class Switch:
         if dest_port_num is None:
 
             self.add_event(Event(
-            type="FRAME_FLOODED",
-            source=frame.source_mac,
-            destination=frame.destination_mac,
-            protocol="ETHERNET",
-            metadata={
-                "switch": self.name,
-                "in_port": in_port,
-                "out_ports": out_ports
-                }
+                type="FRAME_FLOODED",
+                severity="WARNING",
+                source=frame.source_mac,
+                destination=frame.destination_mac,
+                protocol="ETHERNET",
+                metadata={
+                    "switch": self.name,
+                    "in_port": in_port,
+                    "out_ports": out_ports
+                    }
             ))
 
             for port_num in out_ports:
@@ -123,15 +126,16 @@ class Switch:
 
         if dest_port_num == in_port:
             self.add_event(Event(
-            type="FRAME_DROPPED",
-            source=frame.source_mac,
-            destination=frame.destination_mac,
-            protocol="ETHERNET",
-            port=in_port,
-            metadata={
-                "switch": self.name,
-                "reason": "DESTINATION_ON_SOURCE_PORT"
-                }
+                type="FRAME_DROPPED",
+                severity="HIGH",
+                source=frame.source_mac,
+                destination=frame.destination_mac,
+                protocol="ETHERNET",
+                port=in_port,
+                metadata={
+                    "switch": self.name,
+                    "reason": "DESTINATION_ON_SOURCE_PORT"
+                    }
             ))
 
 
@@ -146,16 +150,17 @@ class Switch:
             
         
         self.add_event(Event(
-        type="FRAME_FORWARDED",
-        source=frame.source_mac,
-        destination=frame.destination_mac,
-        protocol="ETHERNET",
-        metadata={
-            "switch": self.name,
-            "in_port": in_port,
-            "out_port": dest_port_num
-            }
-        ))
+                type="FRAME_FORWARDED",
+                severity="INFO",
+                source=frame.source_mac,
+                destination=frame.destination_mac,
+                protocol="ETHERNET",
+                metadata={
+                    "switch": self.name,
+                    "in_port": in_port,
+                    "out_port": dest_port_num
+                    }
+            ))
 
         self.ports[dest_port_num].send(frame)
         

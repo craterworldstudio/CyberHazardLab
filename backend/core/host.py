@@ -195,6 +195,7 @@ class Host:
         if not isinstance(udp, UDPPacket):
             self.network.add_event(Event(
                 type="UDP_DATAGRAM_DROPPED",
+                severity="HIGH",
                 source=packet.source_ip,
                 destination=packet.destination_ip,
                 protocol="UDP",
@@ -213,6 +214,7 @@ class Host:
         if service is None:
             self.network.add_event(Event(
                 type="UDP_PORT_UNREACHABLE",
+                severity="HIGH",
                 source=packet.source_ip,
                 destination=packet.destination_ip,
                 protocol="UDP",
@@ -229,6 +231,7 @@ class Host:
         if service.status.lower() != "running":
             self.network.add_event(Event(
                 type="UDP_DATAGRAM_DROPPED",
+                severity="HIGH",
                 source=packet.source_ip,
                 destination=packet.destination_ip,
                 protocol="UDP",
@@ -310,6 +313,7 @@ class Host:
 
             self.network.add_event(Event(
                 type="ICMP_PACKET_DROPPED",
+                severity="HIGH",
                 source=packet.source_ip,
                 destination=packet.destination_ip,
                 protocol="ICMP",
@@ -324,6 +328,7 @@ class Host:
 
             self.network.add_event(Event(
                 type="ICMP_ECHO_REQUEST_RECEIVED",
+                severity="INFO",
                 source=packet.source_ip,
                 destination=packet.destination_ip,
                 protocol="ICMP"
@@ -344,6 +349,7 @@ class Host:
 
             self.network.add_event(Event(
                 type="ICMP_ECHO_REPLY_SENT",
+                severity="INFO",
                 source=packet.destination_ip,
                 destination=packet.source_ip,
                 protocol="ICMP"
@@ -355,6 +361,7 @@ class Host:
 
             self.network.add_event(Event(
                 type="ICMP_ECHO_REPLY_RECEIVED",
+                severity="INFO",
                 source=packet.source_ip,
                 destination=packet.destination_ip,
                 protocol="ICMP"
@@ -373,6 +380,7 @@ class Host:
 
             self.network.add_event(Event(
                 type="ICMP_TIME_EXCEEDED_RECEIVED",
+                severity="WARNING",
                 source=packet.source_ip,
                 destination=packet.destination_ip,
                 protocol="ICMP"
@@ -391,6 +399,7 @@ class Host:
 
             self.network.add_event(Event(
                 type="ICMP_DESTINATION_UNREACHABLE_RECEIVED",
+                severity="HIGH",
                 source=packet.source_ip,
                 destination=packet.destination_ip,
                 protocol="ICMP"

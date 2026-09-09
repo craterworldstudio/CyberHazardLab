@@ -35,14 +35,15 @@ class UDPConnection:
         )
 
         self.network.add_event(Event(
-            type="UDP_DATAGRAM_SENT",
-            source=f"{self.local_ip}:{self.local_port}",
-            destination=f"{self.remote_ip}:{self.remote_port}",
-            protocol="UDP",
-            port=self.remote_port,
-            metadata={
-                "bytes": payload_length
-            }
+                type="UDP_DATAGRAM_SENT",
+                severity="INFO",
+                source=f"{self.local_ip}:{self.local_port}",
+                destination=f"{self.remote_ip}:{self.remote_port}",
+                protocol="UDP",
+                port=self.remote_port,
+                metadata={
+                    "bytes": payload_length
+                }
         ))
 
         return packet
@@ -56,14 +57,15 @@ class UDPConnection:
         )
     
         self.network.add_event(Event(
-            type="UDP_DATAGRAM_RECEIVED",
-            source=f"{self.remote_ip}:{self.remote_port}",
-            destination=f"{self.local_ip}:{self.local_port}",
-            protocol="UDP",
-            port=self.local_port,
-            metadata={
-                "bytes": payload_length
-            }
-        ))
+                type="UDP_DATAGRAM_RECEIVED",
+                severity="INFO",
+                source=f"{self.remote_ip}:{self.remote_port}",
+                destination=f"{self.local_ip}:{self.local_port}",
+                protocol="UDP",
+                port=self.local_port,
+                metadata={
+                    "bytes": payload_length
+                }
+            ))
     
         return packet.payload

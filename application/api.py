@@ -10,6 +10,30 @@ class API:
     # ========================================================
 
     def handle(self, method, path, body=None):
+        try:
+            return self._handle_internal(method, path, body)
+        except ValueError as e:
+            try:
+                from backend.core.event import Event
+                event = Event(
+                    type="SYSTEM_ERROR",
+                    source="API",
+                    destination="SYSTEM",
+                    severity="HIGH",
+                    metadata={"error": str(e), "path": path, "method": method}
+                )
+                self.ntm.simulation.network.add_event(event)
+                
+                # Double check that it actually got added to the list
+                count = len(self.ntm.simulation.network.events)
+                with open("api_debug.log", "a") as f:
+                    f.write(f"SUCCESS: Added event {e}. Total events now: {count}\n")
+            except Exception as inner_e:
+                with open("api_debug.log", "a") as f:
+                    f.write(f"FAILED to add event: {inner_e}\n")
+            raise e
+
+    def _handle_internal(self, method, path, body=None):
         method = method.upper()
         path = path.split("?", 1)[0]
 
@@ -48,9 +72,128 @@ class API:
                 body
             )
 
+        if manager == "simulation":
+            return self._handle_simulation(method, resource, body)
+
         raise ValueError(
             f"Unknown API manager: {manager}"
         )
+
+    # ========================================================
+    # SIMULATION
+    # ========================================================
+
+    def _handle_simulation(self, method, resource, body):
+        if method == "GET" and resource == ["settings"]:
+            return getattr(self.ntm.simulation, "settings", {
+                "network_name": getattr(self.ntm.simulation, "name", "Cyber Hazard Network"),
+                "dhcp_mode": "manual",
+                "dns_mode": "manual",
+                "default_ttl": 64
+            })
+            
+        if method == "POST" and resource == ["settings"]:
+            if not hasattr(self.ntm.simulation, "settings"):
+                self.ntm.simulation.settings = {}
+            self.ntm.simulation.settings.update(body)
+            if "network_name" in body:
+                self.ntm.simulation.name = body["network_name"]
+            self.state_manager.save()
+            return {"status": "success", "settings": self.ntm.simulation.settings}
+
+        if method == "POST" and resource == ["reset"]:
+            from backend.orchestrator import Simulation
+            self.ntm.simulation = Simulation()
+            self.ncm.simulation = self.ntm.simulation
+            self.state_manager.simulation = self.ntm.simulation
+            self.state_manager.reset()
+            return {"status": "success"}
+
+        if method == "GET" and resource == ["export"]:
+            self.state_manager.save()
+            return self.state_manager.load()
+
+        if method == "POST" and resource == ["import"]:
+            from backend.orchestrator import Simulation
+            self.ntm.simulation = Simulation()
+            self.ncm.simulation = self.ntm.simulation
+            self.state_manager.simulation = self.ntm.simulation
+            
+            sim_data = body.get("simulation", {})
+            layout_data = body.get("layout", {})
+            
+            self.ntm.simulation.name = sim_data.get("name", "Cyber Hazard Network")
+            self.ntm.simulation.settings = sim_data.get("settings", {})
+            
+            # Devices
+            for d in sim_data.get("devices", []):
+                self.ntm.create_device(name=d["name"], device_type=d["type"])
+                
+            # Links
+            for l in sim_data.get("links", []):
+                try:
+                    self.ntm.connect(l["endpoint_a"], l["endpoint_b"])
+                except Exception:
+                    pass
+                    
+            # Interfaces
+            for device_name, intfs in sim_data.get("interfaces", {}).items():
+                for intf in intfs:
+                    try:
+                        self.ncm.update_interface(device_name, intf["name"], ip=intf.get("ip"), subnet=intf.get("subnet"))
+                    except Exception:
+                        pass
+                        
+            # Subnets
+            for subnet, data in sim_data.get("subnets", {}).items():
+                try:
+                    self.ncm.add_subnet(subnet, data.get("gateway"))
+                except Exception:
+                    pass
+                    
+            # Services
+            for device_name, svcs in sim_data.get("services", {}).items():
+                for s in svcs:
+                    try:
+                        self.ncm.add_service(device_name, s["name"], s["protocol"], s["port"], s.get("status", "stopped"))
+                    except Exception:
+                        pass
+                        
+            self.state_manager.save(layout=layout_data)
+            return {"status": "success"}
+
+        if method == "POST" and resource == ["run"]:
+            self.ntm.simulation.run()
+            self.state_manager.save()
+            return {"status": "running"}
+
+        if method == "POST" and resource == ["stop"]:
+            self.ntm.simulation.stop()
+            self.state_manager.save()
+            return {"status": "stopped"}
+
+        if method == "POST" and resource == ["validate"]:
+            updated = self.ntm.simulation.validate()
+            self.state_manager.save()
+            return {"status": "validated", "updated": updated}
+
+        if method == "GET" and resource == ["events"]:
+            events = self.ntm.simulation.network.events
+            return [
+                {
+                    "type": e.type,
+                    "source": e.source,
+                    "destination": e.destination,
+                    "protocol": e.protocol,
+                    "port": e.port,
+                    "severity": getattr(e, "severity", "INFO"),
+                    "timestamp": e.timestamp.isoformat(),
+                    "metadata": e.metadata
+                }
+                for e in events
+            ]
+            
+        raise ValueError("Unknown SIMULATION endpoint")
 
     # ========================================================
     # NTM
@@ -291,7 +434,7 @@ class API:
 
         # POST /api/ncm/subnets
         if (
-            method == "POST" and len(resource) == 2
+            method == "POST"
             and resource == ["subnets"]
         ):
             result = self.ncm.add_subnet(

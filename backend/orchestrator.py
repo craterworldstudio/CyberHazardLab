@@ -32,6 +32,56 @@ class Simulation:
 
         self.tcp_connections = {}
         self.udp_connections = {}
+        self.is_running = False
+
+    # ========================================================
+    # SIMULATION LIFECYCLE
+    # ========================================================
+
+    def run(self):
+        self.is_running = True
+        import time
+        for host in self.hosts.values():
+            host.status = "ONLINE"
+            host.boot_time = time.time()
+        for router in self.routers.values():
+            router.status = "ONLINE"
+            router.boot_time = time.time()
+
+    def stop(self):
+        self.is_running = False
+        for host in self.hosts.values():
+            host.status = "OFFLINE"
+            host.boot_time = None
+        for router in self.routers.values():
+            router.status = "OFFLINE"
+            router.boot_time = None
+
+    def validate(self):
+        # Physical topology check: mark devices with 0 connections as ERROR
+        updated = []
+        
+        for host in self.hosts.values():
+            connected = any(intf.link is not None for intf in host.interfaces)
+            old_status = getattr(host, "status", "OFFLINE")
+            if not connected:
+                host.status = "ERROR"
+            else:
+                host.status = "ONLINE" if self.is_running else "OFFLINE"
+            if old_status != host.status:
+                updated.append(host.name)
+                
+        for router in self.routers.values():
+            connected = any(intf.link is not None for intf in router.interfaces)
+            old_status = getattr(router, "status", "OFFLINE")
+            if not connected:
+                router.status = "ERROR"
+            else:
+                router.status = "ONLINE" if self.is_running else "OFFLINE"
+            if old_status != router.status:
+                updated.append(router.name)
+
+        return updated
 
     # ========================================================
     # TOPOLOGY

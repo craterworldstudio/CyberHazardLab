@@ -57,6 +57,7 @@ class TCPConnection:
 
         self.network.add_event(Event(
             type=event_type,
+            severity="INFO",
             source=f"{self.local_ip}:{self.local_port}",
             destination=f"{self.remote_ip}:{self.remote_port}",
             protocol="TCP",

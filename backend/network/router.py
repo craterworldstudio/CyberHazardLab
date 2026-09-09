@@ -120,6 +120,7 @@ class Router:
 
         self.network.add_event(Event(
             type="ICMP_TIME_EXCEEDED_SENT",
+            severity="WARNING",
             source=in_interface.ip,
             destination=packet.source_ip,
             protocol="ICMP",
@@ -135,6 +136,7 @@ class Router:
     def send_icmp_destination_unreachable( self, packet, in_interface, code=0 ):  
         icmp = ICMPPacket(
             type="DESTINATION_UNREACHABLE",
+                severity="HIGH",
             code=code,
             payload=packet
         )
@@ -148,6 +150,7 @@ class Router:
 
         self.network.add_event(Event(
             type="ICMP_DESTINATION_UNREACHABLE_SENT",
+            severity="HIGH",
             source=in_interface.ip,
             destination=packet.source_ip,
             protocol="ICMP",
@@ -239,6 +242,7 @@ class Router:
 
         self.network.add_event(Event(
             type="PACKET_FORWARDED",
+            severity="INFO",
             source=packet.source_ip,
             destination=packet.destination_ip,
             protocol=packet.protocol,

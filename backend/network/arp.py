@@ -32,6 +32,7 @@ class ARP:
 
         self.network.add_event(Event(
             type="ARP_REQUEST",
+            severity="INFO",
             source=source.ip,
             destination=target_ip,
             protocol="ARP",
@@ -84,6 +85,7 @@ class ARP:
 
             self.network.add_event(Event(
                 type="ARP_REPLY",
+                severity="INFO",
                 source=packet.sender_ip,
                 destination=packet.target_ip,
                 protocol="ARP",

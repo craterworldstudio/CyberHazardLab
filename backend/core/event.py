@@ -9,6 +9,7 @@ class Event:
     destination: str | None
     protocol: str | None = None
     port: int | None = None
+    severity: str = "INFO"
     timestamp: datetime = field(default_factory=datetime.now)
     metadata: dict[str, Any] = field(default_factory=dict)
 
