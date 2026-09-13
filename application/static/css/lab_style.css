@@ -276,6 +276,14 @@ body {
     background-position: 0 0;
 }
 
+.topology-floor.hide-grid {
+    background-image: none !important;
+}
+
+.topology-floor.hide-labels .device-label {
+    visibility: hidden !important;
+}
+
 /* ============================================
    NETWORK DEVICE
    ============================================ */

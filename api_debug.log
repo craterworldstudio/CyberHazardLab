@@ -1,0 +1,21 @@
+SUCCESS: Added event eth0 is already connected to a link.. Total events now: 1
+SUCCESS: Added event Interface etho0 not found on RUT-02. Total events now: 1
+SUCCESS: Added event Interface etho0 not found on RUT-02. Total events now: 2
+SUCCESS: Added event Interface etho0 not found on RUT-02. Total events now: 3
+SUCCESS: Added event Interface etho0 not found on RUT-02. Total events now: 4
+SUCCESS: Added event Interface etho0 not found on RUT-02. Total events now: 5
+SUCCESS: Added event Interface etho0 not found on RUT-02. Total events now: 6
+SUCCESS: Added event Interface etho0 not found on RUT-02. Total events now: 7
+SUCCESS: Added event Interface etho0 not found on RUT-02. Total events now: 8
+SUCCESS: Added event Interface eth0 not found on RUT-02. Total events now: 9
+SUCCESS: Added event HOST-05 already has service DNS. Total events now: 5
+SUCCESS: Added event HOST-05 already has service DNS. Total events now: 10
+SUCCESS: Added event HOST-05 already has service DNS. Total events now: 3
+SUCCESS: Added event Cannot remove eth0: interface is connected to a link. Total events now: 4
+SUCCESS: Added event Cannot remove eth0: interface is connected to a link. Total events now: 5
+SUCCESS: Added event Unknown device: HOST-05. Total events now: 1
+SUCCESS: Added event Unknown device: HOST-05. Total events now: 2
+SUCCESS: Added event Unknown device: HOST-05. Total events now: 3
+SUCCESS: Added event Unknown device: HOST-05. Total events now: 4
+SUCCESS: Added event Unknown device: HOST-05. Total events now: 5
+SUCCESS: Added event Interface 'eth0' already exists on HOST-05. Total events now: 3

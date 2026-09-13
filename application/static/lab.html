@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>CHL // Net.Creator</title>
-    <link rel="stylesheet" href="/css/lab_style.css?v=11">
+    <link rel="stylesheet" href="/css/lab_style.css?v=13">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 
@@ -34,8 +34,8 @@
         <!-- RIBBON TABS -->
         <div class="ribbon-tabs">
             <div style="display: flex;">
-                <button class="ribbon-tab" data-tab="home">HOME</button>
-                <button class="ribbon-tab active" data-tab="tools">TOOLS</button>
+                <button class="ribbon-tab active" data-tab="home">HOME</button>
+                <button class="ribbon-tab" data-tab="tools">TOOLS</button>
                 <button class="ribbon-tab" data-tab="view">VIEW</button>
             </div>    
 
@@ -52,7 +52,7 @@
              HOME TAB
              ===================================== -->
 
-        <div class="ribbon-toolbar" data-panel="home" hidden>
+        <div class="ribbon-toolbar" data-panel="home">
 
             <!-- FILE -->
             <div class="ribbon-group">
@@ -87,41 +87,6 @@
             <div class="ribbon-divider"></div>
 
 
-            <!-- EDIT -->
-            <div class="ribbon-group">
-
-                <span class="group-title">EDIT</span>
-                <div class="group-buttons">
-
-                    <button class="tool-btn disabled" data-action="undo">
-                        <span class="tool-icon">
-                            <i class="fa-solid fa-rotate-left"></i>
-                        </span>
-                        <span class="tool-label">Undo</span>
-                    </button>
-
-                    <button class="tool-btn disabled" data-action="redo">
-                        <span class="tool-icon">
-                            <i class="fa-solid fa-rotate-right"></i>
-                        </span>
-                        <span class="tool-label">Redo</span>
-                    </button>
-
-                    <button class="tool-btn" data-action="delete">
-                        <span class="tool-icon">
-                            <i class="fa-solid fa-trash"></i>
-                        </span>
-                        <span class="tool-label">Delete</span>
-                    </button>
-
-                </div>
-
-            </div>
-
-
-            <div class="ribbon-divider"></div>
-
-
             <!-- NETWORK -->
             <div class="ribbon-group">
 
@@ -139,12 +104,6 @@
                             <i class="fa-solid fa-globe"></i>
                         </span>
                         <span class="tool-label">Net.Config</span>
-                    </button>
-                    <button class="tool-btn" data-action="clear">
-                        <span class="tool-icon">
-                            <i class="fa-solid fa-eraser"></i>
-                        </span>
-                        <span class="tool-label">Clear</span>
                     </button>
                 </div>
 
@@ -186,7 +145,7 @@
              TOOLS TAB
              ===================================== -->
 
-        <div class="ribbon-toolbar" data-panel="tools">
+        <div class="ribbon-toolbar" data-panel="tools" hidden>
 
             <!-- MODE -->
             <div class="ribbon-group">
@@ -267,74 +226,24 @@
                 <span class="group-title">DISPLAY</span>
                 <div class="group-buttons">
 
-                    <button class="tool-btn" data-view="grid" >
+                    <button class="tool-btn active" data-view="grid" >
                         <span class="tool-icon"> <i class="fa-solid fa-table-cells"></i> </span>
                         <span class="tool-label"> Grid </span>
                     </button>
 
-                    <button class="tool-btn" data-view="labels" >
+                    <button class="tool-btn active" data-view="labels" >
                         <span class="tool-icon"> <i class="fa-solid fa-tag"></i> </span>
                         <span class="tool-label"> Labels </span>
                     </button>
 
-                    <button class="tool-btn disabled" data-view="link-labels" >
-                        <span class="tool-icon"> <i class="fa-solid fa-tags"></i> </span>
-                        <span class="tool-label"> Link Labels </span>
+                    <button class="tool-btn" data-view="shortcuts" >
+                        <span class="tool-icon"> <i class="fa-solid fa-keyboard"></i> </span>
+                        <span class="tool-label"> Shortcuts </span>
                     </button>
 
                 </div>
             </div>
 
-
-            <div class="ribbon-divider"></div>
-
-
-            <!-- ZOOM -->
-            <div class="ribbon-group">
-                <span class="group-title">ZOOM</span>
-                <div class="group-buttons">
-
-                    <button class="tool-btn disabled" data-view="zoom-in" >
-                        <span class="tool-icon"> <i class="fa-solid fa-magnifying-glass-plus"></i> </span>
-                        <span class="tool-label"> Zoom In </span>
-                    </button>
-
-                    <button class="tool-btn disabled" data-view="zoom-out" >
-                        <span class="tool-icon"> <i class="fa-solid fa-magnifying-glass-minus"></i> </span>
-                        <span class="tool-label"> Zoom Out </span>
-                    </button>
-
-                    <button class="tool-btn disabled" data-view="reset" >
-                        <span class="tool-icon"> <i class="fa-solid fa-expand"></i> </span>
-
-                        <span class="tool-label"> Reset </span>
-                    </button>
-
-                </div>
-            </div>
-
-
-            <div class="ribbon-divider"></div>
-
-
-            <!-- LAYOUT -->
-            <div class="ribbon-group">
-
-                <span class="group-title">LAYOUT</span>
-                <div class="group-buttons">
-
-                    <button class="tool-btn disabled" data-view="center" >
-                        <span class="tool-icon"> <i class="fa-solid fa-crosshairs"></i> </span>
-                        <span class="tool-label"> Center </span>
-                    </button>
-
-                    <button class="tool-btn disabled" data-view="fit" >
-                        <span class="tool-icon"> <i class="fa-solid fa-maximize"></i> </span>
-                        <span class="tool-label"> Fit Network </span>
-                    </button>
-
-                </div>
-            </div>
         </div>
 
     </header>
@@ -369,9 +278,8 @@
 
                 <!-- ROUTER -->
 
-                <div class="palette-item disabled" data-type="ROUTER" >
-
-
+                <div class="palette-item" data-type="ROUTER" >
+                    <img src="/static/assets/ROUTER_off.png" alt="ROUTER" class="palette-icon" >
                     <span class="palette-label"> ROUTER </span>
                 </div>
 
@@ -432,7 +340,7 @@
 
 
     <!-- SHORTCUT PANEL -->
-    <div id="shortcut-panel" style="position: fixed; bottom: 20px; right: 20px; background: rgba(15, 23, 42, 0.9); border: 1px solid #1e293b; padding: 15px; border-radius: 8px; color: #8a9ba8; font-size: 12px; z-index: 9999; box-shadow: 0 4px 6px rgba(0,0,0,0.3); pointer-events: none;">
+    <div id="shortcut-panel" style="display: none; position: fixed; bottom: 40px; right: 20px; background: rgba(15, 23, 42, 0.9); border: 1px solid #1e293b; padding: 15px; border-radius: 8px; color: #8a9ba8; font-size: 12px; z-index: 9999; box-shadow: 0 4px 6px rgba(0,0,0,0.3); pointer-events: none;">
         <div style="color: #00e5ff; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #1e293b; padding-bottom: 5px; text-align: center; letter-spacing: 1px;">
             QUICK SHORTCUTS
         </div>
@@ -447,10 +355,10 @@
         </div>
     </div>
 
-    <script src="/js/api.js?v=12"></script>
-    <script src="/js/ncm_app.js?v=12"></script>
-    <script src="/js/topology.js?v=12"></script>
-    <script src="/js/lab_app.js?v=12"></script>
+    <script src="/js/api.js?v=20"></script>
+    <script src="/js/ncm_app.js?v=20"></script>
+    <script src="/js/topology.js?v=20"></script>
+    <script src="/js/lab_app.js?v=20"></script>
 
 </body>
 </html>

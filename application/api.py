@@ -15,12 +15,24 @@ class API:
         except ValueError as e:
             try:
                 from backend.core.event import Event
+                # Try to extract device name from path (e.g. /api/ncm/devices/HOST-05/services) or body
+                source_dev = "API"
+                dev_meta = {}
+                parts = [p for p in path.split("/") if p]
+                if len(parts) >= 4 and parts[0] == "api" and parts[2] == "devices":
+                    source_dev = parts[3]
+                elif body and isinstance(body, dict) and "device" in body:
+                    source_dev = body["device"]
+                    
+                if source_dev != "API":
+                    dev_meta = {"host": source_dev} # use host/router/switch interchangeably for UI catching it
+                
                 event = Event(
                     type="SYSTEM_ERROR",
-                    source="API",
+                    source=source_dev,
                     destination="SYSTEM",
                     severity="HIGH",
-                    metadata={"error": str(e), "path": path, "method": method}
+                    metadata={"error": str(e), "path": path, "method": method, **dev_meta}
                 )
                 self.ntm.simulation.network.add_event(event)
                 
@@ -417,6 +429,12 @@ class API:
                 interface
             )
 
+        # POST /api/ncm/devices/<device>/restart
+        if method == "POST" and len(resource) == 3 and resource[0] == "devices" and resource[2] == "restart":
+            result = self.ncm.restart_device(resource[1])
+            self.state_manager.save()
+            return self._serialize(result)
+
         # DELETE /api/ncm/subnets
         if (
             method == "DELETE"
@@ -505,32 +523,56 @@ class API:
 
         if hasattr(device, "interfaces"):
             result["interfaces"] = [ self._serialize_interface(interface) for interface in device.interfaces ]
+        elif hasattr(device, "ports"):
+            result["interfaces"] = [ self._serialize_interface(port) for port in device.ports.values() ]
+
+        if hasattr(device, "mac_table"):
+            result["mac_table"] = { mac: port for mac, port in device.mac_table.items() }
+
+        if hasattr(device, "routes"):
+            result["routes"] = [
+                {
+                    "destination": str(r["destination"]),
+                    "interface": getattr(r["interface"], "name", None),
+                    "next_hop": r["next_hop"]
+                }
+                for r in device.routes
+            ]
 
         return result
 
     def _serialize_interface(self, interface):
+        name = getattr(interface, "name", None)
+        if name is None and hasattr(interface, "port_number"):
+            name = f"Port-{interface.port_number}"
 
-        return {
-            "name": getattr( interface, "name", None ),
-
+        result = {
+            "name": name,
             "mac": (
                 str(interface.mac)
                 if getattr( interface, "mac", None ) is not None else None
             ),
-
             "ip": (
                 str(interface.ip)
                 if getattr( interface, "ip", None ) is not None else None
             ),
-
             "subnet": (
                 str(interface.subnet)
                 if getattr( interface, "subnet", None ) is not None else None
             ),
-
             "connected": (
                 getattr( interface, "link", None ) is not None )
         }
+        
+        if hasattr(interface, "port_number"):
+            result["port_number"] = interface.port_number
+            result["mode"] = getattr(interface, "mode", "access").upper()
+            
+        if getattr(interface, "link", None) is not None:
+            other = interface.link.endpointB if interface.link.endpointA == interface else interface.link.endpointA
+            result["connected_to"] = self._endpoint_name(other)
+            
+        return result
 
     def _serialize_link(self, link):
 

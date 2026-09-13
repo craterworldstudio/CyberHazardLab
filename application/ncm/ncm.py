@@ -31,8 +31,12 @@ class NetworkConfigurationManager:
         device = self.get_device(device)
 
         # Count interfaces
-        total_interfaces = len(device.interfaces) if hasattr(device, 'interfaces') else 0
-        up_interfaces = sum(1 for i in device.interfaces if getattr(i, 'link', None) is not None) if total_interfaces > 0 else 0
+        if hasattr(device, 'ports'):
+            total_interfaces = len(device.ports)
+            up_interfaces = sum(1 for p in device.ports.values() if getattr(p, 'link', None) is not None)
+        else:
+            total_interfaces = len(device.interfaces) if hasattr(device, 'interfaces') else 0
+            up_interfaces = sum(1 for i in device.interfaces if getattr(i, 'link', None) is not None) if total_interfaces > 0 else 0
 
         # Count services
         services = getattr(device, 'services', [])
@@ -60,14 +64,33 @@ class NetworkConfigurationManager:
             "services_running": running_services
         }
 
+    def restart_device(self, device):
+        import time
+        device_obj = self.get_device(device)
+        
+        # Determine current running state of the whole sim
+        sim_running = self.simulation.is_running
+        
+        if sim_running:
+            device_obj.status = "ONLINE"
+            device_obj.boot_time = time.time()
+        else:
+            device_obj.status = "OFFLINE"
+            device_obj.boot_time = None
+            
+        return {"status": "success", "device": device}
+
     # ========================================================
     # INTERFACE HELPERS
     # ========================================================
 
     def get_interfaces(self, device):    #get all interfaces on the single device
         device = self.get_device(device)
+        
+        if hasattr(device, 'ports'):
+            return list(device.ports.values())
 
-        return list(device.interfaces)
+        return list(getattr(device, 'interfaces', []))
 
     def get_interface(self, device, interface):      # get the specific device
         device = self.get_device(device) if isinstance(device, str) else device

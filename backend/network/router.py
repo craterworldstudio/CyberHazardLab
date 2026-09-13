@@ -18,26 +18,26 @@ class Router:
 
 
 
-        self.eth0 = NetworkInterface(
-            name="eth0",
-            mac=generate_mac(),
-            ip="10.0.0.1",
-            owner=self,
-            subnet="10.0.0.0/24"
-            )
-        self.eth1 = NetworkInterface(
-            name="eth1",
-            mac=generate_mac(),
-            ip="10.0.1.1",
-            owner=self,
-            subnet="10.0.1.0/24"
-            )
-        self.eth0.attach_network(self.network)
-        self.eth1.attach_network(self.network)
-        
-        self.add_interface(self.eth0)
-        self.add_interface(self.eth1)  
-
+        #self.eth0 = NetworkInterface(
+        #    name="eth0",
+        #    mac=generate_mac(),
+        #    ip="10.0.0.1",
+        #    owner=self,
+        #    subnet="10.0.0.0/24"
+        #    )
+        #self.eth1 = NetworkInterface(
+        #    name="eth1",
+        #    mac=generate_mac(),
+        #    ip="10.0.1.1",
+        #    owner=self,
+        #    subnet="10.0.1.0/24"
+        #    )
+        #self.eth0.attach_network(self.network)
+        #self.eth1.attach_network(self.network)
+        #
+        #self.add_interface(self.eth0)
+        #self.add_interface(self.eth1)  
+#
 
     def add_interface(self, interface: NetworkInterface):
         interface.owner = self

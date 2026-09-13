@@ -67,8 +67,13 @@ function createNCMWindow(deviceName, deviceType) {
         <div class="ncm-tabs" style="background: #080c10; border-bottom: 1px solid rgba(255,255,255,0.05);">
             <button class="ncm-tab active" data-tab="health">HEALTH</button>
             <button class="ncm-tab" data-tab="config">CONFIG</button>
-            <button class="ncm-tab" data-tab="services">SERVICES</button>
-            <button class="ncm-tab" data-tab="interfaces">INTERFACES</button>
+            ${deviceType === 'SWITCH' 
+                ? `<button class="ncm-tab" data-tab="mac_table">MAC TABLE</button>`
+                : (deviceType === 'ROUTER'
+                    ? `<button class="ncm-tab" data-tab="routes">ROUTING TABLE</button>`
+                    : `<button class="ncm-tab" data-tab="services">SERVICES</button>`)
+            }
+            <button class="ncm-tab" data-tab="interfaces">${deviceType === 'SWITCH' ? 'SWITCH PORTS' : 'INTERFACES'}</button>
         </div>
 
         <div class="ncm-content" style="background: #0a0f18;">
@@ -87,9 +92,19 @@ function createNCMWindow(deviceName, deviceType) {
                 </div>
             </div>
 
+            ${deviceType === 'SWITCH' ? `
+            <div class="ncm-tab-content" data-content="mac_table">
+                <div class="ncm-mac-table"></div>
+            </div>
+            ` : (deviceType === 'ROUTER' ? `
+            <div class="ncm-tab-content" data-content="routes">
+                <div class="ncm-routing-table"></div>
+            </div>
+            ` : `
             <div class="ncm-tab-content" data-content="services">
                 <div class="ncm-services-list"></div>
             </div>
+            `)}
 
             <div class="ncm-tab-content" data-content="interfaces">
                 <div class="ncm-interface-list"></div>
@@ -205,8 +220,22 @@ async function loadNCMDevice(deviceName, window) {
         const services = await apiRequest(
             "GET",
             `/api/ncm/devices/${encodeURIComponent(deviceName)}/services`
-        );
+        ).catch(() => []); // Ignore if services endpoint fails (e.g. for switches)
+        
         renderNCMServices(window, deviceName, services);
+        
+        // If it's a switch, fetch MAC table directly from device info
+        const deviceData = await apiRequest(
+            "GET",
+            `/api/ntm/devices/${encodeURIComponent(deviceName)}`
+        );
+        if (deviceData.type === 'SWITCH') {
+            renderNCMMacTable(window, deviceName, deviceData.mac_table || {});
+        } else if (deviceData.type === 'ROUTER') {
+            renderNCMRoutingTable(window, deviceName, deviceData.routes || []);
+        }
+
+        renderNCMConfig(window, deviceName, deviceData);
 
     } catch (error) {
 
@@ -217,7 +246,43 @@ async function loadNCMDevice(deviceName, window) {
 
     }
 }
+    
+async function restartNCMDevice(deviceName, win) {
+    try {
+        await apiRequest("POST", `/api/ncm/devices/${encodeURIComponent(deviceName)}/restart`);
+        loadNCMDevice(deviceName, win);
+    } catch (error) {
+        console.error("[CHL:NCM] Failed to restart device", error);
+    }
+}
 
+function renderNCMConfig(window, deviceName, deviceData) {
+    const container = window.querySelector('[data-content="config"]');
+    if (!container) return;
+    
+    container.innerHTML = `
+        <div class="ncm-device-type" style="color: #00e5ff; border: 1px solid rgba(0,229,255,0.1); padding: 8px; background: rgba(0,229,255,0.05); display: inline-block; font-weight: bold; letter-spacing: 2px; margin-bottom: 20px;">
+            [ TYPE: ${deviceData.type || "UNKNOWN"} ]
+        </div>
+        <div class="ncm-config-section">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(0, 229, 255, 0.15); padding-bottom: 8px; margin-bottom: 15px;">
+                <div class="ncm-section-title" style="color: #00e5ff; font-weight: bold; letter-spacing: 2px;">>_ DEVICE CONFIGURATION</div>
+            </div>
+            
+            <div style="border: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.02); padding: 15px;">
+                <div style="color: #d5ebf2; font-size: 13px; margin-bottom: 15px;">
+                    <strong>NODE ID:</strong> <span style="color: #00e5ff;">${deviceName}</span>
+                </div>
+                
+                <div style="color: #8a9ba8; font-size: 11px; margin-bottom: 20px;">
+                    Use the restart button to reboot the device node, clearing local states (like ephemeral ports, active connections, and runtime errors) while preserving saved interfaces and services.
+                </div>
+                
+                <button style="background: rgba(255, 170, 0, 0.1); border: 1px solid #ffaa00; color: #ffaa00; padding: 10px 15px; font-family: monospace; font-weight: bold; letter-spacing: 2px; cursor: pointer; transition: 0.2s; width: 100%;" onmouseover="this.style.background='#ffaa00'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(255, 170, 0, 0.1)'; this.style.color='#ffaa00';" onclick="restartNCMDevice('${deviceName}', this.closest('.ncm-window'))">REBOOT DEVICE NODE</button>
+            </div>
+        </div>
+    `;
+}
 
 function renderNCMInterfaces(window, deviceName, interfaces) {
     const container = window.querySelector(".ncm-interface-list");
@@ -226,14 +291,14 @@ function renderNCMInterfaces(window, deviceName, interfaces) {
     let html = `
         <div class="ncm-config-section">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(0, 229, 255, 0.15); padding-bottom: 8px;">
-                <div class="ncm-section-title" style="color: #00e5ff; font-weight: bold; letter-spacing: 2px;">>_ INTERFACE CONFIG</div>
+                <div class="ncm-section-title" style="color: #00e5ff; font-weight: bold; letter-spacing: 2px;">>_ ${deviceName.startsWith('SWT') ? 'PORT' : 'INTERFACE'} CONFIG</div>
                 <button style="background: rgba(0,229,255,0.1); border: 1px solid #00e5ff; color: #00e5ff; font-family: monospace; font-weight: bold; padding: 2px 10px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0,229,255,0.1)'; this.style.color='#00e5ff';" onclick="const f = document.getElementById('add-intf-form-${deviceName}'); f.style.display = f.style.display === 'none' ? 'block' : 'none';"> + </button>
             </div>
             
             <div id="add-intf-form-${deviceName}" style="display: none; margin-top: 15px; border: 1px dashed rgba(0, 229, 255, 0.3); background: rgba(0, 0, 0, 0.2); padding: 15px;">
-                <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 10px; font-weight: bold;">// CONFIGURE INTERFACE TARGET</div>
+                <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 10px; font-weight: bold;">// CONFIGURE ${deviceName.startsWith('SWT') ? 'PORT' : 'INTERFACE'} TARGET</div>
                 
-                <input type="text" id="cfg-intf-name-${deviceName}" placeholder="INTERFACE (e.g. eth0)" style="width: 100%; margin-bottom: 8px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+                <input type="text" id="cfg-intf-name-${deviceName}" placeholder="${deviceName.startsWith('SWT') ? 'PORT (e.g. 1)' : 'INTERFACE (e.g. eth0)'}" style="width: 100%; margin-bottom: 8px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
                 
                 <input type="text" id="cfg-intf-ip-${deviceName}" placeholder="IP ADDRESS" style="width: 100%; margin-bottom: 8px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
                 
@@ -246,36 +311,144 @@ function renderNCMInterfaces(window, deviceName, interfaces) {
     `;
 
     if (!interfaces.length) {
-        html += `<div style="color: #5c6b73; font-style: italic; text-align: center; padding: 20px 0;">>_ NO INTERFACES DETECTED</div>`;
+        html += `<div style="color: #5c6b73; font-style: italic; text-align: center; padding: 20px 0;">>_ NO ${deviceName.startsWith('SWT') ? 'PORTS' : 'INTERFACES'} DETECTED</div>`;
     } else {
         interfaces.forEach(intf => {
 
             const statusColor = intf.connected ? '#00e5ff' : '#5c6b73';
             const statusGlow = intf.connected ? `text-shadow: 0 0 5px ${statusColor};` : '';
-
-            html += `
-                <div style="border: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.02); padding: 12px; margin-bottom: 8px; transition: border 0.2s;" onmouseover="this.style.borderColor='rgba(0,229,255,0.3)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.05)'">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                        <div>
-                            <strong style="color: #fff; font-size: 12px;">${intf.name || "UNKNOWN"}</strong>
-                            <span style="font-size: 9px; color: ${statusColor}; margin-left: 10px; font-weight: bold; letter-spacing: 1px; ${statusGlow}">[ ${intf.connected ? "LINK_UP" : "LINK_DOWN"} ]</span>
-                            <div style="font-size: 11px; margin-top: 8px; color: #8a9ba8; display: grid; grid-template-columns: 50px 1fr; gap: 4px;">
-                                <div style="color: #5c6b73;">MAC</div><div style="color: #d5ebf2;">${intf.mac || "—"}</div>
-                                <div style="color: #5c6b73;">IP</div><div style="color: #00e5ff;">${intf.ip || "—"}</div>
-                                <div style="color: #5c6b73;">SUB</div><div style="color: #d5ebf2;">${intf.subnet || "—"}</div>
+            
+            if (deviceName.startsWith('SWT')) {
+                html += `
+                    <div style="border: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.02); padding: 12px; margin-bottom: 8px; transition: border 0.2s;" onmouseover="this.style.borderColor='rgba(0,229,255,0.3)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.05)'">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div>
+                                <strong style="color: #fff; font-size: 12px;">${intf.name || "UNKNOWN"}</strong>
+                                <span style="font-size: 9px; color: ${statusColor}; margin-left: 10px; font-weight: bold; letter-spacing: 1px; ${statusGlow}">[ ${intf.connected ? "LINK_UP" : "LINK_DOWN"} ]</span>
+                                <div style="font-size: 11px; margin-top: 8px; color: #8a9ba8; display: grid; grid-template-columns: 50px 1fr; gap: 4px;">
+                                    <div style="color: #5c6b73;">PORT</div><div style="color: #d5ebf2;">${intf.port_number || "—"}</div>
+                                    <div style="color: #5c6b73;">MODE</div><div style="color: #00e5ff;">${intf.mode || "ACCESS"}</div>
+                                    <div style="color: #5c6b73;">LINK</div><div style="color: #d5ebf2;">${intf.connected_to || "—"}</div>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 6px;">
+                                <button style="background: rgba(255, 51, 51, 0.05); border: 1px solid rgba(255, 51, 51, 0.2); color: #ff3333; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(255, 51, 51, 0.2)'; this.style.borderColor='#ff3333';" onmouseout="this.style.background='rgba(255, 51, 51, 0.05)'; this.style.borderColor='rgba(255, 51, 51, 0.2)';" title="Delete" onclick="deleteNCMInterface('${deviceName}', '${intf.name}', this.closest('.ncm-window'))">[ DEL ]</button>
                             </div>
                         </div>
-                        <div style="display: flex; gap: 6px;">
-                            <button style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #8a9ba8; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#fff'; this.style.borderColor='rgba(255,255,255,0.3)';" onmouseout="this.style.color='#8a9ba8'; this.style.borderColor='rgba(255,255,255,0.1)';" title="Edit" onclick="const form = document.getElementById('add-intf-form-${deviceName}'); form.style.display='block'; form.dataset.editing='${intf.name}'; document.getElementById('cfg-intf-name-${deviceName}').value='${intf.name}'; document.getElementById('cfg-intf-name-${deviceName}').readOnly=true; document.getElementById('cfg-intf-name-${deviceName}').style.opacity='0.5'; document.getElementById('cfg-intf-ip-${deviceName}').value='${intf.ip || ''}'; document.getElementById('cfg-intf-sub-${deviceName}').value='${intf.subnet || ''}';">[ EDIT ]</button>
-                            
-                            <button style="background: rgba(255, 51, 51, 0.05); border: 1px solid rgba(255, 51, 51, 0.2); color: #ff3333; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(255, 51, 51, 0.2)'; this.style.borderColor='#ff3333';" onmouseout="this.style.background='rgba(255, 51, 51, 0.05)'; this.style.borderColor='rgba(255, 51, 51, 0.2)';" title="Delete" onclick="deleteNCMInterface('${deviceName}', '${intf.name}', this.closest('.ncm-window'))">[ DEL ]</button>
+                    </div>
+                `;
+            } else {
+                html += `
+                    <div style="border: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.02); padding: 12px; margin-bottom: 8px; transition: border 0.2s;" onmouseover="this.style.borderColor='rgba(0,229,255,0.3)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.05)'">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div>
+                                <strong style="color: #fff; font-size: 12px;">${intf.name || "UNKNOWN"}</strong>
+                                <span style="font-size: 9px; color: ${statusColor}; margin-left: 10px; font-weight: bold; letter-spacing: 1px; ${statusGlow}">[ ${intf.connected ? "LINK_UP" : "LINK_DOWN"} ]</span>
+                                <div style="font-size: 11px; margin-top: 8px; color: #8a9ba8; display: grid; grid-template-columns: 50px 1fr; gap: 4px;">
+                                    <div style="color: #5c6b73;">MAC</div><div style="color: #d5ebf2;">${intf.mac || "—"}</div>
+                                    <div style="color: #5c6b73;">IP</div><div style="color: #00e5ff;">${intf.ip || "—"}</div>
+                                    <div style="color: #5c6b73;">SUB</div><div style="color: #d5ebf2;">${intf.subnet || "—"}</div>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 6px;">
+                                <button style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #8a9ba8; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#fff'; this.style.borderColor='rgba(255,255,255,0.3)';" onmouseout="this.style.color='#8a9ba8'; this.style.borderColor='rgba(255,255,255,0.1)';" title="Edit" onclick="const form = document.getElementById('add-intf-form-${deviceName}'); form.style.display='block'; form.dataset.editing='${intf.name}'; document.getElementById('cfg-intf-name-${deviceName}').value='${intf.name}'; document.getElementById('cfg-intf-name-${deviceName}').readOnly=true; document.getElementById('cfg-intf-name-${deviceName}').style.opacity='0.5'; document.getElementById('cfg-intf-ip-${deviceName}').value='${intf.ip || ''}'; document.getElementById('cfg-intf-sub-${deviceName}').value='${intf.subnet || ''}';">[ EDIT ]</button>
+                                
+                                <button style="background: rgba(255, 51, 51, 0.05); border: 1px solid rgba(255, 51, 51, 0.2); color: #ff3333; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(255, 51, 51, 0.2)'; this.style.borderColor='#ff3333';" onmouseout="this.style.background='rgba(255, 51, 51, 0.05)'; this.style.borderColor='rgba(255, 51, 51, 0.2)';" title="Delete" onclick="deleteNCMInterface('${deviceName}', '${intf.name}', this.closest('.ncm-window'))">[ DEL ]</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            `;
+                `;
+            }
         });
     }
 
+    html += `</div></div>`;
+    container.innerHTML = html;
+}
+
+function renderNCMMacTable(window, deviceName, macTable) {
+    const container = window.querySelector(".ncm-mac-table");
+    if (!container) return;
+    
+    let html = `
+        <div class="ncm-config-section">
+            <div style="border-bottom: 1px solid rgba(0, 229, 255, 0.15); padding-bottom: 8px;">
+                <div class="ncm-section-title" style="color: #00e5ff; font-weight: bold; letter-spacing: 2px;">>_ MAC ADDRESS TABLE</div>
+            </div>
+            <div style="margin-top: 15px;">
+    `;
+    
+    const entries = Object.entries(macTable);
+    if (!entries.length) {
+        html += `<div style="color: #5c6b73; font-style: italic; text-align: center; padding: 20px 0;">>_ TABLE IS EMPTY</div>`;
+    } else {
+        html += `
+            <table style="width: 100%; text-align: left; border-collapse: collapse; font-family: monospace; font-size: 11px;">
+                <thead>
+                    <tr style="color: #5c6b73; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                        <th style="padding: 8px 4px;">MAC ADDRESS</th>
+                        <th style="padding: 8px 4px;">PORT</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+        
+        entries.forEach(([mac, port]) => {
+            html += `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.02); color: #d5ebf2;">
+                    <td style="padding: 8px 4px; color: #00e5ff;">${mac}</td>
+                    <td style="padding: 8px 4px;">Port-${port}</td>
+                </tr>
+            `;
+        });
+        
+        html += `</tbody></table>`;
+    }
+    
+    html += `</div></div>`;
+    container.innerHTML = html;
+}
+
+function renderNCMRoutingTable(window, deviceName, routes) {
+    const container = window.querySelector(".ncm-routing-table");
+    if (!container) return;
+    
+    let html = `
+        <div class="ncm-config-section">
+            <div style="border-bottom: 1px solid rgba(0, 229, 255, 0.15); padding-bottom: 8px;">
+                <div class="ncm-section-title" style="color: #00e5ff; font-weight: bold; letter-spacing: 2px;">>_ ROUTING TABLE</div>
+            </div>
+            <div style="margin-top: 15px;">
+    `;
+    
+    if (!routes.length) {
+        html += `<div style="color: #5c6b73; font-style: italic; text-align: center; padding: 20px 0;">>_ TABLE IS EMPTY</div>`;
+    } else {
+        html += `
+            <table style="width: 100%; text-align: left; border-collapse: collapse; font-family: monospace; font-size: 11px;">
+                <thead>
+                    <tr style="color: #5c6b73; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                        <th style="padding: 8px 4px;">DESTINATION</th>
+                        <th style="padding: 8px 4px;">INTERFACE</th>
+                        <th style="padding: 8px 4px;">NEXT HOP</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+        
+        routes.forEach(route => {
+            html += `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.02); color: #d5ebf2;">
+                    <td style="padding: 8px 4px; color: #00e5ff;">${route.destination}</td>
+                    <td style="padding: 8px 4px;">${route.interface || "—"}</td>
+                    <td style="padding: 8px 4px;">${route.next_hop || "DIRECT"}</td>
+                </tr>
+            `;
+        });
+        
+        html += `</tbody></table>`;
+    }
+    
     html += `</div></div>`;
     container.innerHTML = html;
 }
@@ -286,15 +459,32 @@ async function updateNCMInterface(deviceName, interfaceName, win) {
     const form = document.getElementById(`add-intf-form-${deviceName}`);
     
     // Use the original name we're editing, or the field value if it's a new interface
+    const isNew = !form.dataset.editing;
     const targetName = form.dataset.editing || interfaceName;
     
     if (!targetName) return;
 
     try {
-        await apiRequest("PUT", `/api/ncm/devices/${encodeURIComponent(deviceName)}/interfaces/${encodeURIComponent(targetName)}`, {
-            ip: ipInput.value || null,
-            subnet: subInput.value || null
-        });
+        if (isNew) {
+            await apiRequest("POST", `/api/ncm/interfaces`, {
+                device: deviceName,
+                name: targetName,
+                ip: ipInput.value || null,
+                subnet: subInput.value || null
+            });
+            // If IP/Subnet provided, we also need to update it since POST only sets the name/mac
+            if (ipInput.value || subInput.value) {
+                await apiRequest("PUT", `/api/ncm/devices/${encodeURIComponent(deviceName)}/interfaces/${encodeURIComponent(targetName)}`, {
+                    ip: ipInput.value || null,
+                    subnet: subInput.value || null
+                });
+            }
+        } else {
+            await apiRequest("PUT", `/api/ncm/devices/${encodeURIComponent(deviceName)}/interfaces/${encodeURIComponent(targetName)}`, {
+                ip: ipInput.value || null,
+                subnet: subInput.value || null
+            });
+        }
         
         // Reset form state
         delete form.dataset.editing;
@@ -356,6 +546,8 @@ function renderNCMHealth(window, health) {
     const container = window.querySelector('[data-content="health"]');
     if (!container) return;
     
+    const deviceName = window.dataset.device || "";
+    
     const st = (health.status || "UNKNOWN").toUpperCase();
     let statusColor = "#9ca3af"; // Default gray
     if (st === "ONLINE" || st === "ON") statusColor = "#4ade80"; // Green
@@ -375,11 +567,13 @@ function renderNCMHealth(window, health) {
                     <div style="color: #5c6b73;">> UPTIME</div>
                     <div style="color: #d5ebf2;">${health.uptime || '00:00:00'}</div>
                     
-                    <div style="color: #5c6b73;">> INTERFACES</div>
+                    <div style="color: #5c6b73;">> ${deviceName.startsWith('SWT') ? 'SWITCH_PORTS' : 'INTERFACES'}</div>
                     <div style="color: #d5ebf2;">${health.interfaces_active ?? 0} / ${health.interfaces_total ?? 0} ACTIVE</div>
                     
+                    ${!deviceName.startsWith('SWT') && !deviceName.startsWith('RUT') ? `
                     <div style="color: #5c6b73;">> SERVICES</div>
                     <div style="color: #d5ebf2;">${health.services_total ?? 0} TOTAL <span style="color: #00e5ff; margin-left: 8px;">(${health.services_running ?? 0} RUNNING)</span></div>
+                    ` : ''}
                     
                     <div style="color: #5c6b73;">> PACKET_TRACE</div>
                     <div style="color: #5c6b73; font-style: italic;">N/A (AWAITING PROBE)</div>
@@ -395,6 +589,10 @@ function renderNCMHealth(window, health) {
 function renderNCMServices(window, deviceName, services) {
     const container = window.querySelector('[data-content="services"]');
     if (!container) return;
+    
+    if (!services || !Array.isArray(services)) {
+        services = [];
+    }
 
     let servicesHtml = `
         <div class="ncm-config-section">

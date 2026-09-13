@@ -86,7 +86,9 @@ class Network:
 		self.hosts[host.get_ip()] = host
 
 	def add_event(self, event: Event):
-			self.events.append(event)
+		self.events.append(event)
+		if getattr(self, "on_event", None):
+			self.on_event(event)
 
 	def connect(self, source:Host, destination:Host, protocol:str, port:int):
 		src_ip = source.get_ip()

@@ -41,7 +41,7 @@ class Switch:
         port.connect_link(link)
         interface.connect_link(link)
 
-        return port
+        return link
 
     def learn(self, mac, port):
         self.mac_table[mac] = port
@@ -181,7 +181,7 @@ class Switch:
         local_port.connect_link(link)  # To SwitchPort
         remote_port.connect_link(link) # To SwitchPort 
 
-        return local_port, remote_port
+        return link
 
     def connect_router(self, rut_intf: NetworkInterface):
         port_num = len(self.ports) + 1
@@ -201,7 +201,7 @@ class Switch:
 
         self.ports[port_num] = port
 
-        return port
+        return link
 
     def add_port(self, mode="access"):
         port_num = len(self.ports) + 1

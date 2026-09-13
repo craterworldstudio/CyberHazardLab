@@ -33,6 +33,22 @@ class Simulation:
         self.tcp_connections = {}
         self.udp_connections = {}
         self.is_running = False
+        
+        self.network.on_event = self._handle_network_event
+
+    def _handle_network_event(self, event):
+        if event.severity in ["HIGH", "ERROR"]:
+            dev_name = None
+            if hasattr(event, "metadata") and event.metadata:
+                dev_name = event.metadata.get("router") or event.metadata.get("host") or event.metadata.get("switch")
+            
+            if dev_name:
+                if dev_name in self.hosts:
+                    self.hosts[dev_name].status = "ERROR"
+                elif dev_name in self.routers:
+                    self.routers[dev_name].status = "ERROR"
+                elif dev_name in self.switches:
+                    self.switches[dev_name].status = "ERROR"
 
     # ========================================================
     # SIMULATION LIFECYCLE
@@ -47,6 +63,9 @@ class Simulation:
         for router in self.routers.values():
             router.status = "ONLINE"
             router.boot_time = time.time()
+        for switch in self.switches.values():
+            switch.status = "ONLINE"
+            switch.boot_time = time.time()
 
     def stop(self):
         self.is_running = False
@@ -56,6 +75,9 @@ class Simulation:
         for router in self.routers.values():
             router.status = "OFFLINE"
             router.boot_time = None
+        for switch in self.switches.values():
+            switch.status = "OFFLINE"
+            switch.boot_time = None
 
     def validate(self):
         # Physical topology check: mark devices with 0 connections as ERROR
@@ -80,6 +102,16 @@ class Simulation:
                 router.status = "ONLINE" if self.is_running else "OFFLINE"
             if old_status != router.status:
                 updated.append(router.name)
+                
+        for switch in self.switches.values():
+            connected = any(port.link is not None for port in switch.ports.values())
+            old_status = getattr(switch, "status", "OFFLINE")
+            if not connected:
+                switch.status = "ERROR"
+            else:
+                switch.status = "ONLINE" if self.is_running else "OFFLINE"
+            if old_status != switch.status:
+                updated.append(switch.name)
 
         return updated
 
@@ -159,6 +191,10 @@ class Simulation:
     
         if name is None:
             name = f"eth{len(host.interfaces)}"
+            
+        for existing in host.interfaces:
+            if existing.name == name:
+                raise ValueError(f"Interface '{name}' already exists on {host.name}")
     
         if mac is None:
             mac = generate_mac()
@@ -387,6 +423,10 @@ class Simulation:
 
         if name is None:
             name = f"eth{len(router.interfaces)}"
+
+        for existing in router.interfaces:
+            if existing.name == name:
+                raise ValueError(f"Interface '{name}' already exists on {router.name}")
 
         if mac is None:
             mac = generate_mac()

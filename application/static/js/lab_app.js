@@ -35,6 +35,15 @@ const CHL = {
                 ERROR: "/static/assets/SWITCH_Err.png"
             },
             icon: "/static/assets/SWITCH_off.png" // fallback
+        },
+        ROUTER: {
+            prefix: "RUT",
+            icons: {
+                OFFLINE: "/static/assets/ROUTER_off.png",
+                ONLINE: "/static/assets/ROUTER_on.png",
+                ERROR: "/static/assets/ROUTER_Err.png"
+            },
+            icon: "/static/assets/ROUTER_off.png" // fallback
         }
     }
 };
@@ -160,9 +169,65 @@ document.addEventListener("DOMContentLoaded", () => {
                 setTool(btn.dataset.tool);
             } else if (btn.dataset.action) {
                 handleRibbonAction(btn.dataset.action);
+            } else if (btn.dataset.view) {
+                handleViewAction(btn.dataset.view, btn);
             }
         });
     });
+
+    function handleViewAction(view, btn) {
+        if (view === "shortcuts") {
+            const panel = document.getElementById("shortcut-panel");
+            if (panel) {
+                const isHidden = panel.style.display === "none";
+                panel.style.display = isHidden ? "block" : "none";
+                
+                // Toggle active state on button
+                if (isHidden) {
+                    btn.classList.add("active");
+                } else {
+                    btn.classList.remove("active");
+                }
+            }
+        }
+        
+        if (view === "grid") {
+            const floor = document.getElementById("topologyFloor");
+            floor.classList.toggle("hide-grid");
+            if (!floor.classList.contains("hide-grid")) {
+                btn.classList.add("active");
+            } else {
+                btn.classList.remove("active");
+            }
+        }
+        
+        if (view === "labels") {
+            const floor = document.getElementById("topologyFloor");
+            floor.classList.toggle("hide-labels");
+            if (!floor.classList.contains("hide-labels")) {
+                btn.classList.add("active");
+            } else {
+                btn.classList.remove("active");
+            }
+        }
+    }
+
+    async function syncDeviceStatuses() {
+        try {
+            const backendDevices = await apiRequest("GET", "/api/ntm/devices");
+            for (const backendDevice of backendDevices) {
+                const localDevice = devices.find(d => d.id === backendDevice.name);
+                if (localDevice && backendDevice.status !== localDevice.status) {
+                    localDevice.updateStatus(backendDevice.status);
+                }
+            }
+        } catch (e) {
+            // silent catch for background polling
+        }
+    }
+
+    // Poll backend every 2 seconds to keep canvas icons in sync with simulation state (like errors)
+    setInterval(syncDeviceStatuses, 2000);
 
     async function handleRibbonAction(action) {
         if (action === "network_config") {
@@ -215,10 +280,10 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (action === "new" || action === "clear") {
-            if (confirm("Are you sure you want to reset the simulation? All unsaved data will be lost.")) {
+            if (confirm("Reset simulation to factory defaults?")) {
                 try {
                     await apiRequest("POST", "/api/simulation/reset");
-                    window.location.reload();
+                    location.reload();
                 } catch (e) {
                     console.error("Failed to reset", e);
                 }
@@ -230,15 +295,7 @@ document.addEventListener("DOMContentLoaded", () => {
             try {
                 const response = await apiRequest("POST", `/api/simulation/${action}`);
                 console.log(`[CHL:SIM] ${action.toUpperCase()} action completed.`, response);
-                
-                // Refresh all devices from backend so statuses update visually
-                const backendDevices = await apiRequest("GET", "/api/ntm/devices");
-                for (const backendDevice of backendDevices) {
-                    const localDevice = devices.find(d => d.id === backendDevice.name);
-                    if (localDevice && backendDevice.status !== localDevice.status) {
-                        localDevice.updateStatus(backendDevice.status);
-                    }
-                }
+                await syncDeviceStatuses();
             } catch (error) {
                 console.error(`[CHL:SIM] Failed to execute ${action}:`, error);
             }
@@ -467,7 +524,9 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             this.path.setAttribute("d", d);
             this.path.classList.toggle("physical-cut", this.isPhysicallyCut);
-        
+            
+            console.log(`[CHL:DEBUG] Wire ${this.id} path updated to: ${d}`);
+
             this.renderSegmentHitboxes(points);
         }
 
@@ -895,6 +954,11 @@ document.addEventListener("DOMContentLoaded", () => {
         const link = new NetworkLink(linkId, sourceDevice, targetDevice);
         links.push(link);
         svgLayer.appendChild(link.group);
+        
+        // Wait for DOM flush before updating path, matching the topology.js trick
+        requestAnimationFrame(() => {
+            link.updatePath();
+        });
 
         updateCounts();
         console.log(`[CHL] Created wire ${linkId} (${sourceDevice.id} <-> ${targetDevice.id})`);
@@ -943,13 +1007,27 @@ document.addEventListener("DOMContentLoaded", () => {
         const config = DEVICE_CONFIG[type] || DEVICE_CONFIG.PC;
         let id;
 
-        if (type === "SERVER") {
-            id = `${config.prefix}-${String(serverCounter).padStart(2, "0")}`;
-            serverCounter++;
-        } else {
-            id = `${config.prefix}-${String(hostCounter).padStart(2, "0")}`;
-            hostCounter++;
+        if (!window._deviceCounters) window._deviceCounters = {};
+        if (window._deviceCounters[config.prefix] === undefined) {
+            let max = -1;
+            devices.forEach(device => {
+                if (!device.id.startsWith(config.prefix)) return;
+                const numStr = device.id.split('-').pop();
+                const number = Number(numStr);
+                if (!Number.isNaN(number)) max = Math.max(max, number);
+            });
+            window._deviceCounters[config.prefix] = max >= 0 ? max + 1 : 1;
+            // Also factor in the legacy counters if they were used
+            if (config.prefix === "HOST" && hostCounter > window._deviceCounters[config.prefix]) {
+                window._deviceCounters[config.prefix] = hostCounter;
+            }
+            if (config.prefix === "SRV" && serverCounter > window._deviceCounters[config.prefix]) {
+                window._deviceCounters[config.prefix] = serverCounter;
+            }
         }
+        
+        id = `${config.prefix}-${String(window._deviceCounters[config.prefix]).padStart(2, "0")}`;
+        window._deviceCounters[config.prefix]++;
 
         const backendDevice = await apiRequest(
             "POST",
@@ -1030,7 +1108,7 @@ document.addEventListener("DOMContentLoaded", () => {
             event.preventDefault();
             
             const type = item.dataset.type;
-            if (type !== "PC" && type !== "SERVER") return;
+            // Removed: if (type !== "PC" && type !== "SERVER") return;
             
             draggingFromPalette = true;
             paletteDeviceType = type;
