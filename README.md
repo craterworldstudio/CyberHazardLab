@@ -1,10 +1,6 @@
 
 # 🛡️ Cyber Hazard Lab
 
-> **Course Project:** This was CS50! Built by **Soulfire**.
-
-<!-- 🎥 Video Demo: <YOUR_URL_HERE> -->
-
 ## 📝 Description
 
 **Cyber Hazard Lab** is an interactive Security Operations Center (SOC) simulation environment. It features a **real, fully isolated network simulation** running in the background, making it entirely self-contained. 
