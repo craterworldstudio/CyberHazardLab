@@ -20,6 +20,9 @@ Designed specifically for students and aspiring network/security professionals, 
 ## 🛠️ Built With
 
 *   Python
+*   Html5
+*   Css
+*   Javascript
 
 ---
 
