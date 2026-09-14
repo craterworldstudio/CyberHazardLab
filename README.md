@@ -83,12 +83,16 @@ Designed specifically for students and aspiring network/security professionals, 
 - [x] Traceroute
 - [x] Dynamic network topology management
 - [ ] DNS resolution architecture
-- [ ] State-based Firewall
+- [ ] State-based Firewall & ACLs
+- [ ] IDS/IPS Node Simulation
+- [ ] NAT (Network Address Translation)
+- [ ] L1 Hub Emulation
 
 #### PHASE 5 — Application Layer 🟡
-- [ ] HTTP protocol support
+- [ ] HTTP/HTTPS protocol support
 - [ ] Core DNS services
 - [ ] Secure Shell (SSH) emulation
+- [ ] Custom Service Script Execution Engine
 - [x] Fully integrated DHCP services
 
 #### PHASE 6 — Interactive Lab Frontend 🟡
@@ -106,6 +110,7 @@ Designed specifically for students and aspiring network/security professionals, 
 - [ ] Payload Manager (Manual ICMP/TCP/UDP packet forging)
 - [ ] Dynamic MAC Learning & Routing Table UI visualization
 - [ ] PingSweep and TraceRoute Integration via Validate
+- [ ] PCAP Export (Download traffic captures for Wireshark)
 
 
 #### PHASE 7 — Application Integration 🟡
