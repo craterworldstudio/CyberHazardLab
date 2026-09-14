@@ -19,3 +19,52 @@ SUCCESS: Added event Unknown device: HOST-05. Total events now: 3
 SUCCESS: Added event Unknown device: HOST-05. Total events now: 4
 SUCCESS: Added event Unknown device: HOST-05. Total events now: 5
 SUCCESS: Added event Interface 'eth0' already exists on HOST-05. Total events now: 3
+SUCCESS: Added event Unknown device: SERV-01. Total events now: 1
+SUCCESS: Added event Unknown device: SERV-01. Total events now: 2
+SUCCESS: Added event Unknown device: SERV-01. Total events now: 3
+SUCCESS: Added event Unknown device: RUT-01. Total events now: 1
+SUCCESS: Added event Unknown device: RUT-01. Total events now: 2
+SUCCESS: Added event Unknown device: RUT-01. Total events now: 3
+SUCCESS: Added event Unknown device: RUT-01. Total events now: 4
+SUCCESS: Added event Unknown device: RUT-01. Total events now: 5
+SUCCESS: Added event Unknown device: RUT-01. Total events now: 6
+SUCCESS: Added event Unknown device: HOST-01. Total events now: 1
+SUCCESS: Added event Unknown device: HOST-01. Total events now: 2
+SUCCESS: Added event Unknown device: RUT-01. Total events now: 3
+SUCCESS: Added event Unknown device: RUT-01. Total events now: 4
+SUCCESS: Added event Unknown device: HOST-01. Total events now: 5
+SUCCESS: Added event Unknown device: RUT-01. Total events now: 6
+SUCCESS: Added event Unknown device: HOST-01. Total events now: 7
+SUCCESS: Added event Unknown device: HOST-01. Total events now: 8
+SUCCESS: Added event Unknown device: RUT-01. Total events now: 9
+SUCCESS: Added event Unknown device: RUT-01. Total events now: 10
+SUCCESS: Added event Unknown device: HOST-01. Total events now: 11
+SUCCESS: Added event Unknown device: RUT-01. Total events now: 12
+SUCCESS: Added event Unknown device: HOST-01. Total events now: 13
+SUCCESS: Added event Unknown device: HOST-01. Total events now: 14
+SUCCESS: Added event Unknown device: RUT-01. Total events now: 15
+SUCCESS: Added event Unknown device: RUT-01. Total events now: 16
+SUCCESS: Added event Unknown device: HOST-01. Total events now: 17
+SUCCESS: Added event Unknown device: RUT-01. Total events now: 18
+SUCCESS: Added event No connection exists between HOST-01 and SERV-01. Total events now: 21
+SUCCESS: Added event eth0 is already connected to a link.. Total events now: 22
+SUCCESS: Added event HOST-01 is already connected to SWT-01. Total events now: 23
+SUCCESS: Added event Interfaces cannot be removed from SWT-01. Total events now: 31
+SUCCESS: Added event Interfaces cannot be removed from SWT-01. Total events now: 32
+SUCCESS: Added event Interfaces cannot be removed from SWT-01. Total events now: 33
+SUCCESS: Added event Interfaces cannot be removed from SWT-01. Total events now: 34
+SUCCESS: Added event Interfaces cannot be removed from SWT-01. Total events now: 35
+SUCCESS: Added event Interfaces cannot be removed from SWT-01. Total events now: 1
+SUCCESS: Added event Unknown device: SERV-01. Total events now: 1
+SUCCESS: Added event Unknown device: SERV-01. Total events now: 2
+SUCCESS: Added event Unknown device: SERV-01. Total events now: 3
+SUCCESS: Added event Unknown device: SERV-01. Total events now: 4
+SUCCESS: Added event Unknown device: SERV-01. Total events now: 5
+SUCCESS: Added event Unknown device: SERV-01. Total events now: 6
+SUCCESS: Added event Unknown device: SERV-01. Total events now: 7
+SUCCESS: Added event Unknown device: SERV-01. Total events now: 8
+SUCCESS: Added event Unknown device: SERV-01. Total events now: 9
+SUCCESS: Added event Unknown device: SERV-01. Total events now: 10
+SUCCESS: Added event Unknown device: SERV-01. Total events now: 11
+SUCCESS: Added event Unknown device: HOST-03. Total events now: 1
+SUCCESS: Added event Unknown device: HOST-04. Total events now: 20

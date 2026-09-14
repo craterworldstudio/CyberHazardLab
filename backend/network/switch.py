@@ -66,10 +66,10 @@ class Switch:
         ))
 
         out_ports = [
-                port_num
-                for port_num in self.ports
-                if port_num != in_port
-            ]
+            port_num
+            for port_num, port_obj in self.ports.items()
+            if port_num != in_port and port_obj.link is not None
+        ]
 
         if frame.destination_mac == "FF:FF:FF:FF:FF:FF":
             
@@ -204,7 +204,17 @@ class Switch:
         return link
 
     def add_port(self, mode="access"):
+        # First, try to find an existing unconnected port
+        for port_num, port in self.ports.items():
+            if port.link is None:
+                port.mode = mode
+                return port
+
+        # If no open port, create a new one
         port_num = len(self.ports) + 1
+        # ensure we don't overwrite if len was messed up
+        while port_num in self.ports:
+            port_num += 1
 
         port = SwitchPort( self, port_num, mode )
 

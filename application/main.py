@@ -32,6 +32,16 @@ ncm = NetworkConfigurationManager(simulation)
 
 api = API(ntm, ncm, state_manager)
 
+state_data = state_manager.load()
+if state_data:
+    sim_data = state_data.get("simulation", {})
+    if sim_data.get("devices") or sim_data.get("subnets"):
+        print("[CHL] Restoring simulation state from simulation_state.json...")
+        api.handle("POST", "/api/simulation/import", body=state_data)
+else:
+    print("[CHL] No existing state found, starting fresh.")
+    state_manager.reset()
+
 class CustomHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
 

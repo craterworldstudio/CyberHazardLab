@@ -150,6 +150,11 @@ class NetworkConfigurationManager:
                 device,
                 interface
             )
+            
+        if device in self.simulation.switches.values():
+            if str(interface).startswith("Port-"):
+                port_num = int(str(interface).split("-")[1])
+                return device.remove_port(port_num)
 
         raise ValueError(
             f"Interfaces cannot be removed from {device.name}"
@@ -159,16 +164,19 @@ class NetworkConfigurationManager:
         device_obj = self.get_device(device)
         for intf in getattr(device_obj, 'interfaces', []):
             if intf.name == interface_name:
-                if ip is not None:
-                    # Remove old IP from network hosts mapping if it's a Host
-                    old_ip = intf.ip
-                    if old_ip and old_ip in self.simulation.network.hosts and self.simulation.network.hosts[old_ip] == device_obj:
-                        del self.simulation.network.hosts[old_ip]
-                    intf.ip = ip
-                    if ip and device_obj in self.simulation.hosts.values():
-                        self.simulation.network.hosts[ip] = device_obj
-                if subnet is not None:
-                    intf.subnet = subnet
+                if device_obj in self.simulation.routers.values() and hasattr(device_obj, 'update_intf'):
+                    device_obj.update_intf(intf, ip=ip, subnet=subnet)
+                else:
+                    if ip is not None:
+                        # Remove old IP from network hosts mapping if it's a Host
+                        old_ip = intf.ip
+                        if old_ip and old_ip in self.simulation.network.hosts and self.simulation.network.hosts[old_ip] == device_obj:
+                            del self.simulation.network.hosts[old_ip]
+                        intf.ip = ip
+                        if ip and device_obj in self.simulation.hosts.values():
+                            self.simulation.network.hosts[ip] = device_obj
+                    if subnet is not None:
+                        intf.subnet = subnet
                 return intf
         raise ValueError(f"Interface {interface_name} not found on {device_obj.name}")
 

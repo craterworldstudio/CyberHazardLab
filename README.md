@@ -35,7 +35,7 @@ Designed specifically for students and aspiring network/security professionals, 
 | **Phase 1** | Foundation               | `████████████████████` 4/4   | ✅ Done |
 | **Phase 2** | Local Networking         | `████████████████████` 9/9   | ✅ Done |
 | **Phase 3** | Transport Layer          | `████████████████████` 8/8   | ✅ Done |
-| **Phase 4** | Network Infrastructure   | `███████████████░░░░░` 7/9   | 🟡 In Progress |
+| **Phase 4** | Network Infrastructure   | `████████████░░░░░░░░` 7/12   | 🟡 In Progress |
 | **Phase 5** | Application Layer        | `████░░░░░░░░░░░░░░░░` 1/4   | 🟡 In Progress |
 | **Phase 6** | Interactive Lab Frontend | `████████████████░░░░` 10/14 | 🟡 In Progress |
 | **Phase 7** | SOC Integration          | `███░░░░░░░░░░░░░░░░░` 1/6   | 🟡 In Progress |
@@ -105,7 +105,7 @@ Designed specifically for students and aspiring network/security professionals, 
 - [x] Interface & SwitchPort physical assignment API
 - [x] Service spawning and management via UI
 - [x] Device node hardware resets and error state rendering
-- [ ] NCM Terminal (Interactive console for devices)
+- [ ] NCM Terminal (Interactive console for devices, e.g. ping, tracert, ipconfig/ifconfig, hostname, netsh, netstat, ss, arp, nslookup)
 - [ ] Payload Manager (Manual ICMP/TCP/UDP packet forging)
 - [ ] Dynamic MAC Learning & Routing Table UI visualization
 - [ ] PingSweep and TraceRoute Integration via Validate

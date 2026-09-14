@@ -1,0 +1,131 @@
+{
+    "version": 1,
+    "simulation": {
+        "devices": [
+            {
+                "name": "HOST-01",
+                "type": "pc"
+            },
+            {
+                "name": "HOST-02",
+                "type": "pc"
+            },
+            {
+                "name": "SWT-01",
+                "type": "switch"
+            },
+            {
+                "name": "RUT-01",
+                "type": "router"
+            },
+            {
+                "name": "SWT-02",
+                "type": "switch"
+            },
+            {
+                "name": "SERV-01",
+                "type": "server"
+            }
+        ],
+        "links": [
+            {
+                "endpoint_a": "HOST-01",
+                "endpoint_b": "SWT-01"
+            },
+            {
+                "endpoint_a": "HOST-02",
+                "endpoint_b": "SWT-01"
+            },
+            {
+                "endpoint_a": "SWT-01",
+                "endpoint_b": "RUT-01"
+            },
+            {
+                "endpoint_a": "RUT-01",
+                "endpoint_b": "SWT-02"
+            },
+            {
+                "endpoint_a": "SWT-02",
+                "endpoint_b": "SERV-01"
+            }
+        ],
+        "interfaces": {
+            "HOST-01": [
+                {
+                    "name": "eth0",
+                    "mac": "02:00:00:00:00:01",
+                    "ip": "10.0.0.2",
+                    "subnet": "10.0.0.0/24"
+                }
+            ],
+            "HOST-02": [
+                {
+                    "name": "eth0",
+                    "mac": "02:00:00:00:00:02",
+                    "ip": "10.0.0.3",
+                    "subnet": "10.0.0.0/24"
+                }
+            ],
+            "RUT-01": [
+                {
+                    "name": "eth0",
+                    "mac": "02:00:00:00:01:01",
+                    "ip": "10.0.0.1",
+                    "subnet": "10.0.0.0/24"
+                },
+                {
+                    "name": "eth1",
+                    "mac": "02:00:00:00:01:02",
+                    "ip": "10.0.1.1",
+                    "subnet": "10.0.1.0/24"
+                }
+            ],
+            "SERV-01": [
+                {
+                    "name": "eth0",
+                    "mac": "02:00:00:00:02:01",
+                    "ip": "10.0.1.2",
+                    "subnet": "10.0.1.0/24"
+                }
+            ]
+        },
+        "subnets": {
+            "10.0.0.0/24": {
+                "gateway": "10.0.0.1"
+            },
+            "10.0.1.0/24": {
+                "gateway": "10.0.1.1"
+            }
+        },
+        "routes": {
+            "RUT-01": []
+        },
+        "services": {}
+    },
+    "layout": {
+        "HOST-01": {
+            "x": 135,
+            "y": 435
+        },
+        "HOST-02": {
+            "x": 135,
+            "y": 135
+        },
+        "SWT-01": {
+            "x": 300,
+            "y": 285
+        },
+        "RUT-01": {
+            "x": 450,
+            "y": 200
+        },
+        "SWT-02": {
+            "x": 600,
+            "y": 285
+        },
+        "SERV-01": {
+            "x": 750,
+            "y": 435
+        }
+    }
+}

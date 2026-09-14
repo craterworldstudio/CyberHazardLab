@@ -948,8 +948,8 @@ document.addEventListener("DOMContentLoaded", () => {
             return null;
         }
 
-        const linkId = `LINK-${String(linkCounter).padStart(2, "0")}`;
-        linkCounter++;
+        const linkNum = getNextDeviceNumber("LINK-", links);
+        const linkId = `LINK-${String(linkNum).padStart(2, "0")}`;
 
         const link = new NetworkLink(linkId, sourceDevice, targetDevice);
         links.push(link);

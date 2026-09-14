@@ -136,7 +136,6 @@ class Router:
     def send_icmp_destination_unreachable( self, packet, in_interface, code=0 ):  
         icmp = ICMPPacket(
             type="DESTINATION_UNREACHABLE",
-                severity="HIGH",
             code=code,
             payload=packet
         )
@@ -161,6 +160,21 @@ class Router:
             }
         ))
 
+        return self.send_ip_packet(response)
+
+    def send_icmp_echo_reply(self, packet, in_interface):
+        icmp = ICMPPacket(
+            type="ECHO_REPLY",
+            code=0,
+            payload=packet.payload.payload
+        )
+
+        response = Packet(
+            source_ip=in_interface.ip,
+            destination_ip=packet.source_ip,
+            protocol="ICMP",
+            payload=icmp
+        )
         return self.send_ip_packet(response)
 
     def send_ip_packet(self, packet):
@@ -220,6 +234,16 @@ class Router:
     
         destination_ip = packet.destination_ip
         if destination_ip == in_interface.ip:
+            if packet.protocol == "ICMP" and getattr(packet.payload, "type", "") == "ECHO_REQUEST":
+                return self.send_icmp_echo_reply(packet, in_interface)
+            elif packet.protocol == "ICMP" and getattr(packet.payload, "type", "") == "ECHO_REPLY":
+                self.last_icmp_result = {
+                    "type": "ECHO_REPLY",
+                    "source": packet.source_ip,
+                    "destination": packet.destination_ip,
+                    "payload": packet.payload
+                }
+                return self.last_icmp_result
             return "ROUTER_DESTINATION"
         
         if packet.ttl <= 1:

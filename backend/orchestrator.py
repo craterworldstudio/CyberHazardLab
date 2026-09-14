@@ -773,8 +773,32 @@ class Simulation:
 
         if isinstance(source, str):
             source = self.get_host(source)
+            
+        if not hasattr(source, "interfaces") or not source.interfaces:
+            raise ValueError(f"Device {source.name} has no interfaces configured.")
 
-        interface = source.interfaces[0]
+        # Determine best interface based on routing/subnet
+        interface = None
+        if hasattr(source, "lookup_route"):
+            route = source.lookup_route(destination_ip)
+            if route:
+                interface = route["interface"]
+        
+        if not interface:
+            for intf in source.interfaces:
+                if intf.subnet and getattr(intf, 'network', None):
+                    import ipaddress
+                    try:
+                        if ipaddress.ip_address(destination_ip) in ipaddress.ip_network(intf.subnet):
+                            interface = intf
+                            break
+                    except:
+                        pass
+        
+        if not interface:
+            interface = source.interfaces[0]
+
+        #print("Ping Interface: ", interface)
         source.last_icmp_result = None
 
 

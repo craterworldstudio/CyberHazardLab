@@ -70,13 +70,15 @@ function createNCMWindow(deviceName, deviceType) {
             ${deviceType === 'SWITCH' 
                 ? `<button class="ncm-tab" data-tab="mac_table">MAC TABLE</button>`
                 : (deviceType === 'ROUTER'
-                    ? `<button class="ncm-tab" data-tab="routes">ROUTING TABLE</button>`
-                    : `<button class="ncm-tab" data-tab="services">SERVICES</button>`)
+                    ? `<button class="ncm-tab" data-tab="routes">ROUTING TABLE</button>
+                       <button class="ncm-tab" data-tab="terminal">TERMINAL</button>`
+                    : `<button class="ncm-tab" data-tab="services">SERVICES</button>
+                       <button class="ncm-tab" data-tab="terminal">TERMINAL</button>`)
             }
             <button class="ncm-tab" data-tab="interfaces">${deviceType === 'SWITCH' ? 'SWITCH PORTS' : 'INTERFACES'}</button>
         </div>
 
-        <div class="ncm-content" style="background: #0a0f18;">
+        <div class="ncm-content" style="background: #0a0f18; display: flex; flex-direction: column;">
             <div class="ncm-tab-content active" data-content="health">
                 <div class="ncm-config-placeholder" style="color: #5c6b73; text-align: center; margin-top: 40px;">
                     >_ AWAITING TELEMETRY...
@@ -100,9 +102,33 @@ function createNCMWindow(deviceName, deviceType) {
             <div class="ncm-tab-content" data-content="routes">
                 <div class="ncm-routing-table"></div>
             </div>
+            <div class="ncm-tab-content" data-content="terminal">
+                <div style="display: flex; flex-direction: column; height: 100%;">
+                    <div class="ncm-terminal-output" style="flex: 1; background: #06090e; color: #d5ebf2; font-family: monospace; font-size: 12px; padding: 10px; overflow-y: auto; border: 1px solid rgba(0, 229, 255, 0.15); margin-bottom: 10px;">
+                        <div style="color: #00e5ff; font-weight: bold; letter-spacing: 1px;">> Nox OS (Network Operations Execution)</div>
+                        <div style="color: #5c6b73; margin-bottom: 15px;">System version 1.0.0. Type 'help' for available commands.</div>
+                    </div>
+                    <div style="display: flex; align-items: center; border: 1px solid rgba(0, 229, 255, 0.3); background: #06090e; padding: 8px;">
+                        <span style="color: #00e5ff; font-family: monospace; font-weight: bold; margin-right: 8px;">root@${deviceName.toLowerCase()}:~$</span>
+                        <input type="text" class="ncm-terminal-input" placeholder="_" style="flex: 1; background: transparent; border: none; color: #d5ebf2; font-family: monospace; font-size: 12px; outline: none;" onkeydown="handleTerminalInput(event, '${deviceName}')">
+                    </div>
+                </div>
+            </div>
             ` : `
             <div class="ncm-tab-content" data-content="services">
                 <div class="ncm-services-list"></div>
+            </div>
+            <div class="ncm-tab-content" data-content="terminal">
+                <div style="display: flex; flex-direction: column; height: 100%;">
+                    <div class="ncm-terminal-output" style="flex: 1; background: #06090e; color: #d5ebf2; font-family: monospace; font-size: 12px; padding: 10px; overflow-y: auto; border: 1px solid rgba(0, 229, 255, 0.15); margin-bottom: 10px;">
+                        <div style="color: #00e5ff; font-weight: bold; letter-spacing: 1px;">> Nox OS (Network Operations Execution)</div>
+                        <div style="color: #5c6b73; margin-bottom: 15px;">System version 1.0.0. Type 'help' for available commands.</div>
+                    </div>
+                    <div style="display: flex; align-items: center; border: 1px solid rgba(0, 229, 255, 0.3); background: #06090e; padding: 8px;">
+                        <span style="color: #00e5ff; font-family: monospace; font-weight: bold; margin-right: 8px;">root@${deviceName.toLowerCase()}:~$</span>
+                        <input type="text" class="ncm-terminal-input" placeholder="_" style="flex: 1; background: transparent; border: none; color: #d5ebf2; font-family: monospace; font-size: 12px; outline: none;" onkeydown="handleTerminalInput(event, '${deviceName}')">
+                    </div>
+                </div>
             </div>
             `)}
 
@@ -229,9 +255,9 @@ async function loadNCMDevice(deviceName, window) {
             "GET",
             `/api/ntm/devices/${encodeURIComponent(deviceName)}`
         );
-        if (deviceData.type === 'SWITCH') {
+        if (deviceData.type.toUpperCase() === 'SWITCH') {
             renderNCMMacTable(window, deviceName, deviceData.mac_table || {});
-        } else if (deviceData.type === 'ROUTER') {
+        } else if (deviceData.type.toUpperCase() === 'ROUTER') {
             renderNCMRoutingTable(window, deviceName, deviceData.routes || []);
         }
 
@@ -453,6 +479,47 @@ function renderNCMRoutingTable(window, deviceName, routes) {
     container.innerHTML = html;
 }
 
+async function handleTerminalInput(event, deviceName) {
+    if (event.key === 'Enter') {
+        const inputField = event.target;
+        const commandStr = inputField.value.trim();
+        if (!commandStr) return;
+        
+        const win = ncmWindows.get(deviceName);
+        if (!win) return;
+        
+        const outputDiv = win.querySelector('.ncm-terminal-output');
+        
+        // Echo command
+        outputDiv.innerHTML += `<div style="color: #00e5ff; margin-top: 5px;">root@${deviceName.toLowerCase()}:~$ ${commandStr}</div>`;
+        inputField.value = '';
+        inputField.disabled = true;
+        
+        outputDiv.scrollTop = outputDiv.scrollHeight;
+        
+        try {
+            const response = await apiRequest("POST", `/api/ncm/devices/${encodeURIComponent(deviceName)}/terminal`, {
+                command: commandStr
+            });
+            
+            if (response.output) {
+                // Render multiline response
+                const lines = response.output.split('\n');
+                lines.forEach(line => {
+                    outputDiv.innerHTML += `<div style="color: #d5ebf2;">${line}</div>`;
+                });
+            }
+        } catch (error) {
+            outputDiv.innerHTML += `<div style="color: #ff3333;">ERROR: ${error.message || "Failed to execute command"}</div>`;
+        }
+        
+        outputDiv.innerHTML += `<br>`;
+        outputDiv.scrollTop = outputDiv.scrollHeight;
+        inputField.disabled = false;
+        inputField.focus();
+    }
+}
+
 async function updateNCMInterface(deviceName, interfaceName, win) {
     const ipInput = document.getElementById(`cfg-intf-ip-${deviceName}`);
     const subInput = document.getElementById(`cfg-intf-sub-${deviceName}`);
@@ -518,6 +585,19 @@ async function refreshNCMHealth(deviceName, window) {
     }
 }
 
+async function refreshNCMTables(deviceName, window) {
+    try {
+        const deviceData = await apiRequest("GET", `/api/ntm/devices/${encodeURIComponent(deviceName)}`);
+        if (deviceData.type.toUpperCase() === 'SWITCH' && deviceData.mac_table) {
+            renderNCMMacTable(window, deviceName, deviceData.mac_table);
+        } else if (deviceData.type.toUpperCase() === 'ROUTER' && deviceData.routes) {
+            renderNCMRoutingTable(window, deviceName, deviceData.routes);
+        }
+    } catch (e) {
+        // Silent catch for background polling
+    }
+}
+
 // Global polling to keep Health/Uptime/Status live
 let pollTick = 0;
 setInterval(() => {
@@ -527,6 +607,9 @@ setInterval(() => {
             if (!win.hidden) {
                 if (deviceName !== "GLOBAL_NETWORK") {
                     refreshNCMHealth(deviceName, win);
+                    if (pollTick % 2 === 0) { // every 2 seconds for tables
+                        refreshNCMTables(deviceName, win);
+                    }
                 } else if (pollTick % 2 === 0) {
                     refreshGlobalAlerts(win);
                 }

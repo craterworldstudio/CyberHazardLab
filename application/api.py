@@ -226,6 +226,8 @@ class API:
         # GET /api/ntm/devices/HOST-01
         if ( method == "GET" and len(resource) == 2 and resource[0] == "devices"):
             device = self.ntm.get_device( resource[1] )
+            if not device:
+                return {"error": "Device not found"}, 404
 
             return self._serialize_device(device)
 
@@ -428,6 +430,102 @@ class API:
             return self._serialize_interface(
                 interface
             )
+
+        # POST /api/ncm/devices/<device>/terminal
+        if method == "POST" and len(resource) == 3 and resource[0] == "devices" and resource[2] == "terminal":
+            command = body.get("command", "")
+            
+            # Simple terminal logic placeholder
+            output = f"Nox OS > Command '{command}' not recognized."
+            if command == "help":
+                output = "NOX OS TERMINAL COMMANDS:\n"
+                output += "  help       - Show this help message\n"
+                output += "  arp        - Display the local ARP cache\n"
+                output += "  route      - Display the routing table\n"
+                output += "  ping <ip>  - Send ICMP ECHO_REQUEST packets to network hosts"
+            elif command == "arp":
+                sim = self.ntm.simulation
+                device = sim.hosts.get(resource[1]) or sim.routers.get(resource[1]) or sim.switches.get(resource[1])
+                output = "ARP Cache:\n"
+                has_arp = False
+                for intf in getattr(device, "interfaces", []):
+                    if hasattr(intf, "arp") and intf.arp:
+                        has_arp = True
+                        for ip, mac in intf.arp.cache.items():
+                            output += f"({intf.name}) {ip} -> {mac}\n"
+                
+                if not has_arp:
+                    output = "ARP not supported on this device."
+                elif output == "ARP Cache:\n":
+                    output += "(empty)\n"
+                    
+            elif command.startswith("route"):
+                sim = self.ntm.simulation
+                device = sim.hosts.get(resource[1]) or sim.routers.get(resource[1]) or sim.switches.get(resource[1])
+                if not hasattr(device, "routes"):
+                    output = "Routing not supported on this device."
+                else:
+                    parts = command.split()
+                    if len(parts) == 1:
+                        output = "Routing Table:\n"
+                        for r in device.routes:
+                            intf_name = getattr(r['interface'], 'name', 'None')
+                            next_hop = r.get('next_hop') or 'DIRECT'
+                            output += f"{r['destination']} via {next_hop} (dev {intf_name})\n"
+                        if not device.routes:
+                            output += "(empty)\n"
+                    elif parts[1] == "add" and len(parts) == 4 and parts[3] == "via":
+                        output = "Usage: route add <dest_subnet> via <next_hop_ip>"
+                    elif parts[1] == "add" and len(parts) == 5 and parts[3] == "via":
+                        dest_subnet = parts[2]
+                        next_hop = parts[4]
+                        
+                        # Find which interface is on the same subnet as next_hop
+                        out_intf = None
+                        for intf in device.interfaces:
+                            if intf.subnet and self.ncm.get_subnet(next_hop) == self.ncm.get_subnet(intf.ip):
+                                out_intf = intf
+                                break
+                                
+                        if out_intf:
+                            device.add_route(dest_subnet, out_intf, next_hop=next_hop)
+                            self.state_manager.save()
+                            output = f"Route added: {dest_subnet} via {next_hop} (dev {out_intf.name})"
+                        else:
+                            output = f"Network unreachable: Cannot reach next hop {next_hop}"
+                    elif parts[1] == "del" and len(parts) == 3:
+                        dest_subnet = parts[2]
+                        device.routes = [r for r in device.routes if str(r['destination']) != dest_subnet]
+                        self.state_manager.save()
+                        output = f"Route deleted: {dest_subnet}"
+                    else:
+                        output = "Usage:\n  route\n  route add <dest_subnet> via <next_hop_ip>\n  route del <dest_subnet>"
+
+            elif command.startswith("ping"):
+                parts = command.split(" ", 1)
+                if len(parts) < 2 or not parts[1].strip():
+                    output = "Usage: ping <target_ip>"
+                else:
+                    target_ip = parts[1].strip()
+                    sim = self.ntm.simulation
+                    device = sim.hosts.get(resource[1]) or sim.routers.get(resource[1])
+                    if not device:
+                        output = "Cannot run ping from this device."
+                    else:
+                        try:
+                            result = sim.ping(device, target_ip)
+                            source_ip = device.interfaces[0].ip if hasattr(device, 'interfaces') and device.interfaces else "Unknown"
+                            if result:
+                                ttl = getattr(result, 'ttl', getattr(result, 'get', lambda x, y: y)('ttl', 64))
+                                output = f"Reply from {target_ip}: bytes=32 TTL={ttl}"
+                            else:
+                                output = f"Request timed out. Destination host unreachable."
+                        except Exception as e:
+                            import traceback
+                            output = f"Ping failed (Source: {source_ip if 'source_ip' in locals() else 'Unknown'}): {str(e)}\n{traceback.format_exc()}"
+            # We will expand this terminal with Ping/Payload generation in the next steps!
+            
+            return {"output": output}
 
         # POST /api/ncm/devices/<device>/restart
         if method == "POST" and len(resource) == 3 and resource[0] == "devices" and resource[2] == "restart":

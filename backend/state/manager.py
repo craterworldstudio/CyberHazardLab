@@ -8,7 +8,7 @@ class StateManager:
         self.simulation = simulation
         self.path = Path(path)
 
-        self.reset()
+        #self.reset()
 
     # ========================================================
     # FILE MANAGEMENT
@@ -17,12 +17,14 @@ class StateManager:
     def exists(self):
         return self.path.exists()
 
-    def save(self, layout=None):
+    def save(self, file_path=None, layout=None):
+        if file_path is not None:
+            self.path = Path(file_path)
+
         if layout is None:
-            # Try to preserve existing layout
-            existing = self.load()
-            if existing and "layout" in existing:
-                layout = existing["layout"]
+            current = self.load()
+            if current and "layout" in current:
+                layout = current["layout"]
             else:
                 layout = {}
 

@@ -54,8 +54,8 @@ async function loadLinks() {
             continue;
         }
 
-        const linkId =
-            `LINK-${String(CHL.links.length + 1).padStart(2, "0")}`;
+        const linkNum = getNextDeviceNumber("LINK-", CHL.links);
+        const linkId = `LINK-${String(linkNum).padStart(2, "0")}`;
 
         const link = new CHL.NetworkLink( linkId, sourceDevice, targetDevice
         );
