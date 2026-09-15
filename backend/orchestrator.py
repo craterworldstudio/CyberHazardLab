@@ -23,6 +23,7 @@ class Simulation:
         self.name = name
 
         self.network = Network(name)
+        self.network.orchestrator = self
 
         self.dhcp = DHCP(self.network)
 

@@ -14,6 +14,7 @@ class Switch:
         self.mac_table ={}
         self.network = network
         self.event_callback = self.network.add_event
+        self.auto_mac_learning = True
 
     def add_event(self, event):
         if self.event_callback:
@@ -49,9 +50,10 @@ class Switch:
     def receive(self, frame: EthernetFrame, in_port):
         #print("swr")
         
-        self.learn(
-            frame.source_mac, in_port
-        )
+        if getattr(getattr(getattr(self, "network", None), "orchestrator", None), "settings", {}).get("auto_mac_learning", True):
+            self.learn(
+                frame.source_mac, in_port
+            )
 
         self.add_event(Event(
             type="FRAME_RECEIVED",

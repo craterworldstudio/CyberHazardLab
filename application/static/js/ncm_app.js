@@ -273,6 +273,17 @@ async function loadNCMDevice(deviceName, window) {
     }
 }
     
+async function toggleDeviceSetting(deviceName, setting, value) {
+    try {
+        const payload = {};
+        payload[setting] = value;
+        await apiRequest("POST", `/api/ncm/devices/${encodeURIComponent(deviceName)}/config`, payload);
+        console.log(`[CHL:NCM] Updated ${setting} to ${value} for ${deviceName}`);
+    } catch (error) {
+        console.error("[CHL:NCM] Failed to update config", error);
+    }
+}
+
 async function restartNCMDevice(deviceName, win) {
     try {
         await apiRequest("POST", `/api/ncm/devices/${encodeURIComponent(deviceName)}/restart`);
@@ -502,11 +513,20 @@ async function handleTerminalInput(event, deviceName) {
                 command: commandStr
             });
             
+            const escapeHtml = (unsafe) => {
+                return (unsafe || "").toString()
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+            };
+
             if (response.output) {
                 // Render multiline response
                 const lines = response.output.split('\n');
                 lines.forEach(line => {
-                    outputDiv.innerHTML += `<div style="color: #d5ebf2;">${line}</div>`;
+                    outputDiv.innerHTML += `<div style="color: #d5ebf2;">${escapeHtml(line)}</div>`;
                 });
             }
         } catch (error) {
@@ -926,6 +946,28 @@ function renderGlobalSettings(win, settings) {
                     <strong style="color: #8a9ba8;">[ MANUAL ]</strong> Must configure a Server node with 'DNS' service on port 53.
                 </div>
                 
+                <!-- ROUTING CONFIG -->
+                <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 8px; font-weight: bold;">// ROUTING MODE</div>
+                <select id="cfg-routing-mode" style="width: 100%; margin-bottom: 8px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s; cursor: pointer;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+                    <option value="auto" ${settings.auto_routes !== false ? 'selected' : ''}>AUTO (CONNECTED SUBNETS)</option>
+                    <option value="manual" ${settings.auto_routes === false ? 'selected' : ''}>MANUAL (STATIC ROUTING)</option>
+                </select>
+                <div style="font-size: 10px; color: #5c6b73; margin-bottom: 20px; line-height: 1.4; border-left: 2px solid rgba(0, 229, 255, 0.2); padding-left: 8px;">
+                    <strong style="color: #8a9ba8;">[ AUTO ]</strong> Routers automatically generate routes for attached subnets.<br>
+                    <strong style="color: #8a9ba8;">[ MANUAL ]</strong> Must manually add static routes via terminal.
+                </div>
+
+                <!-- SWITCHING CONFIG -->
+                <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 8px; font-weight: bold;">// SWITCHING MODE</div>
+                <select id="cfg-switching-mode" style="width: 100%; margin-bottom: 8px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s; cursor: pointer;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+                    <option value="auto" ${settings.auto_mac_learning !== false ? 'selected' : ''}>AUTO (TRANSPARENT BRIDGING)</option>
+                    <option value="manual" ${settings.auto_mac_learning === false ? 'selected' : ''}>MANUAL (STATIC MAC ONLY)</option>
+                </select>
+                <div style="font-size: 10px; color: #5c6b73; margin-bottom: 20px; line-height: 1.4; border-left: 2px solid rgba(0, 229, 255, 0.2); padding-left: 8px;">
+                    <strong style="color: #8a9ba8;">[ AUTO ]</strong> Switches automatically learn MAC addresses.<br>
+                    <strong style="color: #8a9ba8;">[ MANUAL ]</strong> Unlearned packets are flooded.
+                </div>
+                
                 <!-- TTL CONFIG -->
                 <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 8px; font-weight: bold;">// PACKET LIFESPAN (TTL / MAX HOPS)</div>
                 <input type="number" id="cfg-ttl" value="${settings.default_ttl || 64}" style="width: 100%; margin-bottom: 8px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
@@ -945,6 +987,8 @@ async function saveGlobalSettings(win) {
         network_name: document.getElementById("cfg-net-name").value,
         dhcp_mode: document.getElementById("cfg-dhcp-mode").value,
         dns_mode: document.getElementById("cfg-dns-mode").value,
+        auto_routes: document.getElementById("cfg-routing-mode").value === "auto",
+        auto_mac_learning: document.getElementById("cfg-switching-mode").value === "auto",
         default_ttl: parseInt(document.getElementById("cfg-ttl").value) || 64
     };
     try {

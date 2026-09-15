@@ -87,6 +87,8 @@ class StateManager:
             "interfaces": self.serialize_interfaces(),
             "subnets": self.serialize_subnets(),
             "routes": self.serialize_routes(),
+            "mac_tables": self.serialize_mac_tables(),
+            "arp_caches": self.serialize_arp_caches(),
             "services": self.serialize_services()
         }
 
@@ -188,6 +190,24 @@ class StateManager:
                 )
 
         return routes
+
+    def serialize_mac_tables(self):
+        macs = {}
+        for switch in self.simulation.switches.values():
+            if hasattr(switch, "mac_table") and switch.mac_table:
+                macs[switch.name] = dict(switch.mac_table)
+        return macs
+
+    def serialize_arp_caches(self):
+        arps = {}
+        for device in self.all_devices():
+            if not hasattr(device, "interfaces"): continue
+            for intf in device.interfaces:
+                if hasattr(intf, "arp") and intf.arp and intf.arp.cache:
+                    if device.name not in arps:
+                        arps[device.name] = {}
+                    arps[device.name][intf.name] = dict(intf.arp.cache)
+        return arps
 
     def serialize_services(self):
         services = {}

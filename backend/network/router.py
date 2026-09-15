@@ -15,6 +15,7 @@ class Router:
         self.network = network
         self.interfaces = []
         self.routes = []
+        self.auto_routes = True
 
 
 
@@ -43,27 +44,36 @@ class Router:
         interface.owner = self
         self.interfaces.append(interface)
 
-        if interface.subnet is not None:
-            self.add_route(
-                destination=interface.subnet,
-                interface=interface
+        if interface.subnet is not None and getattr(getattr(getattr(self, "network", None), "orchestrator", None), "settings", {}).get("auto_routes", True):
+            try:
+                self.add_route(
+                    destination=interface.subnet,
+                    interface=interface
                 )
+            except:
+                pass
 
     def update_intf(self, interface: NetworkInterface, ip=None, subnet=None):
         if ip is not None:
             interface.ip = ip
         if subnet is not None:
             if interface.subnet is not None:
-                old_network = ipaddress.ip_network(interface.subnet)
-                self.routes = [r for r in self.routes if not (r["interface"] == interface and r["destination"] == old_network)]
+                try:
+                    old_network = ipaddress.ip_network(interface.subnet)
+                    self.routes = [r for r in self.routes if not (r["interface"] == interface and r["destination"] == old_network)]
+                except:
+                    pass
 
             interface.subnet = subnet
 
-        if interface.subnet is not None:
-            self.add_route(
-                destination=subnet,
-                interface=interface
+        if interface.subnet is not None and getattr(getattr(getattr(self, "network", None), "orchestrator", None), "settings", {}).get("auto_routes", True):
+            try:
+                self.add_route(
+                    destination=interface.subnet,
+                    interface=interface
                 )
+            except:
+                pass
                 
     
 
