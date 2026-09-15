@@ -175,20 +175,17 @@ class StateManager:
 
     def serialize_routes(self):
         routes = {}
-
         for router in self.simulation.routers.values():
-
-            router_routes = getattr(
-                router,
-                "routes",
-                None
-            )
-
+            router_routes = getattr(router, "routes", None)
             if router_routes is not None:
-                routes[router.name] = self.serialize_value(
-                    router_routes
-                )
-
+                serialized = []
+                for r in router_routes:
+                    serialized.append({
+                        "destination": str(r["destination"]),
+                        "interface": getattr(r["interface"], "name", None),
+                        "next_hop": r["next_hop"]
+                    })
+                routes[router.name] = serialized
         return routes
 
     def serialize_mac_tables(self):

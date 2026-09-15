@@ -11,20 +11,24 @@
                 "type": "pc"
             },
             {
-                "name": "SWT-01",
-                "type": "switch"
+                "name": "SERV-01",
+                "type": "server"
             },
             {
-                "name": "RUT-01",
-                "type": "router"
+                "name": "HOST-03",
+                "type": "pc"
+            },
+            {
+                "name": "SWT-01",
+                "type": "switch"
             },
             {
                 "name": "SWT-02",
                 "type": "switch"
             },
             {
-                "name": "SERV-01",
-                "type": "server"
+                "name": "RUT-01",
+                "type": "router"
             }
         ],
         "links": [
@@ -37,23 +41,27 @@
                 "endpoint_b": "SWT-01"
             },
             {
-                "endpoint_a": "SWT-01",
-                "endpoint_b": "RUT-01"
+                "endpoint_a": "RUT-01",
+                "endpoint_b": "SWT-01"
             },
             {
                 "endpoint_a": "RUT-01",
                 "endpoint_b": "SWT-02"
             },
             {
-                "endpoint_a": "SWT-02",
-                "endpoint_b": "SERV-01"
+                "endpoint_a": "SERV-01",
+                "endpoint_b": "SWT-02"
+            },
+            {
+                "endpoint_a": "HOST-03",
+                "endpoint_b": "SWT-02"
             }
         ],
         "interfaces": {
             "HOST-01": [
                 {
                     "name": "eth0",
-                    "mac": "02:00:00:00:00:01",
+                    "mac": "02:1c:08:82:fe:8b",
                     "ip": "10.0.0.2",
                     "subnet": "10.0.0.0/24"
                 }
@@ -61,30 +69,38 @@
             "HOST-02": [
                 {
                     "name": "eth0",
-                    "mac": "02:00:00:00:00:02",
+                    "mac": "02:6a:e7:83:93:50",
                     "ip": "10.0.0.3",
                     "subnet": "10.0.0.0/24"
-                }
-            ],
-            "RUT-01": [
-                {
-                    "name": "eth0",
-                    "mac": "02:00:00:00:01:01",
-                    "ip": "10.0.0.1",
-                    "subnet": "10.0.0.0/24"
-                },
-                {
-                    "name": "eth1",
-                    "mac": "02:00:00:00:01:02",
-                    "ip": "10.0.1.1",
-                    "subnet": "10.0.1.0/24"
                 }
             ],
             "SERV-01": [
                 {
                     "name": "eth0",
-                    "mac": "02:00:00:00:02:01",
+                    "mac": "02:11:e6:36:aa:f7",
                     "ip": "10.0.1.2",
+                    "subnet": "10.0.1.0/24"
+                }
+            ],
+            "HOST-03": [
+                {
+                    "name": "eth0",
+                    "mac": "02:e3:e1:30:db:72",
+                    "ip": "10.0.1.3",
+                    "subnet": "10.0.1.0/24"
+                }
+            ],
+            "RUT-01": [
+                {
+                    "name": "eth0",
+                    "mac": "02:ea:62:ca:ff:75",
+                    "ip": "10.0.0.1",
+                    "subnet": "10.0.0.0/24"
+                },
+                {
+                    "name": "eth1",
+                    "mac": "02:e0:73:9b:48:86",
+                    "ip": "10.0.1.1",
                     "subnet": "10.0.1.0/24"
                 }
             ]
@@ -98,7 +114,31 @@
             }
         },
         "routes": {
-            "RUT-01": []
+            "RUT-01": [
+                {
+                    "destination": "10.0.0.0/24",
+                    "interface": "eth0",
+                    "next_hop": null
+                },
+                {
+                    "destination": "10.0.1.0/24",
+                    "interface": "eth1",
+                    "next_hop": null
+                }
+            ]
+        },
+        "mac_tables": {
+            "SWT-01": {
+                "02:61:41:ae:20:5e": 1,
+                "02:1f:42:17:95:51": 3
+            }
+        },
+        "arp_caches": {
+            "HOST-01": {
+                "eth0": {
+                    "10.0.0.1": "02:1f:42:17:95:51"
+                }
+            }
         },
         "services": {}
     },
@@ -108,24 +148,28 @@
             "y": 435
         },
         "HOST-02": {
-            "x": 135,
-            "y": 135
+            "x": 134,
+            "y": 134
+        },
+        "SERV-01": {
+            "x": 750,
+            "y": 435
+        },
+        "HOST-03": {
+            "x": 582,
+            "y": 495
         },
         "SWT-01": {
             "x": 300,
             "y": 285
         },
-        "RUT-01": {
-            "x": 450,
-            "y": 200
-        },
         "SWT-02": {
             "x": 600,
             "y": 285
         },
-        "SERV-01": {
-            "x": 750,
-            "y": 435
+        "RUT-01": {
+            "x": 450,
+            "y": 200
         }
     }
 }

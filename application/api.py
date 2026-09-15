@@ -177,6 +177,8 @@ class API:
             # Routes
             import ipaddress
             for router_name, routes in sim_data.get("routes", {}).items():
+                if not routes:
+                    continue
                 router = self.ntm.get_device(router_name)
                 if router:
                     router.routes = []
@@ -190,7 +192,16 @@ class API:
                                     if i.name == intf_name:
                                         intf_obj = i
                                         break
-                            router.add_route(r["destination"], intf_obj, r.get("next_hop"))
+                            dest_val = r["destination"]
+                            if isinstance(dest_val, dict):
+                                dest_str = f"{dest_val.get('network_address', '0.0.0.0')}/{ipaddress.IPv4Address(dest_val.get('netmask', '255.255.255.0'))}"
+                                # Quick hack: just use network_address/netmask, though calculating prefixlen from netmask is hard without ipaddress.IPv4Network. 
+                                # Better: 
+                                dest_str = f"{dest_val.get('network_address', '0.0.0.0')}/{dest_val.get('netmask', '255.255.255.0')}"
+                            else:
+                                dest_str = str(dest_val)
+                                
+                            router.add_route(dest_str, intf_obj, r.get("next_hop"))
                         except Exception:
                             pass
                             
