@@ -212,22 +212,45 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    async function syncDeviceStatuses() {
+    // Global Master Poll Object
+    window.SimulationState = {
+        status: "stopped",
+        devices: [],
+        events: []
+    };
+    
+    let lastEventCount = 0;
+
+    async function pollSimulationState() {
         try {
-            const backendDevices = await apiRequest("GET", "/api/ntm/devices");
-            for (const backendDevice of backendDevices) {
+            const state = await apiRequest("GET", "/api/simulation/poll");
+            window.SimulationState = state;
+            
+            // 1. Sync Canvas Devices
+            for (const backendDevice of state.devices) {
                 const localDevice = devices.find(d => d.id === backendDevice.name);
                 if (localDevice && backendDevice.status !== localDevice.status) {
                     localDevice.updateStatus(backendDevice.status);
                 }
             }
+            
+            // 2. Dispatch event to let WEL know about new logs
+            if (state.events.length > 0) {
+                const newEventsCount = state.events.length;
+                if (newEventsCount !== lastEventCount) {
+                    lastEventCount = newEventsCount;
+                    const event = new CustomEvent("simulation-events-updated", { detail: state.events });
+                    window.dispatchEvent(event);
+                }
+            }
+            
         } catch (e) {
             // silent catch for background polling
         }
     }
 
-    // Poll backend every 2 seconds to keep canvas icons in sync with simulation state (like errors)
-    setInterval(syncDeviceStatuses, 2000);
+    // Master Poll every 1000ms
+    setInterval(pollSimulationState, 1000);
 
     async function handleRibbonAction(action) {
         if (action === "network_config") {

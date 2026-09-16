@@ -352,8 +352,11 @@ function renderNCMInterfaces(window, deviceName, interfaces) {
     } else {
         interfaces.forEach(intf => {
 
-            const statusColor = intf.connected ? '#00e5ff' : '#5c6b73';
-            const statusGlow = intf.connected ? `text-shadow: 0 0 5px ${statusColor};` : '';
+            const isLinkUp = intf.connected && intf.status === 'up';
+            const isAdminDown = intf.status === 'down';
+            let statusText = isAdminDown ? "ADMIN_DOWN" : (intf.connected ? "LINK_UP" : "LINK_DOWN");
+            let statusColor = isAdminDown ? '#ff3333' : (intf.connected ? '#00e5ff' : '#5c6b73');
+            const statusGlow = isLinkUp ? `text-shadow: 0 0 5px ${statusColor};` : '';
             
             if (deviceName.startsWith('SWT')) {
                 html += `
@@ -361,7 +364,7 @@ function renderNCMInterfaces(window, deviceName, interfaces) {
                         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                             <div>
                                 <strong style="color: #fff; font-size: 12px;">${intf.name || "UNKNOWN"}</strong>
-                                <span style="font-size: 9px; color: ${statusColor}; margin-left: 10px; font-weight: bold; letter-spacing: 1px; ${statusGlow}">[ ${intf.connected ? "LINK_UP" : "LINK_DOWN"} ]</span>
+                                <span style="font-size: 9px; color: ${statusColor}; margin-left: 10px; font-weight: bold; letter-spacing: 1px; ${statusGlow}">[ ${statusText} ]</span>
                                 <div style="font-size: 11px; margin-top: 8px; color: #8a9ba8; display: grid; grid-template-columns: 50px 1fr; gap: 4px;">
                                     <div style="color: #5c6b73;">PORT</div><div style="color: #d5ebf2;">${intf.port_number || "—"}</div>
                                     <div style="color: #5c6b73;">MODE</div><div style="color: #00e5ff;">${intf.mode || "ACCESS"}</div>
@@ -380,7 +383,7 @@ function renderNCMInterfaces(window, deviceName, interfaces) {
                         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                             <div>
                                 <strong style="color: #fff; font-size: 12px;">${intf.name || "UNKNOWN"}</strong>
-                                <span style="font-size: 9px; color: ${statusColor}; margin-left: 10px; font-weight: bold; letter-spacing: 1px; ${statusGlow}">[ ${intf.connected ? "LINK_UP" : "LINK_DOWN"} ]</span>
+                                <span style="font-size: 9px; color: ${statusColor}; margin-left: 10px; font-weight: bold; letter-spacing: 1px; ${statusGlow}">[ ${statusText} ]</span>
                                 <div style="font-size: 11px; margin-top: 8px; color: #8a9ba8; display: grid; grid-template-columns: 50px 1fr; gap: 4px;">
                                     <div style="color: #5c6b73;">MAC</div><div style="color: #d5ebf2;">${intf.mac || "—"}</div>
                                     <div style="color: #5c6b73;">IP</div><div style="color: #00e5ff;">${intf.ip || "—"}</div>
@@ -490,11 +493,44 @@ function renderNCMRoutingTable(window, deviceName, routes) {
     container.innerHTML = html;
 }
 
+const terminalHistory = [];
+let terminalHistoryIndex = -1;
+
 async function handleTerminalInput(event, deviceName) {
+    const inputField = event.target;
+
+    if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (terminalHistory.length > 0) {
+            if (terminalHistoryIndex < terminalHistory.length - 1) {
+                terminalHistoryIndex++;
+            }
+            inputField.value = terminalHistory[terminalHistory.length - 1 - terminalHistoryIndex];
+        }
+        return;
+    }
+    
+    if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        if (terminalHistoryIndex > 0) {
+            terminalHistoryIndex--;
+            inputField.value = terminalHistory[terminalHistory.length - 1 - terminalHistoryIndex];
+        } else if (terminalHistoryIndex === 0) {
+            terminalHistoryIndex = -1;
+            inputField.value = "";
+        }
+        return;
+    }
+
     if (event.key === 'Enter') {
-        const inputField = event.target;
         const commandStr = inputField.value.trim();
         if (!commandStr) return;
+        
+        // Save to history
+        if (terminalHistory[terminalHistory.length - 1] !== commandStr) {
+            terminalHistory.push(commandStr);
+        }
+        terminalHistoryIndex = -1;
         
         const win = ncmWindows.get(deviceName);
         if (!win) return;
@@ -523,11 +559,32 @@ async function handleTerminalInput(event, deviceName) {
             };
 
             if (response.output) {
-                // Render multiline response
+                // Render multiline response with artificial latency
                 const lines = response.output.split('\n');
-                lines.forEach(line => {
-                    outputDiv.innerHTML += `<div style="color: #d5ebf2;">${escapeHtml(line)}</div>`;
-                });
+                
+                for (let line of lines) {
+                    let delay = 0;
+                    const delayMatch = line.match(/\[DELAY:(\d+)\]/);
+                    if (delayMatch) {
+                        delay = parseInt(delayMatch[1], 10);
+                        line = line.replace(/\[DELAY:\d+\]/, '');
+                    } else {
+                        if (line.includes("Request timed out") || line.includes("Destination Host Unreachable")) {
+                            delay = 2000;
+                        } else if (line.includes(" ms ") || line.includes("icmp_seq=")) {
+                            delay = 600;
+                        } else if (line.includes("Tracing route to")) {
+                            delay = 300;
+                        }
+                    }
+                    
+                    if (delay > 0) {
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    }
+                    
+                    outputDiv.innerHTML += `<div style="color: #d5ebf2; white-space: pre;">${escapeHtml(line)}</div>`;
+                    outputDiv.scrollTop = outputDiv.scrollHeight;
+                }
             }
         } catch (error) {
             outputDiv.innerHTML += `<div style="color: #ff3333;">ERROR: ${error.message || "Failed to execute command"}</div>`;
@@ -618,20 +675,43 @@ async function refreshNCMTables(deviceName, window) {
     }
 }
 
-// Global polling to keep Health/Uptime/Status live
-let pollTick = 0;
-setInterval(() => {
-    pollTick++;
+// Global polling is now handled by lab_app.js (window.SimulationState)
+window.addEventListener("simulation-events-updated", (e) => {
     if (typeof ncmWindows !== 'undefined') {
         ncmWindows.forEach((win, deviceName) => {
-            if (!win.hidden) {
-                if (deviceName !== "GLOBAL_NETWORK") {
-                    refreshNCMHealth(deviceName, win);
-                    if (pollTick % 2 === 0) { // every 2 seconds for tables
-                        refreshNCMTables(deviceName, win);
+            if (!win.hidden && deviceName === "GLOBAL_NETWORK") {
+                refreshGlobalAlerts(win);
+            }
+        });
+    }
+});
+
+// We can also sync NCM tables using the global state instead of fetching individually
+setInterval(() => {
+    if (typeof ncmWindows !== 'undefined' && window.SimulationState && window.SimulationState.devices) {
+        ncmWindows.forEach((win, deviceName) => {
+            if (!win.hidden && deviceName !== "GLOBAL_NETWORK") {
+                const deviceData = window.SimulationState.devices.find(d => d.name === deviceName);
+                if (deviceData) {
+                    if (deviceData.type.toUpperCase() === 'SWITCH' && deviceData.mac_table) {
+                        renderNCMMacTable(win, deviceName, deviceData.mac_table);
+                    } else if (deviceData.type.toUpperCase() === 'ROUTER' && deviceData.routes) {
+                        renderNCMRoutingTable(win, deviceName, deviceData.routes);
                     }
-                } else if (pollTick % 2 === 0) {
-                    refreshGlobalAlerts(win);
+                    
+                    // Update Interfaces if form is not open (to prevent wiping user input)
+                    const form = win.querySelector(`#add-intf-form-${deviceName}`);
+                    if (!form || (form.style.display === 'none' && !form.dataset.editing)) {
+                        renderNCMInterfaces(win, deviceName, deviceData.interfaces || []);
+                    }
+                    
+                    // Update Health
+                    renderNCMHealth(win, {
+                        status: deviceData.status,
+                        uptime: "00:00:00", // We can add real uptime later
+                        cpu: Math.floor(Math.random() * 10) + 1,
+                        memory: Math.floor(Math.random() * 15) + 10
+                    });
                 }
             }
         });

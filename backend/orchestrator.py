@@ -6,6 +6,7 @@ from backend.core.mac import generate_mac
 from backend.core.service import Service
 from backend.network.network import Network
 from backend.network.dhcp import DHCP
+from backend.core.event import Event
 from backend.network.packet import Packet
 from backend.network.switch import Switch
 from backend.network.router import Router
@@ -113,6 +114,43 @@ class Simulation:
                 switch.status = "ONLINE" if self.is_running else "OFFLINE"
             if old_status != switch.status:
                 updated.append(switch.name)
+                
+        # Ping Sweep
+        if self.is_running:
+            
+            self.network.events.append(Event(
+                type="VALIDATION_START",
+                source="SYSTEM",
+                destination="ALL_HOSTS",
+                protocol="ICMP",
+                severity="INFO",
+                metadata={"message": "Starting automated PING SWEEP validation across all active hosts..."}
+            ))
+            
+            active_hosts = [h for h in self.hosts.values() if h.status == "ONLINE" and len(h.interfaces) > 0 and h.interfaces[0].ip is not None]
+            
+            successful_pairs = 0
+            total_pairs = 0
+            
+            for source in active_hosts:
+                for target in active_hosts:
+                    if source == target:
+                        continue
+                    
+                    total_pairs += 1
+                    res = self.ping(source.name, target.interfaces[0].ip)
+                    if res["type"] == "ECHO_REPLY":
+                        successful_pairs += 1
+                        
+            if total_pairs > 0:
+                self.network.events.append(Event(
+                    type="VALIDATION_COMPLETE",
+                    source="SYSTEM",
+                    destination="ALL_HOSTS",
+                    protocol="ICMP",
+                    severity="INFO" if successful_pairs == total_pairs else "WARNING",
+                    metadata={"message": f"Ping sweep complete. {successful_pairs}/{total_pairs} connections successful."}
+                ))
 
         return updated
 

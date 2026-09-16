@@ -239,6 +239,27 @@ class API:
             self.state_manager.save()
             return {"status": "validated", "updated": updated}
 
+        if method == "GET" and resource == ["poll"]:
+            events = self.ntm.simulation.network.events
+            devices = [self._serialize_device(d) for d in self.all_devices()]
+            return {
+                "status": "running" if self.ntm.simulation.is_running else "stopped",
+                "devices": devices,
+                "events": [
+                    {
+                        "type": e.type,
+                        "source": e.source,
+                        "destination": e.destination,
+                        "protocol": e.protocol,
+                        "port": e.port,
+                        "severity": getattr(e, "severity", "INFO"),
+                        "timestamp": e.timestamp.isoformat(),
+                        "metadata": e.metadata
+                    }
+                    for e in events[-50:] # last 50 events to avoid massive payloads
+                ]
+            }
+
         if method == "GET" and resource == ["events"]:
             events = self.ntm.simulation.network.events
             return [
@@ -256,6 +277,13 @@ class API:
             ]
             
         raise ValueError("Unknown SIMULATION endpoint")
+        
+    def all_devices(self):
+        return [
+            *self.ntm.simulation.hosts.values(),
+            *self.ntm.simulation.switches.values(),
+            *self.ntm.simulation.routers.values()
+        ]
 
     # ========================================================
     # NTM
@@ -645,7 +673,8 @@ class API:
                 if getattr( interface, "subnet", None ) is not None else None
             ),
             "connected": (
-                getattr( interface, "link", None ) is not None )
+                getattr( interface, "link", None ) is not None ),
+            "status": getattr(interface, "status", "up")
         }
         
         if hasattr(interface, "port_number"):

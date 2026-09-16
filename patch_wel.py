@@ -1,27 +1,12 @@
-document.addEventListener("DOMContentLoaded", () => {
-    const buttons = document.querySelectorAll(".enter-button");
+with open("application/static/js/wel_app.js", "r") as f:
+    content = f.read()
 
-    buttons.forEach((button) => {
-        button.addEventListener("click", () => {
-            const isAlreadySelected = button.classList.contains("selected");
-
-            if (isAlreadySelected) {
-                // Second click: Execute redirection
-                const destination = button.getAttribute("data-url");
-                if (destination) {
-                    window.location.href = destination;
-                }
-            } else {
-                // First click: Unhighlight previous button and highlight current button
-                buttons.forEach((btn) => btn.classList.remove("selected"));
-                button.classList.add("selected");
-            }
-        });
-    });
-});
-
-
-
+# We want to replace the whole fake generator logic.
+# The generator starts at: const telemetryLogs = [
+# And ends around line 127.
+start_idx = content.find("const telemetryLogs = [")
+if start_idx != -1:
+    new_logic = """
     // ========================================================
     // LIVE EVENT TELEMETRY (WEL)
     // ========================================================
@@ -79,3 +64,8 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 });
+"""
+    content = content[:start_idx] + new_logic
+    
+    with open("application/static/js/wel_app.js", "w") as f:
+        f.write(content)

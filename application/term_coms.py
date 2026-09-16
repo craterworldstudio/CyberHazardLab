@@ -54,7 +54,16 @@ class TerminalCommandHandler:
         topic = parts[1]
         
         if topic == "ping":
-            return "Usage: ping [target_ip]\nSends ICMP ECHO_REQUEST packets to network hosts."
+            return """ping - send ICMP ECHO_REQUEST to network hosts
+  Usage: ping [-c count] [-i interval] [-s size] [-t ttl] [-q] [-v] destination
+  
+  Options:
+    -c count     Stop after sending count ECHO_REQUEST packets (default: 4)
+    -i interval  Wait interval seconds between sending each packet
+    -s size      Specify the number of data bytes to be sent (default: 56)
+    -t ttl       Set the IP Time to Live
+    -q           Quiet output. Nothing is displayed except the summary lines
+    -v           Verbose output. Show detailed packet/payload info"""
         elif topic in ("tracert", "traceroute"):
             return "Usage: tracert [-d] [-h maximum_hops] [-w timeout] target_name\n  -d                 Do not resolve addresses to hostnames.\n  -h maximum_hops    Maximum number of hops to search for target.\n  -w timeout         Wait timeout milliseconds for each reply."
         elif topic in ("netstat", "ss"):
@@ -326,44 +335,87 @@ class TerminalCommandHandler:
 
     def _handle_ping(self, device, parts):
         if len(parts) < 2:
-            return "Usage: ping [target_ip]"
-        else:
-            target_ip = parts[1]
-            if not device:
-                return "Cannot run ping from this device."
-            
-            output = f"PING {target_ip} ({target_ip}) 56(84) bytes of data.\n"
-            success_count = 0
-            
-            try:
-                for i in range(4):
-                    result = self.sim.ping(device, target_ip)
-                    if result:
-                        if isinstance(result, dict):
-                            rtype = result.get("type")
-                            rsource = result.get("source", "Unknown")
-                            if rtype == "TIME_EXCEEDED":
-                                output += f"From {rsource} icmp_seq={i+1} Time to live exceeded\n"
-                            elif rtype == "DESTINATION_UNREACHABLE":
-                                output += f"From {rsource} icmp_seq={i+1} Destination Host Unreachable\n"
-                            elif rtype == "TIMEOUT":
-                                output += f"From {target_ip} icmp_seq={i+1} Request timed out\n"
-                            else:
-                                ttl = result.get('ttl', 64)
-                                output += f"64 bytes from {rsource}: icmp_seq={i+1} ttl={ttl} time=1 ms\n"
-                                success_count += 1
-                        else:
-                            # Fallback for simple truthy
-                            output += f"64 bytes from {target_ip}: icmp_seq={i+1} ttl=64 time=1 ms\n"
-                            success_count += 1
-                    else:
-                        output += f"From {target_ip} icmp_seq={i+1} Request timed out\n"
+            return "Usage: ping [-c count] [-i interval] [-s size] [-t ttl] [-q] [-v] target_ip"
+        
+        count = 4
+        interval = 1.0
+        size = 56
+        ttl = 64
+        quiet = False
+        verbose = False
+        target_ip = None
+        
+        i = 1
+        while i < len(parts):
+            p = parts[i]
+            if p == "-c" and i + 1 < len(parts):
+                try: count = int(parts[i+1]); i += 2; continue
+                except: pass
+            if p == "-i" and i + 1 < len(parts):
+                try: interval = float(parts[i+1]); i += 2; continue
+                except: pass
+            if p == "-s" and i + 1 < len(parts):
+                try: size = int(parts[i+1]); i += 2; continue
+                except: pass
+            if p == "-t" and i + 1 < len(parts):
+                try: ttl = int(parts[i+1]); i += 2; continue
+                except: pass
+            if p == "-q":
+                quiet = True; i += 1; continue
+            if p == "-v":
+                verbose = True; i += 1; continue
                 
-                output += f"\n--- {target_ip} ping statistics ---\n"
-                output += f"4 packets transmitted, {success_count} received, {100 - (success_count/4*100):.0f}% packet loss, time 3003ms"
-                return output
-            except Exception as e:
-                return f"Ping failed: {str(e)}\n{traceback.format_exc()}"
+            if not p.startswith("-"):
+                target_ip = p
+                
+            i += 1
+            
+        if not target_ip:
+            return "Usage: ping [-c count] [-i interval] [-s size] [-t ttl] [-q] [-v] target_ip"
+            
+        if not device:
+            return "Cannot run ping from this device."
+            
+        output = f"PING {target_ip} ({target_ip}) {size}({size+28}) bytes of data.\n" if not quiet else ""
+        success_count = 0
+        
+        try:
+            for j in range(count):
+                result = self.sim.ping(device, target_ip, ttl=ttl, payload="0"*size)
+                
+                # Format response
+                line = ""
+                if result:
+                    if isinstance(result, dict):
+                        rtype = result.get("type")
+                        rsource = result.get("source", "Unknown")
+                        rttl = result.get("ttl", ttl)
+                        if rtype == "TIME_EXCEEDED":
+                            line = f"[DELAY:{int(interval*1000)}]From {rsource} icmp_seq={j+1} Time to live exceeded\n"
+                        elif rtype == "DESTINATION_UNREACHABLE":
+                            line = f"[DELAY:{int(interval*1000)}]From {rsource} icmp_seq={j+1} Destination Host Unreachable\n"
+                        elif rtype == "TIMEOUT":
+                            line = f"[DELAY:{int(interval*1000)}]From {target_ip} icmp_seq={j+1} Request timed out\n"
+                        else:
+                            line = f"[DELAY:{int(interval*1000)}]{size+8} bytes from {rsource}: icmp_seq={j+1} ttl={rttl} time=1 ms\n"
+                            success_count += 1
+                            
+                        if verbose and rtype:
+                            line += f"  > [VERBOSE] Packet Type: {rtype}, Source: {rsource}, Payload Size: {len(result.get('payload', ''))}\n"
+                    else:
+                        line = f"[DELAY:{int(interval*1000)}]{size+8} bytes from {target_ip}: icmp_seq={j+1} ttl={ttl} time=1 ms\n"
+                        success_count += 1
+                else:
+                    line = f"[DELAY:{int(interval*1000)}]From {target_ip} icmp_seq={j+1} Request timed out\n"
+                
+                if not quiet:
+                    output += line
+            
+            output += f"\n--- {target_ip} ping statistics ---\n"
+            output += f"{count} packets transmitted, {success_count} received, {100 - (success_count/count*100 if count else 0):.0f}% packet loss, time {int(count*interval*1000)}ms"
+            return output
+        except Exception as e:
+            return f"Ping failed: {str(e)}"
 
     def _handle_tracert(self, device, parts):
         max_hops = 30

@@ -12,11 +12,12 @@ class NetworkInterface:
     name: str
     mac: str
     ip: str | None = None
-    link: Link = None
-    network: Any |None = None
+    link: Any | None = None
+    network: Any | None = None
     subnet: str | None = None
     owner: Any | None = None
     arp: ARP | None = None
+    status: str = "up"
 
     def connect_link(self, link):
         if self.link is not None:
@@ -28,6 +29,8 @@ class NetworkInterface:
         self.arp = ARP(self.network)
 
     def send(self, frame):
+        if getattr(self, "status", "up") != "up":
+            return None
         if self.link is None:
             raise ValueError(
                 f"{self.name} is not connected to a link"
@@ -36,6 +39,8 @@ class NetworkInterface:
         return self.link.transmit(frame, self)
 
     def receive(self, frame):
+        if getattr(self, "status", "up") != "up":
+            return None
         if self.owner is not None:
             if hasattr(self.owner, "receive_frame"):
                 return self.owner.receive_frame( self, frame ) # host: interface, frame
