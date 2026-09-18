@@ -1,107 +1,59 @@
-from dataclasses import dataclass
-import ipaddress
-from ..network.link import Link
-from ..network.arp import ARP
+from dataclasses import dataclass, field
 from typing import Any
+import ipaddress
 from ..network.frame import EthernetFrame
-from ..network.packet import ARPPacket
-from .event import Event
 
 @dataclass
 class NetworkInterface:
     name: str
     mac: str
-    ip: str | None = None
+    ip: str | None = "0.0.0.0"
+    subnet: str | None = "0.0.0.0/0"
     link: Any | None = None
     network: Any | None = None
-    subnet: str | None = None
     owner: Any | None = None
-    arp: ARP | None = None
     status: str = "up"
+    rx_buffer: list = field(default_factory=list)
+
+    @property
+    def arp(self):
+        if self.owner and hasattr(self.owner, "arp"):
+            return self.owner.arp
+        return None
 
     def connect_link(self, link):
-        if self.link is not None:
+        if self.link is not None and self.link != link:
             raise ValueError(f"{self.name} is already connected to a link.")
         self.link = link
 
     def attach_network(self, network):
         self.network = network
-        self.arp = ARP(self.network)
 
-    def send(self, frame):
+    def send(self, frame: EthernetFrame):
         if getattr(self, "status", "up") != "up":
             return None
         if self.link is None:
-            raise ValueError(
-                f"{self.name} is not connected to a link"
-            )
-        
+            raise ValueError(f"{self.name} is not connected to a link")
         return self.link.transmit(frame, self)
 
-    def receive(self, frame):
+    def receive(self, frame: EthernetFrame):
         if getattr(self, "status", "up") != "up":
             return None
-        if self.owner is not None:
-            if hasattr(self.owner, "receive_frame"):
-                return self.owner.receive_frame( self, frame ) # host: interface, frame
+        self.rx_buffer.append(frame)
+        return None
 
-            if hasattr(self.owner, "receive"):
-                return self.owner.receive( frame, self ) # router: frame, interface
-
-        #print(f"\n{self.name} received frame: {frame}")
-
-        payload = frame.payload
-
-        if isinstance(payload, ARPPacket):
-
-            self.arp.receive(
-                self, payload
-            )
-
-            return
+    def process_rx_buffer(self):
+        while self.rx_buffer:
+            frame = self.rx_buffer.pop(0)
+            if self.owner is not None:
+                if hasattr(self.owner, "receive_frame"):
+                    self.owner.receive_frame(self, frame)
 
     def send_ip_packet(self, packet):
+        if self.owner is not None and hasattr(self.owner, "send_ip_packet"):
+            return self.owner.send_ip_packet(packet, out_interface=self)
+        raise ValueError(f"Interface {self.name} has no owner node to route packet")
 
-        if self.network is None:
-            raise ValueError(
-                f"{self.name} is not attached to a network"
-            )
-
-        source_subnet = self.network.get_subnet(self.ip)
-        destination_subnet = self.network.get_subnet(
-            packet.destination_ip
-        )
-
-        if source_subnet is None:
-            raise ValueError(
-                f"{self.ip} does not belong to a known subnet"
-            )
-
-        if destination_subnet is None:
-            raise ValueError(
-                f"{packet.destination_ip} does not belong to a known subnet"
-            )
-
-        if self.subnet and ipaddress.ip_address(packet.destination_ip) in ipaddress.ip_network(self.subnet):
-            next_hop_ip = packet.destination_ip
-        else:
-            next_hop_ip = self.network.get_gateway(self.ip)
-
-
-
-        destination_mac = self.arp.resolve(
-            self,
-            next_hop_ip
-        )
-
-        if destination_mac is None:
-            return "ARP_FAILED"
-
-        frame = EthernetFrame(
-            source_mac=self.mac,
-            destination_mac=destination_mac,
-            payload=packet
-        )
-
-        return self.send(frame)
-
+    def __repr__(self):
+        owner_name = getattr(self.owner, "name", "None")
+        return f"Interface({owner_name}:{self.name}, ip={self.ip}, mac={self.mac})"

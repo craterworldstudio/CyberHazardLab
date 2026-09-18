@@ -8,17 +8,26 @@ from .network import Network
 
 class Switch:
 
-    def __init__(self, name, network:Network):
+    def __init__(self, name, network=None):
         self.name = name
         self.ports = {}
-        self.mac_table ={}
-        self.network = network
-        self.event_callback = self.network.add_event
+        self.mac_table = {}
+        if callable(network):
+            self.event_callback = network
+            self.network = None
+        else:
+            self.network = network
+            self.event_callback = getattr(self.network, "add_event", None)
         self.auto_mac_learning = True
 
     def add_event(self, event):
         if self.event_callback:
             self.event_callback(event)
+
+    def update(self):
+        for port in self.ports.values():
+            if hasattr(port, "process_rx_buffer"):
+                port.process_rx_buffer()
 
     def connect(self, host, intf_name="eth0"):
         interface = None
@@ -76,7 +85,7 @@ class Switch:
         if frame.destination_mac == "FF:FF:FF:FF:FF:FF":
             
 
-            self.network.add_event(Event(
+            self.add_event(Event(
                     type="FRAME_BROADCAST",
                     severity="INFO",
                     source=frame.source_mac,

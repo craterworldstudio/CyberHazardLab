@@ -155,7 +155,7 @@ class API:
             for device_name, intfs in sim_data.get("interfaces", {}).items():
                 for intf in intfs:
                     try:
-                        self.ncm.update_interface(device_name, intf["name"], ip=intf.get("ip"), subnet=intf.get("subnet"))
+                        self.ncm.update_interface(device_name, intf["name"], ip=intf.get("ip"), subnet=intf.get("subnet"), mac=intf.get("mac"))
                     except Exception:
                         pass
                         
@@ -170,7 +170,9 @@ class API:
             for device_name, svcs in sim_data.get("services", {}).items():
                 for s in svcs:
                     try:
-                        self.ncm.add_service(device_name, s["name"], s["protocol"], s["port"], s.get("status", "stopped"))
+                        svc_obj = self.ncm.add_service(device_name, s["name"], s["protocol"], s["port"], s.get("status", "stopped"))
+                        if "config" in s:
+                            svc_obj.config = s["config"]
                     except Exception:
                         pass
                         
@@ -211,14 +213,21 @@ class API:
                 if switch:
                     switch.mac_table = dict(macs)
                     
-            # ARP Caches
+            # ARP Caches (validate against current device MACs to prevent stale poisoning)
             for device_name, intf_arps in sim_data.get("arp_caches", {}).items():
                 device = self.ntm.get_device(device_name)
                 if device:
                     for intf_name, cache in intf_arps.items():
                         for i in getattr(device, "interfaces", []):
                             if i.name == intf_name and hasattr(i, "arp") and i.arp:
-                                i.arp.cache = dict(cache)
+                                for ip_k, mac_v in cache.items():
+                                    target_dev = next((d for d in self.ntm.get_devices().values() if hasattr(d, "interfaces") and any(di.ip == ip_k for di in d.interfaces)), None)
+                                    if target_dev:
+                                        target_intf = next((di for di in target_dev.interfaces if di.ip == ip_k), None)
+                                        if target_intf and target_intf.mac == mac_v:
+                                            i.arp.cache[ip_k] = mac_v
+                                    else:
+                                        i.arp.cache[ip_k] = mac_v
                                 break
                         
             self.state_manager.save(layout=layout_data)
@@ -238,6 +247,76 @@ class API:
             updated = self.ntm.simulation.validate()
             self.state_manager.save()
             return {"status": "validated", "updated": updated}
+
+        if method == "POST" and resource == ["forge"]:
+            proto = body.get("protocol", "TCP").upper()
+            src_port = body.get("source_port")
+            dst_port = body.get("destination_port")
+            src_ip = body.get("source_ip")
+            dst_ip = body.get("destination_ip")
+            payload = body.get("payload", "")
+            
+            source_device = None
+            source_intf = None
+            
+            for host in self.ntm.simulation.hosts.values():
+                for intf in host.interfaces:
+                    if intf.ip == src_ip:
+                        source_device = host
+                        source_intf = intf
+                        break
+                if source_device: break
+                
+            if not source_device:
+                for host in self.ntm.simulation.hosts.values():
+                    if host.interfaces and host.interfaces[0].link:
+                        source_device = host
+                        source_intf = host.interfaces[0]
+                        break
+            
+            if not source_device or not source_intf:
+                raise ValueError("No valid entry point (online host) found in the network to inject the payload.")
+                
+            from backend.network.packet import Packet, TCPPacket, UDPPacket, ICMPPacket
+            
+            inner_payload = None
+            if proto == "TCP":
+                inner_payload = TCPPacket(
+                    source_port=int(src_port) if src_port else 49152,
+                    destination_port=int(dst_port) if dst_port else 80,
+                    sequence_number=1,
+                    acknowledgement_number=0,
+                    payload=payload
+                )
+            elif proto == "UDP":
+                inner_payload = UDPPacket(
+                    source_port=int(src_port) if src_port else 49152,
+                    destination_port=int(dst_port) if dst_port else 53,
+                    payload=payload
+                )
+            else:
+                inner_payload = ICMPPacket(type="ECHO_REQUEST", payload=payload)
+                
+            packet = Packet(
+                source_ip=src_ip,
+                destination_ip=dst_ip,
+                protocol=proto,
+                payload=inner_payload,
+                ttl=64
+            )
+            
+            from backend.core.event import Event
+            self.ntm.simulation.network.add_event(Event(
+                type="PAYLOAD_FORGED",
+                source=src_ip,
+                destination=dst_ip,
+                protocol=proto,
+                severity="WARNING",
+                metadata={"dst_port": dst_port, "src_port": src_port, "payload_size": len(payload), "injection_point": source_device.name}
+            ))
+            
+            source_device.send_ip_packet(packet, out_interface=source_intf)
+            return {"status": "injected"}
 
         if method == "GET" and resource == ["poll"]:
             events = self.ntm.simulation.network.events
@@ -438,12 +517,15 @@ class API:
 
         # POST /api/ncm/devices/<device>/services
         if method == "POST" and len(resource) == 3 and resource[0] == "devices" and resource[2] == "services":
+            config = body.get("config", {})
             service = self.ncm.add_service(
                 resource[1],
                 body["name"],
                 body["protocol"],
                 int(body["port"])
             )
+            if config:
+                service.config = config
             self.state_manager.save()
             return self._serialize(service)
 
@@ -547,45 +629,11 @@ class API:
             self.state_manager.save()
             return self._serialize(result)
 
-        # DELETE /api/ncm/subnets
-        if (
-            method == "DELETE"
-            and resource == ["subnets"]
-        ):
-
-            result = self.ncm.remove_subnet(
-                body["subnet"]
-            )
-
-            self.state_manager.save()
-            return self._serialize(result)
 
         
 
-        # POST /api/ncm/subnets
-        if (
-            method == "POST"
-            and resource == ["subnets"]
-        ):
-            result = self.ncm.add_subnet(
-                body["subnet"],
-                body.get("gateway")
-            )
 
-            self.state_manager.save()
 
-            return self._serialize(result)
-
-        # GET /api/ncm/subnets
-        if (
-            method == "GET"
-            and resource == ["subnets"]
-        ):
-            return self._serialize( self.ncm.get_subnets() )
-
-        # GET /api/ncm/subnets/<network>
-        if ( method == "GET" and len(resource) == 2 and resource[0] == "subnets" ):
-            return self._serialize( self.ncm.get_subnet( resource[1] ) )
 
         # GET /api/ncm/gateway/<ip>
         if ( method == "GET" and len(resource) == 2 and resource[0] == "gateway"):

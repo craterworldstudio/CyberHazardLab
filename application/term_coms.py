@@ -2,11 +2,20 @@ import ipaddress
 import traceback
 
 class TerminalCommandHandler:
-    def __init__(self, sim, ncm, state_manager):
+    def __init__(self, sim, ncm=None, state_manager=None):
         self.sim = sim
         self.ncm = ncm
         self.state_manager = state_manager
         
+
+    def _get_interface(self, device, dev_name):
+        if self.ncm:
+            return self.ncm.get_interface(device.name, dev_name)
+        for i in getattr(device, "interfaces", []) or getattr(device, "ports", {}).values():
+            if i.name == dev_name:
+                return i
+        return None
+
     def execute(self, device, command_str):
         parts = command_str.split()
         if not parts:
@@ -34,6 +43,8 @@ class TerminalCommandHandler:
             # Just an alias mapping for our ip addr logic
             parts = ["ip", "addr", "show"]
             return self._handle_ip(device, parts)
+        elif cmd == "service":
+            return self._handle_service(device, parts)
         else:
             return f"Nox OS > Command '{cmd}' not recognized."
             
@@ -48,6 +59,7 @@ class TerminalCommandHandler:
             output += "  ip         - Show / manipulate routing, devices, policy routing and tunnels\n"
             output += "  arp        - (Legacy) Display the local ARP cache\n"
             output += "  route      - (Legacy) Display the routing table\n"
+            output += "  service    - Manage daemon services\n"
             output += "  hostname   - Show current system hostname"
             return output
             
@@ -74,12 +86,14 @@ class TerminalCommandHandler:
             return "Usage: arp\nDisplays the legacy ARP cache table."
         elif topic == "route":
             return "Usage:\n  route\n  route add [dest_subnet] via [next_hop_ip]\n  route del [dest_subnet]"
+        elif topic == "service":
+            return "Usage:\n  service list\n  service add <name> <protocol> <port>\n  service start <name>\n  service stop <name>\n  service remove <name>"
         elif topic == "hostname":
             return "Usage: hostname\nPrints the name of the current system."
         elif topic == "ip":
             if len(parts) == 2:
                 output = "Usage: ip [ OPTIONS ] OBJECT { COMMAND | help }\n"
-                output += "OBJECT := { link | addr | route | neigh | maddr }\n"
+                output += "OBJECT := { link | addr | route | neigh | maddr | dhcp | dhcp-relay }\n"
                 output += "Use 'help ip [object]' for detailed information."
                 return output
                 
@@ -89,9 +103,13 @@ class TerminalCommandHandler:
             elif sub_topic == "addr":
                 return "ip addr - protocol address management\n  show                                - list IP addresses\n  add [ip/cidr] dev [name]            - assign IP address to interface\n  del [ip/cidr] dev [name]            - remove IP address from interface"
             elif sub_topic == "route":
-                return "ip route - routing table management\n  show                                - list routes\n  add [cidr] via [ip] dev [name]      - add static route\n  del [cidr]                          - delete static route\n  get [ip]                            - show path to destination\n  flush                               - clear routing table"
+                return "ip route - routing table management\n  show                                      - display routing table\n  add [dest] via [hop] dev [name]           - add new route\n  del [dest]                                - delete route\n  get [ip]                                  - get route for IP\n  flush                                     - clear all routes"
             elif sub_topic == "neigh":
-                return "ip neigh - neighbour/ARP table management\n  show             - list ARP entries\n  flush            - clear ARP cache"
+                return "ip neigh - neighbour/arp table management\n  show             - display ARP cache"
+            elif sub_topic == "dhcp":
+                return "ip dhcp - DHCP Client management\n  client start     - Broadcast DHCPDISCOVER\n  client release   - Release lease and clear IP"
+            elif sub_topic == "dhcp-relay":
+                return "ip dhcp-relay <target_ip> - Deploy and configure a DHCP relay agent to forward broadcasts"
             elif sub_topic == "maddr":
                 return "ip maddr - multicast address management"
             else:
@@ -119,10 +137,10 @@ class TerminalCommandHandler:
             elif len(parts) >= 5 and parts[2] == "set":
                 dev_name = parts[3]
                 state = parts[4] # up or down
-                intf = self.ncm.get_interface(device.name, dev_name)
+                intf = self._get_interface(device, dev_name)
                 if intf:
                     intf.status = "up" if state == "up" else "down"
-                    self.state_manager.save()
+                    if self.state_manager: self.state_manager.save()
                     return f"Device {dev_name} state set to {state.upper()}."
                 else:
                     return f"Cannot find device \"{dev_name}\""
@@ -150,7 +168,7 @@ class TerminalCommandHandler:
                 if "dev" in parts:
                     dev_idx = parts.index("dev")
                     dev_name = parts[dev_idx+1]
-                    intf = self.ncm.get_interface(device.name, dev_name)
+                    intf = self._get_interface(device, dev_name)
                     if not intf:
                         return f"Cannot find device \"{dev_name}\""
                     else:
@@ -159,14 +177,14 @@ class TerminalCommandHandler:
                                 net = ipaddress.IPv4Interface(ip_cidr)
                                 intf.ip = str(net.ip)
                                 intf.subnet = str(net.network)
-                                self.state_manager.save()
+                                if self.state_manager: self.state_manager.save()
                                 return f"Added {ip_cidr} to {dev_name}."
                             except Exception as e:
                                 return f"Error: invalid IP/CIDR '{ip_cidr}'"
                         else:
                             intf.ip = None
                             intf.subnet = None
-                            self.state_manager.save()
+                            if self.state_manager: self.state_manager.save()
                             return f"Deleted IP from {dev_name}."
                 else:
                     return "Usage: ip addr {add|del} [ip/cidr] dev [name]"
@@ -205,14 +223,14 @@ class TerminalCommandHandler:
                                 break
                     if out_intf:
                         device.add_route(dest_subnet, out_intf, next_hop=next_hop)
-                        self.state_manager.save()
+                        if self.state_manager: self.state_manager.save()
                         return f"Route added: {dest_subnet} via {next_hop or 'DIRECT'} dev {out_intf.name}"
                     else:
                         return "Error: Network unreachable or invalid device"
                 elif len(parts) >= 4 and parts[2] == "del":
                     dest_subnet = parts[3]
                     device.routes = [r for r in device.routes if str(r['destination']) != dest_subnet]
-                    self.state_manager.save()
+                    if self.state_manager: self.state_manager.save()
                     return f"Route deleted: {dest_subnet}"
                 elif len(parts) == 4 and parts[2] == "get":
                     dest_ip = parts[3]
@@ -224,11 +242,57 @@ class TerminalCommandHandler:
                         return f"RTNETLINK answers: Network is unreachable"
                 elif len(parts) >= 3 and parts[2] == "flush":
                     device.routes = []
-                    self.state_manager.save()
+                    if self.state_manager: self.state_manager.save()
                     return "Flushed routing table."
                 else:
                     return "Usage: ip route { show | add | del | get | flush }"
                     
+        elif obj == "dhcp":
+            # ip dhcp client {start|release}
+            if len(parts) >= 4 and parts[2] == "client":
+                action = parts[3]
+                if action == "start":
+                    if self.ncm:
+                        try:
+                            self.ncm.add_service(device.name, "DHCP_CLIENT", "UDP", 68)
+                        except ValueError:
+                            pass # Ignore if it already exists
+                            
+                        try:
+                            self.ncm.start_service(device.name, "DHCP_CLIENT")
+                            if self.state_manager: self.state_manager.save()
+                            return "DHCP Client started. Broadcasting DHCPDISCOVER..."
+                        except Exception as e:
+                            return f"Error starting DHCP client: {str(e)}"
+                    return "DHCP Client start failed (no NCM context)."
+                elif action == "release":
+                    if self.ncm:
+                        try:
+                            self.ncm.stop_service(device.name, "DHCP_CLIENT")
+                            self.ncm.remove_service(device.name, "DHCP_CLIENT")
+                        except: pass
+                        if getattr(device, "interfaces", []):
+                            intf = device.interfaces[0]
+                            intf.ip = None
+                            intf.subnet = None
+                            if hasattr(device, "routes"):
+                                device.routes = [r for r in device.routes if r.get("destination") != "0.0.0.0/0"]
+                        if self.state_manager: self.state_manager.save()
+                        return "DHCP lease released. IP cleared."
+                return "Usage: ip dhcp client {start|release}"
+                
+        elif obj == "dhcp-relay":
+            # ip dhcp-relay <target_ip>
+            if len(parts) >= 3:
+                target_ip = parts[2]
+                if self.ncm:
+                    svc = self.ncm.add_service(device.name, "DHCP_RELAY", "UDP", 67)
+                    svc.config = {"target_ip": target_ip}
+                    self.ncm.start_service(device.name, "DHCP_RELAY")
+                    if self.state_manager: self.state_manager.save()
+                    return f"DHCP Relay enabled. Forwarding to {target_ip}."
+            return "Usage: ip dhcp-relay <target_ip>"
+
         elif obj == "neigh":
             has_arp = False
             if len(parts) == 2 or parts[2] == "show":
@@ -257,18 +321,18 @@ class TerminalCommandHandler:
                 dev_name = parts[5]
                 mac = parts[7] if len(parts) >= 8 and parts[6] == "lladdr" else "00:00:00:00:00:00"
                 
-                intf = self.ncm.get_interface(device.name, dev_name)
+                intf = self._get_interface(device, dev_name)
                 if not intf or not hasattr(intf, "arp") or not intf.arp:
                     return f"Cannot find device \"{dev_name}\" or ARP not supported."
                 
                 if action == "add":
                     intf.arp.cache[target_ip] = mac
-                    self.state_manager.save()
+                    if self.state_manager: self.state_manager.save()
                     return f"Added {target_ip} at {mac} to {dev_name} ARP cache."
                 else:
                     if target_ip in intf.arp.cache:
                         del intf.arp.cache[target_ip]
-                        self.state_manager.save()
+                        if self.state_manager: self.state_manager.save()
                         return f"Deleted {target_ip} from {dev_name} ARP cache."
                     return f"Entry {target_ip} not found."
             else:
@@ -321,14 +385,14 @@ class TerminalCommandHandler:
                         
                 if out_intf:
                     device.add_route(dest_subnet, out_intf, next_hop=next_hop)
-                    self.state_manager.save()
+                    if self.state_manager: self.state_manager.save()
                     return f"Route added: {dest_subnet} via {next_hop} (dev {out_intf.name})"
                 else:
                     return f"Network unreachable: Cannot reach next hop {next_hop}"
             elif len(parts) == 3 and parts[1] == "del":
                 dest_subnet = parts[2]
                 device.routes = [r for r in device.routes if str(r['destination']) != dest_subnet]
-                self.state_manager.save()
+                if self.state_manager: self.state_manager.save()
                 return f"Route deleted: {dest_subnet}"
             else:
                 return "Usage:\n  route\n  route add [dest_subnet] via [next_hop_ip]\n  route del [dest_subnet]"
@@ -493,3 +557,73 @@ class TerminalCommandHandler:
             output = "Active Internet connections (w/o servers)\nProto Recv-Q Send-Q Local Address           Foreign Address         State\n(No active sockets found)"
             
         return output
+
+    def _handle_service(self, device, parts):
+        if not hasattr(device, "services"):
+            return "Services not supported on this device."
+            
+        if len(parts) == 1 or parts[1] == "list":
+            if not device.services:
+                return "No services configured."
+            output = "SERVICES:\n"
+            for s in device.services:
+                output += f"  [{s.status.upper()}] {s.name} (Port {s.port}/{s.protocol})\n"
+            return output
+            
+        action = parts[1]
+        
+        if action == "add":
+            if len(parts) < 5:
+                return "Usage: service add <name> <protocol> <port>"
+            name = parts[2].upper()
+            proto = parts[3].upper()
+            try: port = int(parts[4])
+            except: return "Invalid port number"
+            
+            if self.ncm:
+                try:
+                    self.ncm.add_service(device.name, name, proto, port)
+                    if self.state_manager: self.state_manager.save()
+                    return f"Service {name} added."
+                except Exception as e:
+                    return f"Error: {str(e)}"
+            return "Failed to add service (no NCM context)."
+            
+        elif action == "start":
+            if len(parts) < 3: return "Usage: service start <name>"
+            name = parts[2].upper()
+            if self.ncm:
+                try:
+                    self.ncm.start_service(device.name, name)
+                    if self.state_manager: self.state_manager.save()
+                    return f"Service {name} started."
+                except Exception as e:
+                    return f"Error: {str(e)}"
+            return "Failed."
+            
+        elif action == "stop":
+            if len(parts) < 3: return "Usage: service stop <name>"
+            name = parts[2].upper()
+            if self.ncm:
+                try:
+                    self.ncm.stop_service(device.name, name)
+                    if self.state_manager: self.state_manager.save()
+                    return f"Service {name} stopped."
+                except Exception as e:
+                    return f"Error: {str(e)}"
+            return "Failed."
+            
+        elif action in ("remove", "del"):
+            if len(parts) < 3: return "Usage: service remove <name>"
+            name = parts[2].upper()
+            if self.ncm:
+                try:
+                    self.ncm.remove_service(device.name, name)
+                    if self.state_manager: self.state_manager.save()
+                    return f"Service {name} removed."
+                except Exception as e:
+                    return f"Error: {str(e)}"
+            return "Failed."
+            
+        else:
+            return "Usage: service {list|add|start|stop|remove}"

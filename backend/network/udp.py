@@ -30,8 +30,8 @@ class UDPConnection:
 
         payload_length = (
             len(data)
-            if data is not None
-            else 0
+            if hasattr(data, "__len__")
+            else (240 if data is not None else 0)
         )
 
         self.network.add_event(Event(
@@ -49,11 +49,10 @@ class UDPConnection:
         return packet
 
     def receive(self, packet: UDPPacket):
-
         payload_length = (
             len(packet.payload)
-            if packet.payload is not None
-            else 0
+            if hasattr(packet.payload, "__len__")
+            else (240 if packet.payload is not None else 0)
         )
     
         self.network.add_event(Event(

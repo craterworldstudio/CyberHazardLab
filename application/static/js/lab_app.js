@@ -318,7 +318,7 @@ document.addEventListener("DOMContentLoaded", () => {
             try {
                 const response = await apiRequest("POST", `/api/simulation/${action}`);
                 console.log(`[CHL:SIM] ${action.toUpperCase()} action completed.`, response);
-                await syncDeviceStatuses();
+                console.log(`[CHL:SIM] ${action.toUpperCase()} action completed.`, response);
             } catch (error) {
                 console.error(`[CHL:SIM] Failed to execute ${action}:`, error);
             }

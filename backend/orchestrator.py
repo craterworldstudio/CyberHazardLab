@@ -1,1027 +1,400 @@
 import ipaddress
+import time
+import threading
+from typing import Any
 
 from backend.core.host import Host
 from backend.core.interface import NetworkInterface
 from backend.core.mac import generate_mac
 from backend.core.service import Service
+from backend.core.device import DeviceType
+from backend.core.event import Event
 from backend.network.network import Network
 from backend.network.dhcp import DHCP
-from backend.core.event import Event
-from backend.network.packet import Packet
 from backend.network.switch import Switch
 from backend.network.router import Router
 from backend.network.link import Link
-from backend.network.tcp import TCPConnection
-from backend.network.udp import UDPConnection
-from backend.core.device import DeviceType
-from backend.network.packet import *
-
+from backend.network.packet import Packet, ICMPPacket
 
 class Simulation:
-
     def __init__(self, name="Network Simulation"):
-
         self.name = name
-
         self.network = Network(name)
         self.network.orchestrator = self
-
         self.dhcp = DHCP(self.network)
 
-        self.hosts = {}
-        self.switches = {}
-        self.routers = {}
+        self.hosts: dict[str, Host] = {}
+        self.switches: dict[str, Switch] = {}
+        self.routers: dict[str, Router] = {}
 
-        self.tcp_connections = {}
-        self.udp_connections = {}
-        self.is_running = False
+        self.is_running: bool = False
+        self.settings: dict = {"auto_routes": True, "auto_mac_learning": True}
+        self._tick_thread: threading.Thread | None = None
         
         self.network.on_event = self._handle_network_event
 
-    def _handle_network_event(self, event):
+    def _handle_network_event(self, event: Event):
         if event.severity in ["HIGH", "ERROR"]:
             dev_name = None
             if hasattr(event, "metadata") and event.metadata:
                 dev_name = event.metadata.get("router") or event.metadata.get("host") or event.metadata.get("switch")
-            
             if dev_name:
-                if dev_name in self.hosts:
-                    self.hosts[dev_name].status = "ERROR"
-                elif dev_name in self.routers:
-                    self.routers[dev_name].status = "ERROR"
-                elif dev_name in self.switches:
-                    self.switches[dev_name].status = "ERROR"
+                dev = self.get_device(dev_name)
+                if dev:
+                    dev.status = "ERROR"
 
     # ========================================================
-    # SIMULATION LIFECYCLE
+    # DEVICE LOOKUP & HELPERS
     # ========================================================
 
-    def run(self):
-        self.is_running = True
-        import time
-        for host in self.hosts.values():
-            host.status = "ONLINE"
-            host.boot_time = time.time()
-        for router in self.routers.values():
-            router.status = "ONLINE"
-            router.boot_time = time.time()
-        for switch in self.switches.values():
-            switch.status = "ONLINE"
-            switch.boot_time = time.time()
+    def get_host(self, name: str):
+        if name in self.hosts:
+            return self.hosts[name]
+        if name in self.routers:
+            return self.routers[name]
+        return None
 
-    def stop(self):
-        self.is_running = False
-        for host in self.hosts.values():
-            host.status = "OFFLINE"
-            host.boot_time = None
-        for router in self.routers.values():
-            router.status = "OFFLINE"
-            router.boot_time = None
-        for switch in self.switches.values():
-            switch.status = "OFFLINE"
-            switch.boot_time = None
-
-    def validate(self):
-        # Physical topology check: mark devices with 0 connections as ERROR
-        updated = []
-        
-        for host in self.hosts.values():
-            connected = any(intf.link is not None for intf in host.interfaces)
-            old_status = getattr(host, "status", "OFFLINE")
-            if not connected:
-                host.status = "ERROR"
-            else:
-                host.status = "ONLINE" if self.is_running else "OFFLINE"
-            if old_status != host.status:
-                updated.append(host.name)
-                
-        for router in self.routers.values():
-            connected = any(intf.link is not None for intf in router.interfaces)
-            old_status = getattr(router, "status", "OFFLINE")
-            if not connected:
-                router.status = "ERROR"
-            else:
-                router.status = "ONLINE" if self.is_running else "OFFLINE"
-            if old_status != router.status:
-                updated.append(router.name)
-                
-        for switch in self.switches.values():
-            connected = any(port.link is not None for port in switch.ports.values())
-            old_status = getattr(switch, "status", "OFFLINE")
-            if not connected:
-                switch.status = "ERROR"
-            else:
-                switch.status = "ONLINE" if self.is_running else "OFFLINE"
-            if old_status != switch.status:
-                updated.append(switch.name)
-                
-        # Ping Sweep
-        if self.is_running:
-            
-            self.network.events.append(Event(
-                type="VALIDATION_START",
-                source="SYSTEM",
-                destination="ALL_HOSTS",
-                protocol="ICMP",
-                severity="INFO",
-                metadata={"message": "Starting automated PING SWEEP validation across all active hosts..."}
-            ))
-            
-            active_hosts = [h for h in self.hosts.values() if h.status == "ONLINE" and len(h.interfaces) > 0 and h.interfaces[0].ip is not None]
-            
-            successful_pairs = 0
-            total_pairs = 0
-            
-            for source in active_hosts:
-                for target in active_hosts:
-                    if source == target:
-                        continue
-                    
-                    total_pairs += 1
-                    res = self.ping(source.name, target.interfaces[0].ip)
-                    if res["type"] == "ECHO_REPLY":
-                        successful_pairs += 1
-                        
-            if total_pairs > 0:
-                self.network.events.append(Event(
-                    type="VALIDATION_COMPLETE",
-                    source="SYSTEM",
-                    destination="ALL_HOSTS",
-                    protocol="ICMP",
-                    severity="INFO" if successful_pairs == total_pairs else "WARNING",
-                    metadata={"message": f"Ping sweep complete. {successful_pairs}/{total_pairs} connections successful."}
-                ))
-
-        return updated
-
-    # ========================================================
-    # TOPOLOGY
-    # ========================================================
-
-    def add_subnet(self, subnet, gateway):
-        return self.network.add_subnet(
-            subnet,
-            gateway
-        )
-
-    def add_dhcp_scope( self, subnet, start_ip, end_ip, gateway):
-
-        self.dhcp.add_scope(
-            subnet=subnet,
-            start_ip=start_ip,
-            end_ip=end_ip,
-            gateway=gateway
-        )
-
-    def remove_subnet(self, subnet):
-        return self.network.remove_subnet(subnet)
-    # ========================================================
-    # HOSTS
-    # ========================================================
+    def get_device(self, name: str):
+        if name in self.hosts:
+            return self.hosts[name]
+        if name in self.routers:
+            return self.routers[name]
+        if name in self.switches:
+            return self.switches[name]
+        return None
 
     def get_device_type(self, value_str: str) -> DeviceType:
-        """
-        Takes a string input and returns the corresponding HostDeviceType Enum.
-        Returns HostDeviceType.OTHER if the string does not match any valid enum value.
-        """
-        # Clean the input string to handle case sensitivity and whitespace
-        cleaned_input = str(value_str).lower().strip()
+        cleaned = str(value_str).lower().strip()
+        for member in DeviceType:
+            if member.value == cleaned:
+                return member
+        return DeviceType.OTHER
 
-        try:
-            # Looks up the enum member by its exact string value
-            return DeviceType(cleaned_input)
-        except ValueError:
-            # Fallback if the string isn't recognized
-            return DeviceType.OTHER
+    # ========================================================
+    # DEVICE LIFECYCLE
+    # ========================================================
+
+    def add_host(self, name: str, *args, **kwargs) -> Host:
+        if name in self.hosts or name in self.routers or name in self.switches:
+            raise ValueError(f"Device '{name}' already exists.")
         
-    def add_host( self, name, subnet=None, device:DeviceType = DeviceType.PC):
+        device_type = kwargs.get("device_type") or kwargs.get("device")
+        if not device_type and args:
+            for a in args:
+                if isinstance(a, DeviceType):
+                    device_type = a
+                    break
+                elif isinstance(a, str) and not ("." in a or "/" in a):
+                    device_type = self.get_device_type(a)
+                    break
 
-        host = Host(name, device_type=device, network=self.network)
+        if not device_type:
+            device_type = DeviceType.PC
+        elif isinstance(device_type, str):
+            device_type = self.get_device_type(device_type)
 
-        host.interfaces[0].attach_network(
-            self.network
-        )
-
-        if subnet is not None:
-            #print(host.interfaces)
-            self.dhcp.req_ip(
-                host.interfaces[0],
-                subnet
-            )
-
-        self.network.add_host(host)
-
+        host = Host(name=name, device_type=device_type, network=self.network)
         self.hosts[name] = host
-
+        self.network.add_host(host)
         return host
 
-    def get_host(self, name):
+    def remove_host(self, name: str):
+        host = self.hosts.pop(name, None)
+        if not host:
+            raise ValueError(f"Host '{name}' not found.")
+        # Disconnect all links
+        for link in list(self.network.links):
+            if any(link.endpointA == i or link.endpointB == i for i in host.interfaces):
+                self.disconnect(link)
+        self.network.hosts.pop(name, None)
+        return host
 
-        if name not in self.hosts:
-            raise ValueError(
-                f"Unknown host: {name}"
-            )
+    def add_router(self, name: str) -> Router:
+        if name in self.hosts or name in self.routers or name in self.switches:
+            raise ValueError(f"Device '{name}' already exists.")
+        router = Router(name=name, network=self.network)
+        self.routers[name] = router
+        self.network.add_host(router)
+        return router
 
-        return self.hosts[name]
+    def remove_router(self, name: str):
+        router = self.routers.pop(name, None)
+        if not router:
+            raise ValueError(f"Router '{name}' not found.")
+        for link in list(self.network.links):
+            if any(link.endpointA == i or link.endpointB == i for i in router.interfaces):
+                self.disconnect(link)
+        self.network.hosts.pop(name, None)
+        return router
+
+    def add_switch(self, name: str) -> Switch:
+        if name in self.hosts or name in self.routers or name in self.switches:
+            raise ValueError(f"Device '{name}' already exists.")
+        switch = Switch(name=name, network=self.network)
+        self.switches[name] = switch
+        return switch
+
+    def remove_switch(self, name: str):
+        switch = self.switches.pop(name, None)
+        if not switch:
+            raise ValueError(f"Switch '{name}' not found.")
+        for link in list(self.network.links):
+            if any(link.endpointA == p or link.endpointB == p for p in switch.ports.values()):
+                self.disconnect(link)
+        return switch
+
+    # ========================================================
+    # INTERFACE LIFECYCLE
+    # ========================================================
 
     def add_host_interface(self, host, name=None, mac=None):
         if isinstance(host, str):
             host = self.get_host(host)
-    
+        if not host:
+            raise ValueError("Invalid host specified.")
+
         if name is None:
             name = f"eth{len(host.interfaces)}"
-            
         for existing in host.interfaces:
             if existing.name == name:
                 raise ValueError(f"Interface '{name}' already exists on {host.name}")
-    
-        if mac is None:
-            mac = generate_mac()
-    
-        interface = NetworkInterface(
-            name=name,
-            mac=mac,
-            owner=host
-        )
-    
-        interface.attach_network(self.network)
-    
-        host.add_interface(interface)
-    
-        return interface
 
-    def remove_host_interface(self, host, interface):
+        mac = mac or generate_mac()
+        intf = NetworkInterface(name=name, mac=mac, owner=host, ip="0.0.0.0", subnet="0.0.0.0/0")
+        intf.attach_network(self.network)
+        host.add_interface(intf)
+        return intf
+
+    def remove_host_interface(self, host, intf_or_name):
         if isinstance(host, str):
             host = self.get_host(host)
+        intf_name = getattr(intf_or_name, "name", intf_or_name)
+        intf = host.get_interface(intf_name)
+        if not intf:
+            raise ValueError(f"Interface '{intf_name}' not found on {host.name}")
+        if intf.link:
+            self.disconnect(intf.link)
+        return host.remove_interface(intf_name)
 
+    def add_router_interface(self, router, name=None, mac=None):
+        if isinstance(router, str):
+            router = self.routers.get(router)
+        if not router:
+            raise ValueError("Invalid router specified.")
+
+        if name is None:
+            name = f"eth{len(router.interfaces)}"
+        for existing in router.interfaces:
+            if existing.name == name:
+                raise ValueError(f"Interface '{name}' already exists on {router.name}")
+
+        mac = mac or generate_mac()
+        intf = NetworkInterface(name=name, mac=mac, owner=router, ip="0.0.0.0", subnet="0.0.0.0/0")
+        intf.attach_network(self.network)
+        router.add_interface(intf)
+        return intf
+
+    def remove_router_interface(self, router, intf_name: str):
+        return self.remove_host_interface(router, intf_name)
+
+    def configure_router_interface(self, router, interface, ip=None, subnet=None):
+        if isinstance(router, str):
+            router = self.routers.get(router)
         if isinstance(interface, str):
-            interface = host.get_interface(interface)
-
-        if interface is None:
-            raise ValueError(
-                f"Interface does not exist on {host.name}"
-            )
-
-        if interface.link is not None:
-            raise ValueError(
-                f"Cannot remove {interface.name}: "
-                "interface is connected to a link"
-            )
-
-        if interface not in host.interfaces:
-            raise ValueError(
-                f"{interface.name} does not belong to {host.name}"
-            )
-
-        host.interfaces.remove(interface)
-
+            interface = router.get_interface(interface)
+        if router and interface:
+            router.update_intf(interface, ip=ip, subnet=subnet)
         return interface
 
-    def remove_host(self, name):
-        host = self.get_host(name)
+    # ========================================================
+    # TOPOLOGY CONNECTIONS
+    # ========================================================
 
-        for interface in host.interfaces:
-            if interface.link is not None:
-                self.disconnect(interface.link)
+    def connect_interfaces(self, interface_a: NetworkInterface, interface_b: NetworkInterface) -> Link:
+        link = Link(interface_a, interface_b)
+        self.network.add_link(link)
+        interface_a.connect_link(link)
+        interface_b.connect_link(link)
+        return link
 
-        if host.get_ip() in self.network.hosts:
-            del self.network.hosts[host.get_ip()]
+    def connect_host_to_switch(self, host, switch, host_intf=None, port_num=None) -> Link:
+        if isinstance(host, str):
+            host = self.get_host(host)
+        if isinstance(switch, str):
+            switch = self.switches[switch]
+        return switch.connect(host, host_intf.name if host_intf else "eth0")
 
-        del self.hosts[name]
+    def connect_switch_to_router(self, switch, router_interface) -> Link:
+        if isinstance(switch, str):
+            switch = self.switches[switch]
+        return switch.connect_router(router_interface)
 
-        return host
+    def connect_switches(self, switch_a, switch_b, port_a=None, port_b=None) -> Link:
+        if isinstance(switch_a, str):
+            switch_a = self.switches[switch_a]
+        if isinstance(switch_b, str):
+            switch_b = self.switches[switch_b]
+        return switch_a.connect_switch(switch_b)
 
+    def disconnect(self, link: Link):
+        if link not in self.network.links:
+            return link
+        ep_a, ep_b = link.endpointA, link.endpointB
+        if hasattr(ep_a, "link") and ep_a.link is link:
+            ep_a.link = None
+        if hasattr(ep_b, "link") and ep_b.link is link:
+            ep_b.link = None
+        self.network.links.remove(link)
+        return link
+
+    def get_links(self) -> list[Link]:
+        return list(self.network.links)
 
     # ========================================================
     # SERVICES
     # ========================================================
 
-    def add_service( self, host, name, protocol, port, status="stopped"):
-
+    def add_service(self, host, name: str, protocol: str, port: int, status="stopped", config=None) -> Service:
         if isinstance(host, str):
             host = self.get_host(host)
-
-        service = Service(
-            name=name,
-            protocol=protocol,
-            port=port,
-            status=status
-        )
-
-        self.network.add_service(
-            host,
-            service
-        )
-
+        if not host:
+            raise ValueError("Device not found")
+        service = Service(name=name, protocol=protocol, port=port, status=status, config=config or {})
+        self.network.add_service(host, service)
         return service
 
-    def start_service( self, host, service_name):
-
+    def start_service(self, host, service_name: str):
         if isinstance(host, str):
             host = self.get_host(host)
+        self.network.start_service(host, service_name)
 
-        self.network.start_service(
-            host,
-            service_name
-        )
+    def stop_service(self, host, service_name: str):
+        if isinstance(host, str):
+            host = self.get_host(host)
+        self.network.stop_services(host, service_name)
 
-    def remove_service(self, host, service_name):
+    def remove_service(self, host, service_name: str):
         if isinstance(host, str):
             host = self.get_host(host)
         self.network.remove_service(host, service_name)
 
-    def stop_service( self, host, service_name):
+    def add_subnet(self, subnet: str, gateway: str | None = None):
+        return self.network.add_subnet(subnet, gateway)
 
-        if isinstance(host, str):
-            host = self.get_host(host)
-
-        self.network.stop_services(
-            host,
-            service_name
-        )
+    def add_dhcp_scope(self, subnet, start_ip, end_ip, gateway, dns="8.8.8.8", lease_time=120):
+        return self.dhcp.add_scope(subnet, start_ip, end_ip, gateway, dns, lease_time)
 
     # ========================================================
-    # SWITCHES
+    # SIMULATION LIFECYCLE & TICK LOOP
     # ========================================================
 
-    def add_switch(self, name):
+    def run(self):
+        if self.is_running:
+            return
+        self.is_running = True
 
-        switch = Switch(
-            name,
-            self.network
-        )
+        # 1. Provision default routes for hosts connected to routers
+        for host in self.hosts.values():
+            has_default = any(str(r["destination"]) == "0.0.0.0/0" for r in host.routes)
+            if not has_default:
+                for intf in host.interfaces:
+                    if intf.ip and intf.ip != "0.0.0.0" and intf.subnet:
+                        gw = None
+                        for router in self.routers.values():
+                            for r_intf in router.interfaces:
+                                if r_intf.subnet == intf.subnet and r_intf.ip and r_intf.ip != "0.0.0.0":
+                                    gw = r_intf.ip
+                                    break
+                            if gw:
+                                break
+                        if gw:
+                            host.add_route("0.0.0.0/0", intf, next_hop=gw)
+                            break
 
-        self.switches[name] = switch
+        # 2. Provision DHCP scopes for subnets if not already configured
+        for router in self.routers.values():
+            for r_intf in router.interfaces:
+                if r_intf.subnet and r_intf.subnet not in ("0.0.0.0/0", "0.0.0.0"):
+                    self.dhcp.auto_provision_scope(r_intf.subnet, default_gateway=r_intf.ip)
 
-        return switch
+        # 3. Bring devices online and start enabled services
+        now = time.time()
+        all_nodes = list(self.hosts.values()) + list(self.routers.values())
+        for node in all_nodes:
+            node.status = "ONLINE"
+            node.boot_time = now
+            for s in node.services:
+                if getattr(s, "enabled", True):
+                    self.start_service(node, s.name)
 
-    def connect_host_to_switch( self, host, switch):
+        for switch in self.switches.values():
+            switch.status = "ONLINE"
+            switch.boot_time = now
 
-        if isinstance(host, str):
-            host = self.get_host(host)
+        # 4. Start tick loop
+        self._tick_thread = threading.Thread(target=self._tick_loop, daemon=True)
+        self._tick_thread.start()
 
-        if isinstance(switch, str):
-            switch = self.switches[switch]
+    def _tick_loop(self):
+        while self.is_running:
+            for host in list(self.hosts.values()):
+                host.update()
+            for router in list(self.routers.values()):
+                router.update()
+            for switch in list(self.switches.values()):
+                switch.update()
+            time.sleep(0.01)
 
-        return switch.connect(host)
+    def stop(self):
+        self.is_running = False
+        all_nodes = list(self.hosts.values()) + list(self.routers.values())
+        for node in all_nodes:
+            node.status = "OFFLINE"
+            node.boot_time = None
+            for s in node.services:
+                if s.status == "running":
+                    self.stop_service(node, s.name)
 
-    def connect_switches(self, switch_a, switch_b):
-        if isinstance(switch_a, str):
-            switch_a = self.switches[switch_a]
+        for switch in self.switches.values():
+            switch.status = "OFFLINE"
+            switch.boot_time = None
 
-        if isinstance(switch_b, str):
-            switch_b = self.switches[switch_b]
-
-        return switch_a.connect_switch(switch_b)
-
-    def remove_switch_port(self, switch, port_number):
-        if isinstance(switch, str):
-            switch = self.switches[switch]
-
-        return switch.remove_port(port_number)
-
-    def remove_switch(self, name):
-        if name not in self.switches:
-            raise ValueError(f"Unknown switch: {name}")
-
-        switch = self.switches[name]
-
-        for port in list(switch.ports.values()):
-            if port.link is not None:
-                self.disconnect(port.link)
-
-        del self.switches[name]
-
-        return switch
-
-
-    # ========================================================
-    # ROUTERS
-    # ========================================================
-
-    def add_router(self, name):
-
-        router = Router(
-            name,
-            self.network
-        )
-
-        self.routers[name] = router
-
-        return router
-
-    def configure_router_interface( self, router, interface, ip, subnet):
-
-        if isinstance(router, str):
-            router = self.routers[router]
-
-        router.update_intf(
-            interface,
-            ip=ip,
-            subnet=subnet
-        )
-
-    def connect_switch_to_router( self, switch, router_interface ):
-
-        if isinstance(switch, str):
-            switch = self.switches[switch]
-
-        return switch.connect_router(
-            router_interface
-        )
-
-    def connect_interfaces( self, interface_a, interface_b ):
-
-        link = Link(
-            interface_a,
-            interface_b
-        )
-
-        self.network.add_link(link)
-
-
-        interface_a.connect_link(link)
-        interface_b.connect_link(link)
-
-        return link
-
-    def add_route( self, router, destination, interface, next_hop=None ):
-
-        if isinstance(router, str):
-            router = self.routers[router]
-
-        router.add_route(
-            destination=destination,
-            interface=interface,
-            next_hop=next_hop
-        )
-
-    def add_router_interface(self, router, name=None, mac=None):
-        if isinstance(router, str):
-            router = self.routers[router]
-
-        if name is None:
-            name = f"eth{len(router.interfaces)}"
-
-        for existing in router.interfaces:
-            if existing.name == name:
-                raise ValueError(f"Interface '{name}' already exists on {router.name}")
-
-        if mac is None:
-            mac = generate_mac()
-
-        interface = NetworkInterface(
-            name=name,
-            mac=mac,
-            owner=router
-        )
-
-        interface.attach_network(self.network)
-
-        router.add_interface(interface)
-
-        return interface
-
-    def remove_router_interface(self, router, interface):
-        if isinstance(router, str):
-            router = self.routers[router]
-
-        if isinstance(interface, str):
-            interface = router.get_interface(interface)
-
-        if interface is None:
-            raise ValueError(
-                f"Interface does not exist on {router.name}"
-            )
-
-        if interface.link is not None:
-            raise ValueError(
-                f"Cannot remove {interface.name}: "
-                "interface is connected to a link"
-            )
-
-        if interface not in router.interfaces:
-            raise ValueError(
-                f"{interface.name} does not belong to {router.name}"
-            )
-
-        router.interfaces.remove(interface)
-
-        return interface
-
-    def remove_router(self, name):
-        if name not in self.routers:
-            raise ValueError(f"Unknown router: {name}")
-
-        router = self.routers[name]
-
-        for interface in router.interfaces:
-            if interface.link is not None:
-                self.disconnect(interface.link)
-
-        del self.routers[name]
-
-        return router
-
-
-
+    def validate(self):
+        updated = []
+        for host in self.hosts.values():
+            connected = any(i.link is not None for i in host.interfaces)
+            old_status = host.status
+            host.status = ("ONLINE" if self.is_running else "OFFLINE") if connected else "ERROR"
+            if old_status != host.status:
+                updated.append(host.name)
+        return updated
 
     # ========================================================
-    # PACKET HELPERS
+    # ICMP PING HELPER
     # ========================================================
 
-    @staticmethod
-    def tcp_to_ip_packet( source_interface, destination_ip, tcp_packet, ttl=64):
+    def ping(self, source, destination_ip: str, payload="ping", ttl=64):
+        if isinstance(source, str):
+            source = self.get_host(source)
+        if not source or not source.interfaces:
+            raise ValueError("Source device has no interfaces.")
 
-        return Packet(
-            source_ip=source_interface.ip,
-            destination_ip=destination_ip,
-            protocol="TCP",
-            ttl = ttl,
-            payload=tcp_packet
-        )
+        source.last_icmp_result = None
+        intf = source.interfaces[0]
 
-    @staticmethod
-    def udp_to_ip_packet( source_interface, destination_ip, udp_packet, ttl=64 ):
-
-        return Packet(
-            source_ip=source_interface.ip,
-            destination_ip=destination_ip,
-            protocol="UDP",
-            ttl = ttl,
-            payload=udp_packet
-        )
-
-    @staticmethod
-    def icmp_to_ip_packet( source_interface, destination_ip, icmp_packet, ttl=64 ):
-
-        return Packet(
-            source_ip=source_interface.ip,
+        icmp = ICMPPacket(type="ECHO_REQUEST", code=0, payload=payload)
+        packet = Packet(
+            source_ip=intf.ip,
             destination_ip=destination_ip,
             protocol="ICMP",
-            ttl = ttl,
-            payload=icmp_packet
-        )
-    # ========================================================
-    # TCP
-    # ========================================================
-
-    def create_tcp_connection( self, source, source_port, destination, destination_port ):
-
-        if isinstance(source, str):
-            source = self.get_host(source)
-
-        if isinstance(destination, str):
-            destination = self.get_host(destination)
-
-        existing = self.get_tcp_connection(
-            source,
-            source_port,
-            destination,
-            destination_port
-        )
-        
-        if existing is not None:
-            return existing
-
-        connection = TCPConnection(
-            local_ip=source.get_ip(),
-            local_port=source_port,
-            remote_ip=destination.get_ip(),
-            remote_port=destination_port,
-            network=self.network
-        )
-
-        key = (
-            connection.remote_ip,
-            connection.remote_port,
-            connection.local_ip,
-            connection.local_port
-        )
-
-        source.tcp_connections[key] = connection
-
-        self.tcp_connections[key] = connection
-
-        return connection
-
-    def remove_tcp_connection(self, connection):
-
-        key = (
-            connection.remote_ip,
-            connection.remote_port,
-            connection.local_ip,
-            connection.local_port
-        )
-
-        self.tcp_connections.pop(key, None)
-
-        host = self.get_host_by_ip(connection.local_ip)
-
-        host.tcp_connections.pop(key, None)
-
-    def tcp_connect( self, connection ):
-
-        packet = connection.connect()
-
-        ip_packet = self.tcp_to_ip_packet(
-            self.get_host_by_ip(connection.local_ip).interfaces[0],
-            connection.remote_ip,
-            packet
-        )
-
-        return self.get_host_by_ip(
-            connection.local_ip
-        ).interfaces[0].send_ip_packet(
-            ip_packet
-        )
-
-    def get_host_by_ip(self, ip):
-
-        if ip not in self.network.hosts:
-            raise ValueError(
-                f"No host with IP {ip}"
-            )
-
-        return self.network.hosts[ip]
-
-    # ========================================================
-    # UDP
-    # ========================================================
-
-    def create_udp_connection( self, source, source_port, destination, destination_port ):
-
-        if isinstance(source, str):
-            source = self.get_host(source)
-
-        if isinstance(destination, str):
-            destination = self.get_host(destination)
-
-        existing = self.get_udp_connection(
-            source,
-            source_port,
-            destination,
-            destination_port
-        )
-        
-        if existing is not None:
-            return existing
-
-        connection = UDPConnection(
-            local_ip=source.get_ip(),
-            local_port=source_port,
-            remote_ip=destination.get_ip(),
-            remote_port=destination_port,
-            network=self.network
-        )
-
-        key = (
-            connection.remote_ip,
-            connection.remote_port,
-            connection.local_ip,
-            connection.local_port
-        )
-
-        self.udp_connections[key] = connection
-
-        return connection
-
-    def remove_udp_connection(self, connection):
-
-        key = (
-            connection.remote_ip,
-            connection.remote_port,
-            connection.local_ip,
-            connection.local_port
-        )
-
-        self.udp_connections.pop(key, None)
-
-        host = self.get_host_by_ip(connection.local_ip)
-
-        host.udp_connections.pop(key, None)
-
-    def udp_send( self, connection, data ):
-
-        packet = connection.send(data)
-
-        source_host = self.get_host_by_ip(
-            connection.local_ip
-        )
-
-        ip_packet = self.udp_to_ip_packet(
-            source_host.interfaces[0],
-            connection.remote_ip,
-            packet
-        )
-
-        return source_host.interfaces[0].send_ip_packet(
-            ip_packet
-        )
-
-    # ========================================================
-    # CONNECTION MANAGEMENT
-    # ========================================================
-
-    def get_tcp_connection( self, source, source_port, destination, destination_port ):
-        if isinstance(source, str):
-            source = self.get_host(source)
-
-        if isinstance(destination, str):
-            destination = self.get_host(destination)
-
-        key = (
-            destination.get_ip(),
-            destination_port,
-            source.get_ip(),
-            source_port
-        )
-
-        return self.tcp_connections.get(key)
-
-    def get_udp_connection( self, source, source_port, destination, destination_port ):
-        if isinstance(source, str):
-            source = self.get_host(source)
-
-        if isinstance(destination, str):
-            destination = self.get_host(destination)
-
-        key = (
-            destination.get_ip(),
-            destination_port,
-            source.get_ip(),
-            source_port
-        )
-
-        return self.udp_connections.get(key)
-
-    def get_active_connections(self):
-
-        return {
-            "tcp": [
-                {
-                    "local": (
-                        connection.local_ip,
-                        connection.local_port
-                    ),
-                    "remote": (
-                        connection.remote_ip,
-                        connection.remote_port
-                    ),
-                    "state": connection.state.value
-                }
-                for connection in self.tcp_connections.values()
-            ],
-
-            "udp": [
-                {
-                    "local": (
-                        connection.local_ip,
-                        connection.local_port
-                    ),
-                    "remote": (
-                        connection.remote_ip,
-                        connection.remote_port
-                    )
-                }
-                for connection in self.udp_connections.values()
-            ]
-        }
-
-    def disconnect(self, link):
-        if link not in self.network.links:
-            raise ValueError("Link is not registered in the network")
-
-        endpoint_a = link.endpointA
-        endpoint_b = link.endpointB
-
-        if hasattr(endpoint_a, "link") and endpoint_a.link is link:
-            endpoint_a.link = None
-
-        if hasattr(endpoint_b, "link") and endpoint_b.link is link:
-            endpoint_b.link = None
-
-        self.network.remove_link(link)
-
-        return link
-    
-    # ========================================================
-    # GENERIC PACKET SENDING
-    # ========================================================
-    def ping(self, source, destination_ip, payload="ping", ttl=64):
-
-        if isinstance(source, str):
-            source = self.get_host(source)
-            
-        if not hasattr(source, "interfaces") or not source.interfaces:
-            raise ValueError(f"Device {source.name} has no interfaces configured.")
-
-        # Determine best interface based on routing/subnet
-        interface = None
-        if hasattr(source, "lookup_route"):
-            route = source.lookup_route(destination_ip)
-            if route:
-                interface = route["interface"]
-        
-        if not interface:
-            for intf in source.interfaces:
-                if intf.subnet and getattr(intf, 'network', None):
-                    import ipaddress
-                    try:
-                        if ipaddress.ip_address(destination_ip) in ipaddress.ip_network(intf.subnet):
-                            interface = intf
-                            break
-                    except:
-                        pass
-        
-        if not interface:
-            interface = source.interfaces[0]
-
-        #print("Ping Interface: ", interface)
-        source.last_icmp_result = None
-
-
-        request = ICMPPacket(
-            type="ECHO_REQUEST",
-            code=0,
-            payload=payload
-        )
-
-        packet = self.icmp_to_ip_packet(
-            interface,
-            destination_ip,
-            request,
+            payload=icmp,
             ttl=ttl
         )
-        interface.send_ip_packet(packet)
-        return source.last_icmp_result
-
-    def send_packet( self, source, destination_ip, packet ):
-
-        if isinstance(source, str):
-            source = self.get_host(source)
-
-        ip_packet = Packet(
-            source_ip=source.get_ip(),
-            destination_ip=destination_ip,
-            protocol=packet.protocol,
-            payload=packet
-        )
-
-        return source.interfaces[0].send_ip_packet(
-            ip_packet
-        )
-
-    def traceroute(self, source, destination_ip, max_hops=30):
-
-        if isinstance(source, str):
-            source = self.get_host(source)
-
-        hops = []
-
-        for ttl in range(1, max_hops + 1):
-
-            result = self.ping(
-                source=source,
-                destination_ip=destination_ip,
-                ttl=ttl
-            )
-
-            if result is None:
-                hops.append({
-                    "ttl": ttl,
-                    "address": None,
-                    "type": "TIMEOUT"
-                })
-
-                continue
-
-            if result["type"] == "TIME_EXCEEDED":
-
-                hops.append({
-                    "ttl": ttl,
-                    "address": result["source"],
-                    "type": "TIME_EXCEEDED"
-                })
-
-                continue
-
-            if result["type"] == "ECHO_REPLY":
-
-                hops.append({
-                    "ttl": ttl,
-                    "address": result["source"],
-                    "type": "ECHO_REPLY"
-                })
-
+        source.send_ip_packet(packet, out_interface=intf)
+        # Wait up to 200ms for tick-based delivery and ICMP reply
+        start_wait = time.time()
+        while time.time() - start_wait < 0.2:
+            if source.last_icmp_result is not None:
                 break
-
-            hops.append({
-                "ttl": ttl,
-                "address": result["source"],
-                "type": result["type"]
-            })
-
-            break
-
-        return hops
-
-    # ========================================================
-    # TIME
-    # ========================================================
-
-    def tick(self, seconds):
-
-        if seconds < 0:
-            raise ValueError(
-                "seconds cannot be negative"
-            )
-
-        for connection in list(self.tcp_connections.values()):
-
-            connection.tick(seconds)
-
-            if connection.state.value == "CLOSED":
-                self.remove_tcp_connection(connection)
-
-    # ========================================================
-    # TELEMETRY
-    # ========================================================
-
-    def get_events(self):
-
-        return self.network.events
-
-    def clear_events(self):
-
-        self.network.events.clear()
-
-    # ========================================================
-    # SIMULATION STATE
-    # ========================================================
-
-    def get_state(self):
-
-        return {
-            "name": self.name,
-
-            "hosts": [
-                {
-                    "name": host.name,
-                    
-                    "ip": host.get_ip(),
-                    "mac": host.get_mac(),
-                    "device_type": host.device_type.name,
-                    "services": [
-                        {
-                            "name": service.name,
-                            "protocol": service.protocol,
-                            "port": service.port,
-                            "status": service.status
-                        }
-
-                        for service in host.services
-                    ]
-                }
-
-                for host in self.hosts.values()
-            ],
-
-            "tcp_connections": [
-                {
-                    "local": (
-                        connection.local_ip,
-                        connection.local_port
-                    ),
-
-                    "remote": (
-                        connection.remote_ip,
-                        connection.remote_port
-                    ),
-
-                    "state": connection.state.value
-                }
-
-                for connection in self.tcp_connections.values()
-            ],
-
-            "udp_connections": [
-                {
-                    "local": (
-                        connection.local_ip,
-                        connection.local_port
-                    ),
-
-                    "remote": (
-                        connection.remote_ip,
-                        connection.remote_port
-                    )
-                }
-
-                for connection in self.udp_connections.values()
-            ]
-        }
-
-    def get_links(self):
-        return self.network.links
-    
+            time.sleep(0.01)
+        return source.last_icmp_result

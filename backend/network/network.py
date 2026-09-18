@@ -9,8 +9,8 @@ class Network:
 	def __init__(
 				self, 
 				name: str,
-				#subnet: str, 
-				#gateway: str | None 
+				subnet: str | None = None, 
+				gateway: str | None = None 
 				):
 		
 		self.name = name
@@ -18,75 +18,25 @@ class Network:
 		self.hosts : dict[str, Host] = {}
 		self.events : list[Event] = []
 		self.links = []
-
-		#self.subnet = [ipaddress.ip_network(subnet)]
 		self.subnets = {}
-		#self.gateway = gateway
+		from .arp import ARP
+		self.arp = ARP(network=self)
+		if subnet:
+			self.add_subnet(subnet, gateway)
+
+	def add_subnet(self, subnet: str, gateway: str | None = None):
+		self.subnets[subnet] = {"gateway": gateway}
+		return subnet
 
 		#self.arp = ARP(self)
 
-	def add_subnet(self, subnet, gateway):
-		network = ipaddress.ip_network(subnet)
-
-		if network in self.subnets:
-			raise ValueError(
-				f"Subnet already exists: {network}"
-			)
-
-		self.subnets[network] = {
-			"gateway": gateway
-		}
-
-		return network
-
-
-	def remove_subnet(self, subnet):
-		network = ipaddress.ip_network(subnet)
-
-		if network not in self.subnets:
-			raise ValueError(
-				f"Subnet doesn't exists: {network}"
-			)
-
-		return self.subnets.pop(network)
-
-	def get_subnet(self, ip):
-		ip = ipaddress.ip_address(ip)
-
-		for subnet, config in self.subnets.items():
-			if ip in subnet:
-				return subnet
-
-		return None
-
-	def get_gateway(self, ip):
-		subnet = self.get_subnet(ip)
-
-		if subnet is None:
-			return None
-
-		return self.subnets[subnet]["gateway"]
-
 	def add_host(self, host: Host):
-
-		for interface in host.interfaces:
-
-			if interface.ip is None:
-				continue
-
-			subnet = self.get_subnet(interface.ip)
-
-			if subnet is None:
-				raise ValueError(
-					f"{interface.ip} does not belong to any subnet"
-				)
-
-			
 		host.network = self
-		self.hosts[host.get_ip()] = host
+		self.hosts[host.name] = host
 
 	def add_event(self, event: Event):
 		self.events.append(event)
+		print(event)
 		if getattr(self, "on_event", None):
 			self.on_event(event)
 
@@ -100,10 +50,10 @@ class Network:
 		if dst_ip is None:
 			raise ValueError(f"{destination.name} does not have an IP address")
 
-		if src_ip not in self.hosts:
+		if source.name not in self.hosts:
 			raise ValueError(f"{source.name} is not part of this network")
 
-		if dst_ip not in self.hosts:
+		if destination.name not in self.hosts:
 			raise ValueError(f"{destination.name} is not part of this network")
 		intf = source.interfaces[0]
 		dest_mac = intf.arp.resolve(intf, dst_ip)
@@ -187,8 +137,8 @@ class Network:
 
 		return None
 
-	def add_service(self, host: Host, service):
-		if host.get_ip() not in self.hosts:
+	def add_service(self, host, service):
+		if getattr(host, 'network', None) != self:
 			raise ValueError(f"{host.name} is not part of this network")
 
 		if self.get_services(host, service.name):
@@ -203,7 +153,7 @@ class Network:
 			type="SERVICE_CREATED",
             severity="INFO",
 			source="SYSTEM",
-			destination=host.get_ip(),
+			destination=getattr(host, "name", "UNKNOWN"),
 			protocol=service.protocol,
 			port=service.port,
 			metadata={
@@ -225,12 +175,16 @@ class Network:
 		if service.status == "running": return
 
 		service.status = "running"
+		if hasattr(host, 'get_service_daemon'):
+			daemon = host.get_service_daemon(service.name)
+			if daemon and hasattr(daemon, 'on_start'):
+				daemon.on_start(service)
 
 		self.add_event(Event(
 				type="SERVICE_STARTED",
                 severity="INFO",
 				source="SYSTEM",
-				destination=host.get_ip(),
+				destination=getattr(host, "name", "UNKNOWN"),
 				protocol=service.protocol,
 				port=service.port,
 				metadata={
@@ -250,7 +204,7 @@ class Network:
 			type="SERVICE_REMOVED",
             severity="INFO",
 			source="SYSTEM",
-			destination=host.get_ip(),
+			destination=getattr(host, "name", "UNKNOWN"),
 			protocol=service.protocol,
 			port=service.port,
 			metadata={
@@ -272,12 +226,16 @@ class Network:
 		if service.status == "stopped": return
 
 		service.status = "stopped"
+		if hasattr(host, 'get_service_daemon'):
+			daemon = host.get_service_daemon(service.name)
+			if daemon and hasattr(daemon, 'on_stop'):
+				daemon.on_stop(service)
 
 		self.add_event(Event(
 				type="SERVICE_STOPPED",
                 severity="INFO",
 				source="SYSTEM",
-				destination=host.get_ip(),
+				destination=getattr(host, "name", "UNKNOWN"),
 				protocol=service.protocol,
 				port=service.port,
 				metadata={

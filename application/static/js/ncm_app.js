@@ -71,6 +71,7 @@ function createNCMWindow(deviceName, deviceType) {
                 ? `<button class="ncm-tab" data-tab="mac_table">MAC TABLE</button>`
                 : (deviceType === 'ROUTER'
                     ? `<button class="ncm-tab" data-tab="routes">ROUTING TABLE</button>
+                       <button class="ncm-tab" data-tab="services">SERVICES</button>
                        <button class="ncm-tab" data-tab="terminal">TERMINAL</button>`
                     : `<button class="ncm-tab" data-tab="services">SERVICES</button>
                        <button class="ncm-tab" data-tab="terminal">TERMINAL</button>`)
@@ -101,6 +102,9 @@ function createNCMWindow(deviceName, deviceType) {
             ` : (deviceType === 'ROUTER' ? `
             <div class="ncm-tab-content" data-content="routes">
                 <div class="ncm-routing-table"></div>
+            </div>
+            <div class="ncm-tab-content" data-content="services">
+                <div class="ncm-services-list"></div>
             </div>
             <div class="ncm-tab-content" data-content="terminal">
                 <div style="display: flex; flex-direction: column; height: 100%;">
@@ -337,9 +341,7 @@ function renderNCMInterfaces(window, deviceName, interfaces) {
                 
                 <input type="text" id="cfg-intf-name-${deviceName}" placeholder="${deviceName.startsWith('SWT') ? 'PORT (e.g. 1)' : 'INTERFACE (e.g. eth0)'}" style="width: 100%; margin-bottom: 8px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
                 
-                <input type="text" id="cfg-intf-ip-${deviceName}" placeholder="IP ADDRESS" style="width: 100%; margin-bottom: 8px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
-                
-                <input type="text" id="cfg-intf-sub-${deviceName}" placeholder="SUBNET MASK" style="width: 100%; margin-bottom: 12px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+                <input type="text" id="cfg-intf-ip-${deviceName}" placeholder="IP ADDRESS (e.g. 10.0.0.1/24)" style="width: 100%; margin-bottom: 8px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
                 
                 <button style="width: 100%; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; color: #00e5ff; padding: 8px; font-family: monospace; font-weight: bold; letter-spacing: 2px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0, 229, 255, 0.1)'; this.style.color='#00e5ff';" onclick="updateNCMInterface('${deviceName}', document.getElementById('cfg-intf-name-${deviceName}').value, this.closest('.ncm-window'))">SAVE CONFIG</button>
             </div>
@@ -386,12 +388,11 @@ function renderNCMInterfaces(window, deviceName, interfaces) {
                                 <span style="font-size: 9px; color: ${statusColor}; margin-left: 10px; font-weight: bold; letter-spacing: 1px; ${statusGlow}">[ ${statusText} ]</span>
                                 <div style="font-size: 11px; margin-top: 8px; color: #8a9ba8; display: grid; grid-template-columns: 50px 1fr; gap: 4px;">
                                     <div style="color: #5c6b73;">MAC</div><div style="color: #d5ebf2;">${intf.mac || "—"}</div>
-                                    <div style="color: #5c6b73;">IP</div><div style="color: #00e5ff;">${intf.ip || "—"}</div>
-                                    <div style="color: #5c6b73;">SUB</div><div style="color: #d5ebf2;">${intf.subnet || "—"}</div>
+                                    <div style="color: #5c6b73;">IP</div><div style="color: #00e5ff;">${intf.ip ? (intf.subnet && intf.subnet.includes('/') ? intf.ip + '/' + intf.subnet.split('/')[1] : intf.ip) : "—"}</div>
                                 </div>
                             </div>
                             <div style="display: flex; gap: 6px;">
-                                <button style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #8a9ba8; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#fff'; this.style.borderColor='rgba(255,255,255,0.3)';" onmouseout="this.style.color='#8a9ba8'; this.style.borderColor='rgba(255,255,255,0.1)';" title="Edit" onclick="const form = document.getElementById('add-intf-form-${deviceName}'); form.style.display='block'; form.dataset.editing='${intf.name}'; document.getElementById('cfg-intf-name-${deviceName}').value='${intf.name}'; document.getElementById('cfg-intf-name-${deviceName}').readOnly=true; document.getElementById('cfg-intf-name-${deviceName}').style.opacity='0.5'; document.getElementById('cfg-intf-ip-${deviceName}').value='${intf.ip || ''}'; document.getElementById('cfg-intf-sub-${deviceName}').value='${intf.subnet || ''}';">[ EDIT ]</button>
+                                <button style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #8a9ba8; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#fff'; this.style.borderColor='rgba(255,255,255,0.3)';" onmouseout="this.style.color='#8a9ba8'; this.style.borderColor='rgba(255,255,255,0.1)';" title="Edit" onclick="const form = document.getElementById('add-intf-form-${deviceName}'); form.style.display='block'; form.dataset.editing='${intf.name}'; document.getElementById('cfg-intf-name-${deviceName}').value='${intf.name}'; document.getElementById('cfg-intf-name-${deviceName}').readOnly=true; document.getElementById('cfg-intf-name-${deviceName}').style.opacity='0.5'; document.getElementById('cfg-intf-ip-${deviceName}').value='${intf.ip ? (intf.subnet && intf.subnet.includes('/') ? intf.ip + '/' + intf.subnet.split('/')[1] : intf.ip) : ''}';">[ EDIT ]</button>
                                 
                                 <button style="background: rgba(255, 51, 51, 0.05); border: 1px solid rgba(255, 51, 51, 0.2); color: #ff3333; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(255, 51, 51, 0.2)'; this.style.borderColor='#ff3333';" onmouseout="this.style.background='rgba(255, 51, 51, 0.05)'; this.style.borderColor='rgba(255, 51, 51, 0.2)';" title="Delete" onclick="deleteNCMInterface('${deviceName}', '${intf.name}', this.closest('.ncm-window'))">[ DEL ]</button>
                             </div>
@@ -599,7 +600,6 @@ async function handleTerminalInput(event, deviceName) {
 
 async function updateNCMInterface(deviceName, interfaceName, win) {
     const ipInput = document.getElementById(`cfg-intf-ip-${deviceName}`);
-    const subInput = document.getElementById(`cfg-intf-sub-${deviceName}`);
     const form = document.getElementById(`add-intf-form-${deviceName}`);
     
     // Use the original name we're editing, or the field value if it's a new interface
@@ -613,20 +613,17 @@ async function updateNCMInterface(deviceName, interfaceName, win) {
             await apiRequest("POST", `/api/ncm/interfaces`, {
                 device: deviceName,
                 name: targetName,
-                ip: ipInput.value || null,
-                subnet: subInput.value || null
+                ip: ipInput.value || null
             });
-            // If IP/Subnet provided, we also need to update it since POST only sets the name/mac
-            if (ipInput.value || subInput.value) {
+            // If IP provided, we also need to update it since POST only sets the name/mac
+            if (ipInput.value) {
                 await apiRequest("PUT", `/api/ncm/devices/${encodeURIComponent(deviceName)}/interfaces/${encodeURIComponent(targetName)}`, {
-                    ip: ipInput.value || null,
-                    subnet: subInput.value || null
+                    ip: ipInput.value || null
                 });
             }
         } else {
             await apiRequest("PUT", `/api/ncm/devices/${encodeURIComponent(deviceName)}/interfaces/${encodeURIComponent(targetName)}`, {
-                ip: ipInput.value || null,
-                subnet: subInput.value || null
+                ip: ipInput.value || null
             });
         }
         
@@ -753,7 +750,7 @@ function renderNCMHealth(window, health) {
                     <div style="color: #5c6b73;">> ${deviceName.startsWith('SWT') ? 'SWITCH_PORTS' : 'INTERFACES'}</div>
                     <div style="color: #d5ebf2;">${health.interfaces_active ?? 0} / ${health.interfaces_total ?? 0} ACTIVE</div>
                     
-                    ${!deviceName.startsWith('SWT') && !deviceName.startsWith('RUT') ? `
+                    ${!deviceName.startsWith('SWT') ? `
                     <div style="color: #5c6b73;">> SERVICES</div>
                     <div style="color: #d5ebf2;">${health.services_total ?? 0} TOTAL <span style="color: #00e5ff; margin-left: 8px;">(${health.services_running ?? 0} RUNNING)</span></div>
                     ` : ''}
@@ -777,6 +774,22 @@ function renderNCMServices(window, deviceName, services) {
         services = [];
     }
 
+    const availableServices = [
+        { value: "HTTP", label: "HTTP SERVER (TCP/80)" },
+        { value: "DNS", label: "DNS SERVER (UDP/53)" },
+        { value: "DHCP", label: "DHCP SERVER (UDP/67)" },
+        { value: "DHCP_CLIENT", label: "DHCP CLIENT (UDP/68)" },
+        { value: "DHCP_RELAY", label: "DHCP RELAY (UDP/67)" },
+        { value: "SSH", label: "SSH DAEMON (TCP/22)" },
+        { value: "ECHO", label: "ECHO RESPONDER (ICMP/0)" }
+    ];
+    
+    let optionsHtml = "";
+    for (const svc of availableServices) {
+        const isActive = services.find(s => s.name === svc.value) !== undefined;
+        optionsHtml += `<option value="${svc.value}" ${isActive ? 'disabled' : ''}>${svc.label}${isActive ? ' - (ACTIVE)' : ''}</option>`;
+    }
+
     let servicesHtml = `
         <div class="ncm-config-section">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(0, 229, 255, 0.15); padding-bottom: 8px;">
@@ -786,14 +799,15 @@ function renderNCMServices(window, deviceName, services) {
             
             <div id="add-svc-form-${deviceName}" style="display: none; margin-top: 15px; border: 1px dashed rgba(0, 229, 255, 0.3); background: rgba(0, 0, 0, 0.2); padding: 15px;">
                 <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 10px; font-weight: bold;">// INITIALIZE NEW SERVICE ROUTINE</div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                    <input type="text" id="new-svc-name-${deviceName}" placeholder="NAME (e.g. HTTP)" style="background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+                <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
+                    <select id="new-svc-preset-${deviceName}" onchange="document.getElementById('svc-config-wrapper-'+'${deviceName}').style.display = (this.value === 'DHCP_RELAY') ? 'block' : 'none';" style="background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s; cursor: pointer;">
+                        ${optionsHtml}
+                    </select>
+                    <div id="svc-config-wrapper-${deviceName}" style="display: none;">
+                        <input type="text" id="svc-target-ip-${deviceName}" placeholder="Target Server IP (e.g. 10.0.1.254)" style="background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s; width: 100%;">
+                    </div>
                     
-                    <input type="text" id="new-svc-proto-${deviceName}" placeholder="PROTOCOL (TCP/UDP)" style="background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
-                    
-                    <input type="number" id="new-svc-port-${deviceName}" placeholder="PORT_BINDING" style="grid-column: span 2; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
-                    
-                    <button style="grid-column: span 2; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; color: #00e5ff; padding: 8px; font-family: monospace; font-weight: bold; letter-spacing: 2px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0, 229, 255, 0.1)'; this.style.color='#00e5ff';" onclick="addNCMService('${deviceName}', this.closest('.ncm-window'))">SPAWN SERVICE</button>
+                    <button style="background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; color: #00e5ff; padding: 8px; font-family: monospace; font-weight: bold; letter-spacing: 2px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0, 229, 255, 0.1)'; this.style.color='#00e5ff';" onclick="addNCMService('${deviceName}', this.closest('.ncm-window'))">SPAWN SERVICE</button>
                 </div>
             </div>
             
@@ -819,6 +833,7 @@ function renderNCMServices(window, deviceName, services) {
                         <div style="font-size: 11px; margin-top: 8px; color: #8a9ba8; display: grid; grid-template-columns: 40px 1fr; gap: 4px;">
                             <div style="color: #5c6b73;">PROTO</div><div style="color: #d5ebf2;">${(s.protocol || '').toUpperCase()}</div>
                             <div style="color: #5c6b73;">PORT</div><div style="color: #00e5ff;">${s.port}</div>
+                            ${s.config && s.config.target_ip ? `<div style="color: #5c6b73;">TARGET</div><div style="color: #ffaa00;">${s.config.target_ip}</div>` : ''}
                         </div>
                     </div>
                     <div style="display: flex; gap: 6px; align-items: flex-start;">
@@ -826,8 +841,6 @@ function renderNCMServices(window, deviceName, services) {
                             `<button style="background: rgba(255, 170, 0, 0.05); border: 1px solid rgba(255, 170, 0, 0.3); color: #ffaa00; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(255, 170, 0, 0.2)'; this.style.borderColor='#ffaa00';" onmouseout="this.style.background='rgba(255, 170, 0, 0.05)'; this.style.borderColor='rgba(255, 170, 0, 0.3)';" title="Stop" onclick="manageService('${deviceName}', '${s.name}', 'stop', this.closest('.ncm-window'))">[ STOP ]</button>` :
                             `<button style="background: rgba(0, 229, 255, 0.05); border: 1px solid rgba(0, 229, 255, 0.3); color: #00e5ff; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(0, 229, 255, 0.2)'; this.style.borderColor='#00e5ff';" onmouseout="this.style.background='rgba(0, 229, 255, 0.05)'; this.style.borderColor='rgba(0, 229, 255, 0.3)';" title="Start" onclick="manageService('${deviceName}', '${s.name}', 'start', this.closest('.ncm-window'))">[ START ]</button>`
                         }
-                        
-                        <button style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #8a9ba8; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#fff'; this.style.borderColor='rgba(255,255,255,0.3)';" onmouseout="this.style.color='#8a9ba8'; this.style.borderColor='rgba(255,255,255,0.1)';" title="Edit" onclick="const f=document.getElementById('add-svc-form-${deviceName}'); f.style.display='block'; document.getElementById('new-svc-name-${deviceName}').value='${s.name}'; document.getElementById('new-svc-proto-${deviceName}').value='${s.protocol}'; document.getElementById('new-svc-port-${deviceName}').value='${s.port}';">[ EDIT ]</button>
                         
                         <button style="background: rgba(255, 51, 51, 0.05); border: 1px solid rgba(255, 51, 51, 0.2); color: #ff3333; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(255, 51, 51, 0.2)'; this.style.borderColor='#ff3333';" onmouseout="this.style.background='rgba(255, 51, 51, 0.05)'; this.style.borderColor='rgba(255, 51, 51, 0.2)';" title="Delete" onclick="manageService('${deviceName}', '${s.name}', 'remove', this.closest('.ncm-window'))">[ DEL ]</button>
                     </div>
@@ -855,17 +868,33 @@ async function manageService(deviceName, serviceName, action, win) {
 }
 
 async function addNCMService(deviceName, win) {
-    const nameInput = document.getElementById(`new-svc-name-${deviceName}`);
-    const protoInput = document.getElementById(`new-svc-proto-${deviceName}`);
-    const portInput = document.getElementById(`new-svc-port-${deviceName}`);
+    const preset = document.getElementById(`new-svc-preset-${deviceName}`).value;
+    
+    let proto = "TCP";
+    let port = 80;
+    let config = {};
 
-    if (!nameInput.value || !protoInput.value || !portInput.value) return;
+    if (preset === "HTTP") { proto = "TCP"; port = 80; }
+    else if (preset === "DNS") { proto = "UDP"; port = 53; }
+    else if (preset === "DHCP") { proto = "UDP"; port = 67; }
+    else if (preset === "DHCP_CLIENT") { proto = "UDP"; port = 68; }
+    else if (preset === "DHCP_RELAY") { 
+        proto = "UDP"; 
+        port = 67; 
+        const targetIpInput = win.querySelector(`#svc-target-ip-${deviceName}`);
+        if (targetIpInput && targetIpInput.value) {
+            config.target_ip = targetIpInput.value;
+        }
+    }
+    else if (preset === "SSH") { proto = "TCP"; port = 22; }
+    else if (preset === "ECHO") { proto = "ICMP"; port = 0; }
 
     try {
         await apiRequest("POST", `/api/ncm/devices/${encodeURIComponent(deviceName)}/services`, {
-            name: nameInput.value,
-            protocol: protoInput.value,
-            port: portInput.value
+            name: preset,
+            protocol: proto,
+            port: port,
+            config: config
         });
         loadNCMDevice(deviceName, win);
     } catch (error) {
@@ -901,15 +930,15 @@ function openGlobalNCM() {
         </div>
         <div class="ncm-tabs">
             <button class="ncm-tab active" data-tab="settings">SETTINGS</button>
-            <button class="ncm-tab" data-tab="subnets">SUBNETS</button>
+            <button class="ncm-tab" data-tab="forger">PAYLOAD FORGER</button>
             <button class="ncm-tab" data-tab="alerts">ALERTS (HIGH)</button>
         </div>
         <div class="ncm-content">
             <div class="ncm-tab-content active" data-content="settings">
                 <div class="ncm-settings-list"></div>
             </div>
-            <div class="ncm-tab-content" data-content="subnets">
-                <div class="ncm-subnets-list"></div>
+            <div class="ncm-tab-content" data-content="forger">
+                <div class="ncm-forger-interface"></div>
             </div>
             <div class="ncm-tab-content" data-content="alerts">
                 <div class="ncm-alerts-list"></div>
@@ -973,8 +1002,7 @@ async function loadGlobalNCM(win) {
         const settings = await apiRequest("GET", "/api/simulation/settings");
         renderGlobalSettings(win, settings);
 
-        const subnets = await apiRequest("GET", "/api/ncm/subnets");
-        renderGlobalSubnets(win, subnets);
+        renderPayloadForger(win);
         
         const events = await apiRequest("GET", "/api/simulation/events");
         renderGlobalAlerts(win, events.filter(e => e.severity === "HIGH" || e.severity === "WARNING"));
@@ -1079,111 +1107,98 @@ async function saveGlobalSettings(win) {
     }
 }
 
-function renderGlobalSubnets(win, subnets) {
-    const container = win.querySelector(".ncm-subnets-list");
-    let html = `
+function renderPayloadForger(win) {
+    const container = win.querySelector(".ncm-forger-interface");
+    if (!container) return;
+    
+    container.innerHTML = `
         <div class="ncm-config-section">
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(0, 229, 255, 0.15); padding-bottom: 8px;">
-                <div class="ncm-section-title" style="color: #00e5ff; font-weight: bold; letter-spacing: 2px;">>_ SUBNET ALLOCATION</div>
-                <button style="background: rgba(0,229,255,0.1); border: 1px solid #00e5ff; color: #00e5ff; font-family: monospace; font-weight: bold; padding: 2px 10px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0,229,255,0.1)'; this.style.color='#00e5ff';" onclick="const f = document.getElementById('add-subnet-form'); f.style.display = f.style.display === 'none' ? 'block' : 'none';">+</button>
-            </div>
-
-            <div id="add-subnet-form" style="display: none; margin-top: 15px; border: 1px dashed rgba(0, 229, 255, 0.3); background: rgba(0, 0, 0, 0.2); padding: 15px;">
-                <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 10px; font-weight: bold;">// DEFINE NETWORK BLOCK</div>
-                
-                <input type="text" id="new-subnet-cidr" placeholder="CIDR (e.g. 10.0.0.0/24)" style="width: 100%; margin-bottom: 8px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
-                
-                <input type="text" id="new-subnet-gw" placeholder="GATEWAY IP (OPTIONAL)" style="width: 100%; margin-bottom: 12px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
-                
-                <button style="width: 100%; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; color: #00e5ff; padding: 8px; font-family: monospace; font-weight: bold; letter-spacing: 2px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0, 229, 255, 0.1)'; this.style.color='#00e5ff';" onclick="addGlobalSubnet(this.closest('.ncm-window'))">EXECUTE ALLOCATION</button>
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(0, 229, 255, 0.15); padding-bottom: 8px; margin-bottom: 15px;">
+                <div class="ncm-section-title" style="color: #00e5ff; font-weight: bold; letter-spacing: 2px;">>_ CRAFT CUSTOM PACKET</div>
             </div>
             
-            <div style="margin-top: 15px;">
-    `;
-
-    const subnetKeys = Object.keys(subnets);
-    if (subnetKeys.length === 0) {
-        html += `<div style="color: #5c6b73; font-style: italic; text-align: center; padding: 20px 0;">>_ NO SUBNETS CONFIGURED</div>`;
-    } else {
-        subnetKeys.forEach(cidr => {
-            const sn = subnets[cidr];
-            const dhcpColor = sn.dhcp_enabled ? '#00e5ff' : '#5c6b73';
-            
-            html += `
-                <div style="border: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.02); padding: 12px; margin-bottom: 8px; transition: border 0.2s;" onmouseover="this.style.borderColor='rgba(0,229,255,0.3)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.05)'">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                        <div>
-                            <strong style="color: #fff; font-size: 12px; letter-spacing: 1px;">${cidr}</strong>
-                            <div style="font-size: 11px; margin-top: 8px; color: #8a9ba8; display: grid; grid-template-columns: 40px 1fr; gap: 4px;">
-                                <div style="color: #5c6b73;">GW</div><div style="color: #00e5ff;">${sn.gateway || "UNASSIGNED"}</div>
-                            </div>
-                        </div>
-                        <div style="display: flex; align-items: flex-start;">
-                            <button style="background: rgba(255, 51, 51, 0.05); border: 1px solid rgba(255, 51, 51, 0.2); color: #ff3333; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(255, 51, 51, 0.2)'; this.style.borderColor='#ff3333';" onmouseout="this.style.background='rgba(255, 51, 51, 0.05)'; this.style.borderColor='rgba(255, 51, 51, 0.2)';" title="Delete" onclick="removeGlobalSubnet('${cidr}', this.closest('.ncm-window'))">[ DEL ]</button>
-                        </div>
+            <div style="background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); padding: 15px;">
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                    <div>
+                        <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 8px; font-weight: bold;">// PROTOCOL</div>
+                        <select id="forge-proto" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s; cursor: pointer;">
+                            <option value="TCP">TCP</option>
+                            <option value="UDP">UDP</option>
+                            <option value="ICMP">ICMP</option>
+                        </select>
+                    </div>
+                    <div>
+                        <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 8px; font-weight: bold;">// SRC PORT</div>
+                        <input type="number" id="forge-src-port" placeholder="49152" value="49152" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;">
+                    </div>
+                    <div>
+                        <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 8px; font-weight: bold;">// DEST PORT</div>
+                        <input type="number" id="forge-dst-port" placeholder="80" value="80" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;">
                     </div>
                 </div>
-            `;
-        });
-    }
-    html += `</div></div>`;
-    container.innerHTML = html;
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                    <div>
+                        <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 8px; font-weight: bold;">// SOURCE IP (SPOOFABLE)</div>
+                        <input type="text" id="forge-src" placeholder="10.0.0.5" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;">
+                    </div>
+                    <div>
+                        <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 8px; font-weight: bold;">// DESTINATION IP</div>
+                        <input type="text" id="forge-dst" placeholder="10.0.1.5" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;">
+                    </div>
+                </div>
+                
+                <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 8px; font-weight: bold;">// RAW PAYLOAD DATA</div>
+                <textarea id="forge-payload" placeholder="Enter raw string payload (e.g. GET /index.html HTTP/1.1 or DROP TABLE USERS;)" style="width: 100%; height: 60px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #d5ebf2; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s; resize: none; margin-bottom: 15px;"></textarea>
+
+                <button id="forge-submit-btn" style="width: 100%; background: rgba(255, 51, 51, 0.1); border: 1px solid #ff3333; color: #ff3333; padding: 10px 15px; font-family: monospace; font-weight: bold; letter-spacing: 2px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#ff3333'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(255, 51, 51, 0.1)'; this.style.color='#ff3333';" onclick="submitForgedPayload()">[ FIRE PAYLOAD ]</button>
+            </div>
+        </div>
+    `;
 }
 
-function renderGlobalAlerts(win, events) {
-    const container = win.querySelector(".ncm-alerts-list");
-    let html = `<div class="ncm-config-section">
-        <div class="ncm-section-title">HIGH SEVERITY ALERTS</div>
-        <div style="margin-top: 15px;">
-    `;
-
-    if (events.length === 0) {
-        html += `<div style="color: #4ade80; padding: 10px 0;">NO CRITICAL ALERTS</div>`;
-    } else {
-        // Reverse to show newest first
-        events.reverse().forEach(evt => {
-            html += `
-                <div style="border-bottom: 1px solid #333; padding: 10px 0;">
-                    <div style="color: #ef4444; font-weight: bold; margin-bottom: 5px;">
-                        [${evt.type}]
-                    </div>
-                    <div style="font-size: 12px; color: #ccc;">
-                        <div>Time: ${new Date(evt.timestamp).toLocaleTimeString()}</div>
-                        <div>Source: ${evt.source || "System"}</div>
-                        ${evt.metadata && evt.metadata.error ? `<div style="color: #ffaa00; margin-top: 5px;">${evt.metadata.error}</div>` : ""}
-                        ${evt.metadata && evt.metadata.reason ? `<div style="color: #ffaa00; margin-top: 5px;">${evt.metadata.reason}</div>` : ""}
-                    </div>
-                </div>
-            `;
-        });
+async function submitForgedPayload() {
+    const proto = document.getElementById("forge-proto").value;
+    const srcPort = document.getElementById("forge-src-port").value;
+    const dstPort = document.getElementById("forge-dst-port").value;
+    const src = document.getElementById("forge-src").value;
+    const dst = document.getElementById("forge-dst").value;
+    const payload = document.getElementById("forge-payload").value;
+    
+    if (!src || !dst) {
+        alert("Source and Destination IPs are required!");
+        return;
     }
     
-    html += `</div></div>`;
-    container.innerHTML = html;
-}
-
-async function addGlobalSubnet(win) {
-    const cidrInput = document.getElementById("new-subnet-cidr");
-    const gwInput = document.getElementById("new-subnet-gw");
-    if (!cidrInput.value) return;
-
     try {
-        await apiRequest("POST", "/api/ncm/subnets", {
-            subnet: cidrInput.value,
-            gateway: gwInput.value || null
+        await apiRequest("POST", "/api/simulation/forge", {
+            protocol: proto,
+            source_port: parseInt(srcPort) || null,
+            destination_port: parseInt(dstPort) || null,
+            source_ip: src,
+            destination_ip: dst,
+            payload: payload
         });
-        loadGlobalNCM(win);
+        
+        // Flash button green on success
+        const btn = document.getElementById("forge-submit-btn");
+        if (btn) {
+            const oldBg = btn.style.background;
+            const oldColor = btn.style.color;
+            btn.style.background = "#00e5ff";
+            btn.style.color = "#0a0f18";
+            btn.innerText = "[ PAYLOAD INJECTED ]";
+            
+            setTimeout(() => {
+                btn.style.background = oldBg;
+                btn.style.color = oldColor;
+                btn.innerText = "[ FIRE PAYLOAD ]";
+            }, 1000);
+        }
+        
     } catch (e) {
-        console.error("Failed to add subnet", e);
+        console.error("Payload forge failed", e);
+        alert("Failed to inject payload: " + (e.message || "Unknown Error"));
     }
 }
-
-async function removeGlobalSubnet(cidr, win) {
-    try {
-        await apiRequest("DELETE", "/api/ncm/subnets", { subnet: cidr });
-        loadGlobalNCM(win);
-    } catch (e) {
-        console.error("Failed to remove subnet", e);
-    }
-}
-

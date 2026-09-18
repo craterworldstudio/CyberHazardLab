@@ -24,7 +24,7 @@ class TCPConnection:
         self,
         local_ip: str, local_port: int,
         remote_ip: str, remote_port: int,
-        network
+        network=None
     ):
         self.local_ip = local_ip
         self.local_port = local_port

@@ -79,3 +79,9 @@ SUCCESS: Added event Unknown SIMULATION endpoint. Total events now: 118
 SUCCESS: Added event Unknown SIMULATION endpoint. Total events now: 119
 SUCCESS: Added event Unknown SIMULATION endpoint. Total events now: 120
 SUCCESS: Added event Unknown SIMULATION endpoint. Total events now: 121
+SUCCESS: Added event SERV-01 is not part of this network. Total events now: 1
+SUCCESS: Added event SERV-01 is not part of this network. Total events now: 2
+SUCCESS: Added event SERV-01 is not part of this network. Total events now: 3
+SUCCESS: Added event None does not appear to be an IPv4 or IPv6 address. Total events now: 6
+SUCCESS: Added event HOST-01 already has service DHCP_CLIENT. Total events now: 7
+SUCCESS: Added event None does not appear to be an IPv4 or IPv6 address. Total events now: 11

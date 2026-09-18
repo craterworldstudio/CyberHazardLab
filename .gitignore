@@ -5,3 +5,5 @@ __pycache__
 __pycache__/
 tests/output.txt
 simulation_state.json
+tests/
+tmp/

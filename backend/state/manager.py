@@ -209,20 +209,19 @@ class StateManager:
     def serialize_services(self):
         services = {}
 
-        for host in self.simulation.hosts.values():
-
-            if not host.services:
+        all_nodes = list(self.simulation.hosts.values()) + list(self.simulation.routers.values())
+        for node in all_nodes:
+            if not getattr(node, "services", None):
                 continue
-
-            services[host.name] = []
-            for svc in host.services:
-                services[host.name].append({
+            services[node.name] = []
+            for svc in node.services:
+                services[node.name].append({
                     "name": svc.name,
                     "protocol": svc.protocol,
                     "port": svc.port,
-                    "status": svc.status
+                    "status": svc.status,
+                    "config": getattr(svc, "config", {})
                 })
-
         return services
 
     # ========================================================

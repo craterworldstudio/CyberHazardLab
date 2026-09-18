@@ -5,6 +5,7 @@ class SwitchPort:
         self.port_number = port_number
         self.link = None
         self.mode = mode
+        self.rx_buffer = []
 
     def connect_link(self, link):
         self.link =  link
@@ -15,7 +16,13 @@ class SwitchPort:
             raise ValueError(
                 f"This SwitchPort {self.port_number} is not connected to assigned to a switch"
             )
-        return self.switch.receive( frame, self.port_number)
+        self.rx_buffer.append(frame)
+        return None
+        
+    def process_rx_buffer(self):
+        while self.rx_buffer:
+            frame = self.rx_buffer.pop(0)
+            self.switch.receive(frame, self.port_number)
         
     def send(self, frame):
         #print('spr2')

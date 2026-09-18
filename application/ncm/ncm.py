@@ -160,21 +160,30 @@ class NetworkConfigurationManager:
             f"Interfaces cannot be removed from {device.name}"
         )
 
-    def update_interface(self, device, interface_name, ip=None, subnet=None):
+    def update_interface(self, device, interface_name, ip=None, subnet=None, mac=None):
         device_obj = self.get_device(device)
         for intf in getattr(device_obj, 'interfaces', []):
             if intf.name == interface_name:
+                if mac is not None:
+                    intf.mac = mac
+                
+                # Split CIDR if provided in IP field
+                if ip and "/" in ip:
+                    parts = ip.split("/")
+                    ip = parts[0]
+                    # Convert prefix len to actual IP Network string (e.g. 192.168.1.0/24)
+                    import ipaddress
+                    try:
+                        net = ipaddress.ip_network(f"{ip}/{parts[1]}", strict=False)
+                        subnet = str(net)
+                    except ValueError:
+                        subnet = f"{ip}/{parts[1]}"
+                
                 if device_obj in self.simulation.routers.values() and hasattr(device_obj, 'update_intf'):
                     device_obj.update_intf(intf, ip=ip, subnet=subnet)
                 else:
                     if ip is not None:
-                        # Remove old IP from network hosts mapping if it's a Host
-                        old_ip = intf.ip
-                        if old_ip and old_ip in self.simulation.network.hosts and self.simulation.network.hosts[old_ip] == device_obj:
-                            del self.simulation.network.hosts[old_ip]
                         intf.ip = ip
-                        if ip and device_obj in self.simulation.hosts.values():
-                            self.simulation.network.hosts[ip] = device_obj
                     if subnet is not None:
                         intf.subnet = subnet
                 return intf
@@ -184,27 +193,6 @@ class NetworkConfigurationManager:
     # NETWORK / SUBNET MANAGEMENT
     # ========================================================
 
-    def add_subnet(self, subnet, gateway=None):
-
-        return self.simulation.add_subnet(
-            subnet,
-            gateway
-        )
-
-    def get_subnets(self):
-
-        return self.simulation.network.subnets
-
-    def get_subnet(self, ip):
-
-        return self.simulation.network.get_subnet(ip)
-
-    def get_gateway(self, ip):
-
-        return self.simulation.network.get_gateway(ip)
-
-    def remove_subnet(self, subnet):
-        return self.simulation.remove_subnet(subnet)
 
     # ========================================================
     # SERVICE MANAGEMENT
@@ -214,11 +202,6 @@ class NetworkConfigurationManager:
     ):
 
         device = self.get_device(device)
-
-        if device not in self.simulation.hosts.values():
-            raise ValueError(
-                f"Services cannot be added to {device.name}"
-            )
 
         return self.simulation.add_service( device, name, protocol, port, status
         )
@@ -248,11 +231,3 @@ class NetworkConfigurationManager:
             device,
             service_name
         )
-
-
-
-
-
-
-
-    
