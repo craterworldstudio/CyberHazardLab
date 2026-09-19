@@ -257,25 +257,31 @@ class API:
             payload = body.get("payload", "")
             
             source_device = None
-            source_intf = None
+            all_l3 = list(self.ntm.simulation.hosts.values()) + list(self.ntm.simulation.routers.values())
             
-            for host in self.ntm.simulation.hosts.values():
-                for intf in host.interfaces:
-                    if intf.ip == src_ip:
-                        source_device = host
-                        source_intf = intf
-                        break
-                if source_device: break
-                
+            if src_ip:
+                for dev in all_l3:
+                    for intf in dev.interfaces:
+                        if intf.ip == src_ip:
+                            source_device = dev
+                            source_intf = intf
+                            break
+                    if source_device: break
+                    
             if not source_device:
-                for host in self.ntm.simulation.hosts.values():
-                    if host.interfaces and host.interfaces[0].link:
-                        source_device = host
-                        source_intf = host.interfaces[0]
-                        break
+                for dev in all_l3:
+                    for intf in dev.interfaces:
+                        if intf.link is not None:
+                            source_device = dev
+                            source_intf = intf
+                            break
+                    if source_device: break
             
             if not source_device or not source_intf:
-                raise ValueError("No valid entry point (online host) found in the network to inject the payload.")
+                raise ValueError("No valid entry point (connected node) found in the network to inject the payload.")
+                
+            if not src_ip or src_ip == "0.0.0.0":
+                src_ip = source_intf.ip if (source_intf.ip and source_intf.ip != "0.0.0.0") else "10.0.0.100"
                 
             from backend.network.packet import Packet, TCPPacket, UDPPacket, ICMPPacket
             

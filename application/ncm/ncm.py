@@ -178,8 +178,15 @@ class NetworkConfigurationManager:
                         subnet = str(net)
                     except ValueError:
                         subnet = f"{ip}/{parts[1]}"
+                elif ip and ip != "0.0.0.0" and (not subnet or subnet in ("0.0.0.0/0", "0.0.0.0")):
+                    import ipaddress
+                    try:
+                        net = ipaddress.ip_network(f"{ip}/24", strict=False)
+                        subnet = str(net)
+                    except Exception:
+                        pass
                 
-                if device_obj in self.simulation.routers.values() and hasattr(device_obj, 'update_intf'):
+                if hasattr(device_obj, 'update_intf'):
                     device_obj.update_intf(intf, ip=ip, subnet=subnet)
                 else:
                     if ip is not None:

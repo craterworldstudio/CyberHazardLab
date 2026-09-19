@@ -13,11 +13,19 @@ async function apiRequest(method, path, body = null) {
 
     const response = await fetch(path, options);
 
-    const data = await response.json();
+    let data;
+    try {
+        data = await response.json();
+    } catch (e) {
+        if (!response.ok) {
+            throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+        }
+        return null;
+    }
 
     if (!response.ok) {
         throw new Error(
-            data.error || `API request failed: ${response.status}`
+            (data && data.error) || `API request failed: ${response.status}`
         );
     }
 

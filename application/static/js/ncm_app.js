@@ -696,18 +696,32 @@ setInterval(() => {
                         renderNCMRoutingTable(win, deviceName, deviceData.routes);
                     }
                     
-                    // Update Interfaces if form is not open (to prevent wiping user input)
+                    // Only update Interfaces if form is not actively editing and interface data changed
                     const form = win.querySelector(`#add-intf-form-${deviceName}`);
-                    if (!form || (form.style.display === 'none' && !form.dataset.editing)) {
-                        renderNCMInterfaces(win, deviceName, deviceData.interfaces || []);
+                    const isFormOpen = form && form.style.display !== 'none' && form.style.display !== '';
+                    const isEditing = form && Boolean(form.dataset.editing);
+                    
+                    if (!isFormOpen && !isEditing) {
+                        const intfKey = JSON.stringify(deviceData.interfaces || []);
+                        if (win._cachedIntfKey !== intfKey) {
+                            renderNCMInterfaces(win, deviceName, deviceData.interfaces || []);
+                            win._cachedIntfKey = intfKey;
+                        }
                     }
                     
-                    // Update Health
+                    // Update Health with real interface / service metrics
+                    const intfs = deviceData.interfaces || [];
+                    const activeIntfs = intfs.filter(i => i.connected && i.status === 'up').length;
+                    const svcs = deviceData.services || [];
+                    const runningSvcs = svcs.filter(s => (s.status || '').toLowerCase() === 'running').length;
+
                     renderNCMHealth(win, {
                         status: deviceData.status,
-                        uptime: "00:00:00", // We can add real uptime later
-                        cpu: Math.floor(Math.random() * 10) + 1,
-                        memory: Math.floor(Math.random() * 15) + 10
+                        uptime: deviceData.status === 'ONLINE' ? (win._cachedUptime || 'ACTIVE') : '00:00:00',
+                        interfaces_active: activeIntfs,
+                        interfaces_total: intfs.length,
+                        services_total: svcs.length,
+                        services_running: runningSvcs
                     });
                 }
             }
@@ -720,6 +734,41 @@ async function refreshGlobalAlerts(win) {
         const events = await apiRequest("GET", "/api/simulation/events");
         renderGlobalAlerts(win, events.filter(e => e.severity === "HIGH" || e.severity === "WARNING"));
     } catch(e) {}
+}
+
+function renderGlobalAlerts(win, events) {
+    const container = win.querySelector(".ncm-alerts-list");
+    if (!container) return;
+    
+    let html = `
+        <div class="ncm-config-section">
+            <div style="border-bottom: 1px solid rgba(0, 229, 255, 0.15); padding-bottom: 8px;">
+                <div class="ncm-section-title" style="color: #ff3333; font-weight: bold; letter-spacing: 2px;">>_ CRITICAL & HIGH ALERTS</div>
+            </div>
+            <div style="margin-top: 15px;">
+    `;
+
+    if (!events || events.length === 0) {
+        html += `<div style="color: #4ade80; font-family: monospace; font-size: 11px; padding: 15px 0; text-align: center;">>_ ALL SYSTEMS SECURE - NO HIGH SEVERITY ALERTS</div>`;
+    } else {
+        const reversed = [...events].reverse();
+        reversed.slice(0, 30).forEach(evt => {
+            const timeStr = evt.timestamp ? (new Date(evt.timestamp).toLocaleTimeString()) : "—";
+            html += `
+                <div style="border: 1px solid rgba(255, 51, 51, 0.2); background: rgba(255, 51, 51, 0.05); padding: 10px; margin-bottom: 8px; font-family: monospace; font-size: 11px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                        <span style="color: #ff3333; font-weight: bold;">[${evt.type}]</span>
+                        <span style="color: #8a9ba8;">${timeStr}</span>
+                    </div>
+                    <div style="color: #d5ebf2; margin-bottom: 4px;">Source: <span style="color: #00e5ff;">${evt.source || "System"}</span> &rarr; Dest: <span style="color: #00e5ff;">${evt.destination || "Broadcast"}</span></div>
+                    ${evt.metadata ? `<div style="color: #ffaa00; font-size: 10px;">${JSON.stringify(evt.metadata)}</div>` : ''}
+                </div>
+            `;
+        });
+    }
+
+    html += `</div></div>`;
+    container.innerHTML = html;
 }
 
 function renderNCMHealth(window, health) {
@@ -915,12 +964,12 @@ function openGlobalNCM() {
         return;
     }
 
-    const window = document.createElement("section");
-    window.className = "ncm-window";
-    window.dataset.device = deviceName;
-    window.style.zIndex = ++ncmWindowZIndex;
+    const win = document.createElement("section");
+    win.className = "ncm-window";
+    win.dataset.device = deviceName;
+    win.style.zIndex = ++ncmWindowZIndex;
 
-    window.innerHTML = `
+    win.innerHTML = `
         <div class="ncm-header" style="background: #05070a; border-bottom: 1px solid rgba(0, 229, 255, 0.2);">
             <div class="ncm-title" style="color: #00e5ff; font-family: monospace; letter-spacing: 2px;">
                 <i class="fa-solid fa-globe" style="margin-right: 8px; opacity: 0.8;"></i>
@@ -946,55 +995,43 @@ function openGlobalNCM() {
         </div>
     `;
 
-    // Make Draggable
-    const header = window.querySelector(".ncm-header");
-    let isDragging = false, currentX, currentY, initialX, initialY;
-    let xOffset = window.getBoundingClientRect().left;
-    let yOffset = window.getBoundingClientRect().top;
-    
-    header.addEventListener("pointerdown", e => {
-        initialX = e.clientX - xOffset;
-        initialY = e.clientY - yOffset;
-        isDragging = true;
-        window.style.zIndex = ++ncmWindowZIndex;
-        e.preventDefault();
-    });
-    document.addEventListener("pointermove", e => {
-        if (!isDragging) return;
-        currentX = e.clientX - initialX;
-        currentY = e.clientY - initialY;
-        xOffset = currentX;
-        yOffset = currentY;
-        window.style.transform = `translate3d(${currentX}px, ${currentY}px, 0)`;
-    });
-    document.addEventListener("pointerup", () => {
-        isDragging = false;
-    });
+    const header = win.querySelector(".ncm-header");
+    setupNCMDragging(win, header);
 
     // Close Button
-    window.querySelector(".ncm-close").addEventListener("click", () => {
-        window.remove();
+    win.querySelector(".ncm-close").addEventListener("click", () => {
+        win.remove();
         ncmWindows.delete(deviceName);
     });
 
+    win.addEventListener("mousedown", () => {
+        win.style.zIndex = ++ncmWindowZIndex;
+    });
+
     // Tab Switching
-    const tabs = window.querySelectorAll(".ncm-tab");
+    const tabs = win.querySelectorAll(".ncm-tab");
     tabs.forEach(tab => {
         tab.addEventListener("click", () => {
             tabs.forEach(t => t.classList.remove("active"));
             tab.classList.add("active");
-            window.querySelectorAll(".ncm-tab-content").forEach(c => c.classList.remove("active"));
-            window.querySelector(`[data-content="${tab.dataset.tab}"]`).classList.add("active");
+            win.querySelectorAll(".ncm-tab-content").forEach(c => c.classList.remove("active"));
+            const targetContent = win.querySelector(`[data-content="${tab.dataset.tab}"]`);
+            if (targetContent) targetContent.classList.add("active");
         });
     });
 
-    ncmWindows.set(deviceName, window);
-    document.getElementById("topologyFloor").appendChild(window);
+    ncmWindows.set(deviceName, win);
+    document.getElementById("topologyFloor").appendChild(win);
     
-    // Position it center-ish
-    window.style.transform = `translate3d(${window.innerWidth / 2 - 200}px, 100px, 0)`;
+    // Position it centered on viewport
+    const floor = document.getElementById("topologyFloor");
+    const floorWidth = floor ? floor.clientWidth : window.innerWidth;
+    const initialLeft = Math.max(20, Math.floor((floorWidth - 620) / 2));
+    win.style.left = `${initialLeft}px`;
+    win.style.top = "80px";
+    win.style.transform = "none";
 
-    loadGlobalNCM(window);
+    loadGlobalNCM(win);
 }
 
 async function loadGlobalNCM(win) {
@@ -1166,8 +1203,8 @@ async function submitForgedPayload() {
     const dst = document.getElementById("forge-dst").value;
     const payload = document.getElementById("forge-payload").value;
     
-    if (!src || !dst) {
-        alert("Source and Destination IPs are required!");
+    if (!dst) {
+        alert("Destination IP is required!");
         return;
     }
     
@@ -1176,7 +1213,7 @@ async function submitForgedPayload() {
             protocol: proto,
             source_port: parseInt(srcPort) || null,
             destination_port: parseInt(dstPort) || null,
-            source_ip: src,
+            source_ip: src || null,
             destination_ip: dst,
             payload: payload
         });

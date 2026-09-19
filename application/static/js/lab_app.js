@@ -1044,7 +1044,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (config.prefix === "HOST" && hostCounter > window._deviceCounters[config.prefix]) {
                 window._deviceCounters[config.prefix] = hostCounter;
             }
-            if (config.prefix === "SRV" && serverCounter > window._deviceCounters[config.prefix]) {
+            if (config.prefix === "SERV" && serverCounter > window._deviceCounters[config.prefix]) {
                 window._deviceCounters[config.prefix] = serverCounter;
             }
         }
@@ -1307,6 +1307,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     loadDevices()
     .then(() => loadLinks())
+    .then(() => {
+        updateCounts();
+    })
     .catch(error => {
         console.error(
             "[CHL] Failed to load topology:",

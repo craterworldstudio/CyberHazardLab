@@ -86,6 +86,11 @@ class Node:
             interface.ip = ip
         if subnet is not None:
             interface.subnet = subnet
+        elif ip and ip != "0.0.0.0" and (not interface.subnet or interface.subnet in ("0.0.0.0/0", "0.0.0.0")):
+            try:
+                interface.subnet = str(ipaddress.ip_network(f"{ip}/24", strict=False))
+            except Exception:
+                pass
             
         self._install_connected_route(interface)
 
@@ -94,10 +99,13 @@ class Node:
     # ========================================================
 
     def _install_connected_route(self, interface: NetworkInterface):
-        if not interface.subnet or interface.subnet in ("0.0.0.0/0", "0.0.0.0"):
-            return
         if not interface.ip or interface.ip == "0.0.0.0":
             return
+        if not interface.subnet or interface.subnet in ("0.0.0.0/0", "0.0.0.0"):
+            try:
+                interface.subnet = str(ipaddress.ip_network(f"{interface.ip}/24", strict=False))
+            except Exception:
+                return
         try:
             net = ipaddress.ip_network(interface.subnet, strict=False)
             # Check if route already exists
@@ -177,10 +185,14 @@ class Node:
         # 3. Route lookup
         route = self.lookup_route(packet.destination_ip)
         if not route:
-            return "NO_ROUTE"
-
-        target_intf = route["interface"]
-        next_hop = route["next_hop"] or packet.destination_ip
+            if out_interface and out_interface.link is not None:
+                target_intf = out_interface
+                next_hop = packet.destination_ip
+            else:
+                return "NO_ROUTE"
+        else:
+            target_intf = route["interface"]
+            next_hop = route["next_hop"] or packet.destination_ip
 
         # 4. ARP Resolution
         dest_mac = self.arp.resolve(next_hop)
