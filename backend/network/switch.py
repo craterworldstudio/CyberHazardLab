@@ -19,6 +19,8 @@ class Switch:
             self.network = network
             self.event_callback = getattr(self.network, "add_event", None)
         self.auto_mac_learning = True
+        self.status = "OFFLINE"
+        self.boot_time = None
 
     def add_event(self, event):
         if self.event_callback:

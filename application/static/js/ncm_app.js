@@ -240,6 +240,7 @@ async function loadNCMDevice(deviceName, window) {
         );
 
         renderNCMInterfaces(window, deviceName, interfaces);
+        window._cachedIntfKey = JSON.stringify(interfaces || []);
         
         const health = await apiRequest(
             "GET",
@@ -253,6 +254,7 @@ async function loadNCMDevice(deviceName, window) {
         ).catch(() => []); // Ignore if services endpoint fails (e.g. for switches)
         
         renderNCMServices(window, deviceName, services);
+        window._renderedServicesKey = JSON.stringify(services || []);
         
         // If it's a switch, fetch MAC table directly from device info
         const deviceData = await apiRequest(
@@ -261,8 +263,10 @@ async function loadNCMDevice(deviceName, window) {
         );
         if (deviceData.type.toUpperCase() === 'SWITCH') {
             renderNCMMacTable(window, deviceName, deviceData.mac_table || {});
+            window._renderedMacKey = JSON.stringify(deviceData.mac_table || {});
         } else if (deviceData.type.toUpperCase() === 'ROUTER') {
             renderNCMRoutingTable(window, deviceName, deviceData.routes || []);
+            window._renderedRoutesKey = JSON.stringify(deviceData.routes || []);
         }
 
         renderNCMConfig(window, deviceName, deviceData);
@@ -411,6 +415,10 @@ function renderNCMMacTable(window, deviceName, macTable) {
     const container = window.querySelector(".ncm-mac-table");
     if (!container) return;
     
+    const key = JSON.stringify(macTable || {});
+    if (window._renderedMacKey === key) return;
+    window._renderedMacKey = key;
+    
     let html = `
         <div class="ncm-config-section">
             <div style="border-bottom: 1px solid rgba(0, 229, 255, 0.15); padding-bottom: 8px;">
@@ -453,6 +461,10 @@ function renderNCMMacTable(window, deviceName, macTable) {
 function renderNCMRoutingTable(window, deviceName, routes) {
     const container = window.querySelector(".ncm-routing-table");
     if (!container) return;
+    
+    const key = JSON.stringify(routes || []);
+    if (window._renderedRoutesKey === key) return;
+    window._renderedRoutesKey = key;
     
     let html = `
         <div class="ncm-config-section">
@@ -709,20 +721,27 @@ setInterval(() => {
                         }
                     }
                     
-                    // Update Health with real interface / service metrics
                     const intfs = deviceData.interfaces || [];
-                    const activeIntfs = intfs.filter(i => i.connected && i.status === 'up').length;
                     const svcs = deviceData.services || [];
-                    const runningSvcs = svcs.filter(s => (s.status || '').toLowerCase() === 'running').length;
 
-                    renderNCMHealth(win, {
+                    // Sync Services if data changed & add-service form not open
+                    const sForm = win.querySelector(`#add-svc-form-${deviceName}`);
+                    const isSFormOpen = sForm && sForm.style.display !== 'none' && sForm.style.display !== '';
+                    if (!isSFormOpen) {
+                        renderNCMServices(win, deviceName, svcs);
+                    }
+                    
+                    // Update Health with real telemetry metrics
+                    const healthData = deviceData.health || {
                         status: deviceData.status,
-                        uptime: deviceData.status === 'ONLINE' ? (win._cachedUptime || 'ACTIVE') : '00:00:00',
-                        interfaces_active: activeIntfs,
-                        interfaces_total: intfs.length,
-                        services_total: svcs.length,
-                        services_running: runningSvcs
-                    });
+                        uptime: deviceData.uptime || '00:00:00',
+                        interfaces_active: deviceData.interfaces_active ?? intfs.filter(i => i.connected && i.status === 'up').length,
+                        interfaces_total: deviceData.interfaces_total ?? intfs.length,
+                        services_total: deviceData.services_total ?? svcs.length,
+                        services_running: deviceData.services_running ?? svcs.filter(s => (s.status || '').toLowerCase() === 'running').length
+                    };
+
+                    renderNCMHealth(win, healthData);
                 }
             }
         });
@@ -783,6 +802,23 @@ function renderNCMHealth(window, health) {
     else if (st === "OFFLINE" || st === "OFF") statusColor = "#ef4444"; // Red
     else if (st === "ERROR" || st === "FAULT" || st === "COMPROMISED") statusColor = "#8b0000"; // Dark Blood Red
 
+    const statusEl = container.querySelector(".ncm-health-status");
+    const uptimeEl = container.querySelector(".ncm-health-uptime");
+    const intfEl = container.querySelector(".ncm-health-interfaces");
+    const svcEl = container.querySelector(".ncm-health-services");
+
+    if (statusEl && uptimeEl && intfEl) {
+        statusEl.textContent = `[ ${st} ]`;
+        statusEl.style.color = statusColor;
+        statusEl.style.textShadow = `0 0 5px ${statusColor}60`;
+        uptimeEl.textContent = health.uptime || "00:00:00";
+        intfEl.textContent = `${health.interfaces_active ?? 0} / ${health.interfaces_total ?? 0} ACTIVE`;
+        if (svcEl) {
+            svcEl.innerHTML = `${health.services_total ?? 0} TOTAL <span style="color: #00e5ff; margin-left: 8px;">(${health.services_running ?? 0} RUNNING)</span>`;
+        }
+        return;
+    }
+
     container.innerHTML = `
         <div class="ncm-config-section">
             <div class="ncm-section-title" style="color: #00e5ff; font-weight: bold; letter-spacing: 2px; border-bottom: 1px solid rgba(0, 229, 255, 0.15); padding-bottom: 8px;">>_ SYSTEM DIAGNOSTICS</div>
@@ -791,17 +827,17 @@ function renderNCMHealth(window, health) {
                 <div style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; font-family: monospace; font-size: 11px;">
                     
                     <div style="color: #5c6b73;">> STATUS</div>
-                    <div style="color: ${statusColor}; font-weight: bold; letter-spacing: 1px; text-shadow: 0 0 5px ${statusColor}60;">[ ${st} ]</div>
+                    <div class="ncm-health-status" style="color: ${statusColor}; font-weight: bold; letter-spacing: 1px; text-shadow: 0 0 5px ${statusColor}60;">[ ${st} ]</div>
                     
                     <div style="color: #5c6b73;">> UPTIME</div>
-                    <div style="color: #d5ebf2;">${health.uptime || '00:00:00'}</div>
+                    <div class="ncm-health-uptime" style="color: #d5ebf2;">${health.uptime || '00:00:00'}</div>
                     
                     <div style="color: #5c6b73;">> ${deviceName.startsWith('SWT') ? 'SWITCH_PORTS' : 'INTERFACES'}</div>
-                    <div style="color: #d5ebf2;">${health.interfaces_active ?? 0} / ${health.interfaces_total ?? 0} ACTIVE</div>
+                    <div class="ncm-health-interfaces" style="color: #d5ebf2;">${health.interfaces_active ?? 0} / ${health.interfaces_total ?? 0} ACTIVE</div>
                     
                     ${!deviceName.startsWith('SWT') ? `
                     <div style="color: #5c6b73;">> SERVICES</div>
-                    <div style="color: #d5ebf2;">${health.services_total ?? 0} TOTAL <span style="color: #00e5ff; margin-left: 8px;">(${health.services_running ?? 0} RUNNING)</span></div>
+                    <div class="ncm-health-services" style="color: #d5ebf2;">${health.services_total ?? 0} TOTAL <span style="color: #00e5ff; margin-left: 8px;">(${health.services_running ?? 0} RUNNING)</span></div>
                     ` : ''}
                     
                     <div style="color: #5c6b73;">> PACKET_TRACE</div>
@@ -822,6 +858,10 @@ function renderNCMServices(window, deviceName, services) {
     if (!services || !Array.isArray(services)) {
         services = [];
     }
+
+    const key = JSON.stringify(services);
+    if (window._renderedServicesKey === key) return;
+    window._renderedServicesKey = key;
 
     const availableServices = [
         { value: "HTTP", label: "HTTP SERVER (TCP/80)" },

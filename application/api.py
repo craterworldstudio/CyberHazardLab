@@ -687,10 +687,20 @@ class API:
             "status": getattr(device, "status", "OFFLINE")
         }
 
+        # Interfaces
         if hasattr(device, "interfaces"):
-            result["interfaces"] = [ self._serialize_interface(interface) for interface in device.interfaces ]
+            intfs = [ self._serialize_interface(interface) for interface in device.interfaces ]
+            active_intfs = sum(1 for i in device.interfaces if getattr(i, "link", None) is not None)
         elif hasattr(device, "ports"):
-            result["interfaces"] = [ self._serialize_interface(port) for port in device.ports.values() ]
+            intfs = [ self._serialize_interface(port) for port in device.ports.values() ]
+            active_intfs = sum(1 for p in device.ports.values() if getattr(p, "link", None) is not None)
+        else:
+            intfs = []
+            active_intfs = 0
+
+        result["interfaces"] = intfs
+        result["interfaces_total"] = len(intfs)
+        result["interfaces_active"] = active_intfs
 
         if hasattr(device, "mac_table"):
             result["mac_table"] = { mac: port for mac, port in device.mac_table.items() }
@@ -704,6 +714,47 @@ class API:
                 }
                 for r in device.routes
             ]
+
+        if hasattr(device, "services"):
+            svcs = [
+                {
+                    "name": s.name,
+                    "protocol": s.protocol,
+                    "port": s.port,
+                    "status": getattr(s, "status", "stopped"),
+                    "config": getattr(s, "config", {})
+                }
+                for s in device.services
+            ]
+            total_svcs = len(svcs)
+            running_svcs = sum(1 for s in device.services if getattr(s, "status", "").lower() == "running")
+        else:
+            svcs = []
+            total_svcs = 0
+            running_svcs = 0
+
+        result["services"] = svcs
+        result["services_total"] = total_svcs
+        result["services_running"] = running_svcs
+
+        boot_time = getattr(device, "boot_time", None)
+        if getattr(device, "status", "") == "ONLINE" and boot_time:
+            import time
+            uptime_sec = int(time.time() - boot_time)
+            m, s = divmod(uptime_sec, 60)
+            h, m = divmod(m, 60)
+            result["uptime"] = f"{h:02d}:{m:02d}:{s:02d}"
+        else:
+            result["uptime"] = "00:00:00"
+
+        result["health"] = {
+            "status": result["status"],
+            "uptime": result["uptime"],
+            "interfaces_active": active_intfs,
+            "interfaces_total": len(intfs),
+            "services_total": total_svcs,
+            "services_running": running_svcs
+        }
 
         return result
 
