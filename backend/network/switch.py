@@ -18,7 +18,9 @@ class Switch:
         else:
             self.network = network
             self.event_callback = getattr(self.network, "add_event", None)
-        self.auto_mac_learning = True
+        self.auto_mac_learning = "inherit"
+        self.mac_aging_time = 300
+        self.stp_enabled = False
         self.status = "OFFLINE"
         self.boot_time = None
 
@@ -61,7 +63,13 @@ class Switch:
     def receive(self, frame: EthernetFrame, in_port):
         #print("swr")
         
-        if getattr(getattr(getattr(self, "network", None), "orchestrator", None), "settings", {}).get("auto_mac_learning", True):
+        # Check per-switch override, fallback to global orchestrator setting if 'inherit'
+        if self.auto_mac_learning in (True, False):
+            learning_enabled = self.auto_mac_learning
+        else:
+            learning_enabled = getattr(getattr(getattr(self, "network", None), "orchestrator", None), "settings", {}).get("auto_mac_learning", True)
+
+        if learning_enabled:
             self.learn(
                 frame.source_mac, in_port
             )

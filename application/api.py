@@ -1,3 +1,4 @@
+import urllib.parse
 from application.term_coms import TerminalCommandHandler
 from backend.core.event import Event
 from backend.orchestrator import Simulation
@@ -22,12 +23,12 @@ class API:
                 # Try to extract device name from path (e.g. /api/ncm/devices/HOST-05/services) or body
                 source_dev = "API"
                 dev_meta = {}
-                parts = [p for p in path.split("/") if p]
+                parts = [urllib.parse.unquote(p) for p in path.split("/") if p]
                 if len(parts) >= 4 and parts[0] == "api" and parts[2] == "devices":
                     source_dev = parts[3]
                 elif body and isinstance(body, dict) and "device" in body:
                     source_dev = body["device"]
-                    
+                
                 if source_dev != "API":
                     dev_meta = {"host": source_dev} # use host/router/switch interchangeably for UI catching it
                 
@@ -54,7 +55,7 @@ class API:
         path = path.split("?", 1)[0]
 
         parts = [
-            part
+            urllib.parse.unquote(part)
             for part in path.split("/")
             if part
         ]
@@ -136,6 +137,9 @@ class API:
             
             sim_data = body.get("simulation", {})
             layout_data = body.get("layout", {})
+            renames_data = body.get("renames", {})
+            if isinstance(renames_data, dict):
+                self.ntm.simulation.rename_map = dict(renames_data)
             
             self.ntm.simulation.name = sim_data.get("name", "Cyber Hazard Network")
             self.ntm.simulation.settings = sim_data.get("settings", {})
@@ -143,6 +147,20 @@ class API:
             # Devices
             for d in sim_data.get("devices", []):
                 self.ntm.create_device(name=d["name"], device_type=d["type"])
+                dev = self.ntm.simulation.hosts.get(d["name"]) or self.ntm.simulation.routers.get(d["name"]) or self.ntm.simulation.switches.get(d["name"])
+                if dev:
+                    if "default_gateway" in d:
+                        dev.default_gateway = d["default_gateway"]
+                    if "ip_forwarding" in d:
+                        dev.ip_forwarding = bool(d["ip_forwarding"])
+                    if "auto_routes" in d:
+                        dev.auto_routes = d["auto_routes"]
+                    if "auto_mac_learning" in d:
+                        dev.auto_mac_learning = d["auto_mac_learning"]
+                    if "mac_aging_time" in d:
+                        dev.mac_aging_time = int(d["mac_aging_time"])
+                    if "stp_enabled" in d:
+                        dev.stp_enabled = bool(d["stp_enabled"])
                 
             # Links
             for l in sim_data.get("links", []):
@@ -330,6 +348,7 @@ class API:
             return {
                 "status": "running" if self.ntm.simulation.is_running else "stopped",
                 "devices": devices,
+                "renames": getattr(self.ntm.simulation, "rename_map", {}),
                 "events": [
                     {
                         "type": e.type,
@@ -429,6 +448,18 @@ class API:
             self.state_manager.save()
             return self._serialize_device(device)
 
+        # PUT /api/ntm/devices/<device>
+        if (method == "PUT" and len(resource) == 2 and resource[0] == "devices"):
+            old_name = resource[1]
+            new_name = body.get("name") or body.get("hostname")
+            if not new_name:
+                return {"error": "New device name not provided"}, 400
+            device = self.ntm.rename_device(old_name, str(new_name).strip())
+            if hasattr(self, "state_manager") and self.state_manager:
+                self.state_manager.rename_device(old_name, str(new_name).strip())
+            self.state_manager.save()
+            return self._serialize_device(device)
+
         # POST /api/ntm/connect
         if ( method == "POST" and resource == ["connect"] ):
             link = self.ntm.connect(
@@ -461,9 +492,17 @@ class API:
             state = self.state_manager.load()
             return state.get("layout", {}) if state else {}
 
-        # POST /api/ntm/layout
+        # POST /api/ntm/layout — merge incoming positions with existing to prevent partial saves wiping coords
         if method == "POST" and resource == ["layout"]:
-            self.state_manager.save(layout=body)
+            if isinstance(body, dict) and body:
+                # Load current layout and merge: incoming positions override existing, but never drop unsent keys
+                current_state = self.state_manager.load()
+                current_layout = current_state.get("layout", {}) if current_state else {}
+                merged_layout = dict(current_layout)
+                merged_layout.update(body)
+                self.state_manager.save(layout=merged_layout)
+            else:
+                self.state_manager.save()
             return {"status": "success"}
 
         raise ValueError(
@@ -553,6 +592,28 @@ class API:
             self.state_manager.save()
             return {"status": "stopped"}
 
+        # POST /api/ncm/devices/<device>/services/<service>/config
+        if method == "POST" and len(resource) == 5 and resource[0] == "devices" and resource[2] == "services" and resource[4] == "config":
+            sim = self.ntm.simulation
+            device = sim.hosts.get(resource[1]) or sim.routers.get(resource[1])
+            if not device:
+                return {"error": "Device not found"}, 404
+            service_name = resource[3]
+            svc = next((s for s in getattr(device, "services", []) if s.name.upper() == service_name.upper() or (service_name.upper() in ("SSH", "SSH_SERVER") and s.name.upper() in ("SSH", "SSH_SERVER"))), None)
+            if not svc:
+                return {"error": f"Service {service_name} not found on {device.name}"}, 404
+
+            if not hasattr(svc, "config") or svc.config is None:
+                svc.config = {}
+            svc.config.update(body)
+
+            daemon = device.get_service_daemon(svc.name)
+            if daemon and hasattr(daemon, "reload_config"):
+                daemon.reload_config(svc.config)
+
+            self.state_manager.save()
+            return {"status": "success", "config": svc.config}
+
         # POST /api/ncm/interfaces
         if (
             method == "POST"
@@ -600,17 +661,62 @@ class API:
         # POST /api/ncm/devices/<device>/config
         if method == "POST" and len(resource) == 3 and resource[0] == "devices" and resource[2] == "config":
             sim = self.ntm.simulation
-            device = sim.hosts.get(resource[1]) or sim.routers.get(resource[1]) or sim.switches.get(resource[1])
+            device_name = resource[1]
+            device = sim.get_device(device_name) if hasattr(sim, "get_device") else (sim.hosts.get(device_name) or sim.routers.get(device_name) or sim.switches.get(device_name))
             if not device:
                 return {"error": "Device not found"}, 404
-                
+
+            old_name = device.name
+            new_name = old_name
+            if "hostname" in body and body["hostname"]:
+                target_name = str(body["hostname"]).strip()
+                if target_name and target_name != old_name:
+                    sim.rename_device(old_name, target_name)
+                    if hasattr(self, "state_manager") and self.state_manager:
+                        self.state_manager.rename_device(old_name, target_name)
+                    new_name = target_name
+                    device = sim.get_device(new_name)
+
+            if "default_gateway" in body:
+                gw_val = str(body["default_gateway"]).strip()
+                device.default_gateway = gw_val if gw_val else None
+                if device.default_gateway and getattr(device, "interfaces", None):
+                    device.routes = [r for r in getattr(device, "routes", []) if str(r.get("destination")) != "0.0.0.0/0"]
+                    device.add_route("0.0.0.0/0", device.interfaces[0], next_hop=device.default_gateway)
+
+            if "ip_forwarding" in body:
+                device.ip_forwarding = bool(body["ip_forwarding"])
+
             if "auto_routes" in body:
-                device.auto_routes = bool(body["auto_routes"])
+                val = body["auto_routes"]
+                if isinstance(val, str):
+                    device.auto_routes = True if val.lower() in ("auto", "true") else (False if val.lower() in ("manual", "false") else "inherit")
+                else:
+                    device.auto_routes = val
+
             if "auto_mac_learning" in body:
-                device.auto_mac_learning = bool(body["auto_mac_learning"])
+                val = body["auto_mac_learning"]
+                if isinstance(val, str):
+                    device.auto_mac_learning = True if val.lower() in ("auto", "true") else (False if val.lower() in ("manual", "false") else "inherit")
+                else:
+                    device.auto_mac_learning = val
+
+            if "mac_aging_time" in body:
+                try:
+                    device.mac_aging_time = int(body["mac_aging_time"])
+                except Exception:
+                    pass
+
+            if "stp_enabled" in body:
+                device.stp_enabled = bool(body["stp_enabled"])
                 
             self.state_manager.save()
-            return {"success": True}
+            return {
+                "success": True, 
+                "old_name": old_name, 
+                "new_name": new_name, 
+                "device": self._serialize_device(device)
+            }
 
         # GET/POST /api/ncm/devices/<device>/terminal
         if len(resource) == 3 and resource[0] == "devices" and resource[2] == "terminal":
@@ -714,6 +820,14 @@ class API:
                 }
                 for r in device.routes
             ]
+
+        # Node configuration settings
+        result["default_gateway"] = getattr(device, "default_gateway", "") or ""
+        result["ip_forwarding"] = getattr(device, "ip_forwarding", True)
+        result["auto_routes"] = getattr(device, "auto_routes", "inherit")
+        result["auto_mac_learning"] = getattr(device, "auto_mac_learning", "inherit")
+        result["mac_aging_time"] = getattr(device, "mac_aging_time", 300)
+        result["stp_enabled"] = getattr(device, "stp_enabled", False)
 
         if hasattr(device, "services"):
             svcs = [

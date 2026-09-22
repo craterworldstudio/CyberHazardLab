@@ -25,6 +25,7 @@ class Node:
         self.status: str = "OFFLINE"
         self.boot_time: float | None = None
         self.forwarding_enabled: bool = False
+        self.default_gateway: str | None = None
         
         self.arp = ARP(self)
         self.tcp_connections: dict = {}

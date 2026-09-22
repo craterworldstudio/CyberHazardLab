@@ -226,7 +226,38 @@ document.addEventListener("DOMContentLoaded", () => {
             const state = await apiRequest("GET", "/api/simulation/poll");
             window.SimulationState = state;
             
-            // 1. Sync Canvas Devices
+            // 1. Sync Renamed Devices from state.renames
+            if (state.renames && typeof state.renames === "object") {
+                for (const [oldName, newName] of Object.entries(state.renames)) {
+                    if (oldName === newName) continue;
+                    const localDevice = devices.find(d => d.id === oldName);
+                    if (localDevice) {
+                        console.log(`[CHL:POLL] Syncing renamed node: ${oldName} -> ${newName}`);
+                        renameDevice(oldName, newName);
+                    }
+                }
+            }
+
+            // 1b. Self-healing fallback: match unmatched canvas devices with backend devices
+            if (Array.isArray(state.devices) && devices.length > 0) {
+                const unmatchedLocal = devices.filter(d => !state.devices.some(b => b.name === d.id));
+                const unmatchedBackend = state.devices.filter(b => !devices.some(d => d.id === b.name));
+
+                if (unmatchedLocal.length > 0 && unmatchedLocal.length === unmatchedBackend.length) {
+                    for (let i = 0; i < unmatchedLocal.length; i++) {
+                        const lDev = unmatchedLocal[i];
+                        const bDev = unmatchedBackend.find(b => b.type.toLowerCase() === lDev.type.toLowerCase()) || unmatchedBackend[i];
+                        if (bDev) {
+                            console.log(`[CHL:POLL] Self-healing unmatched node: ${lDev.id} -> ${bDev.name}`);
+                            renameDevice(lDev.id, bDev.name);
+                            const idx = unmatchedBackend.indexOf(bDev);
+                            if (idx !== -1) unmatchedBackend.splice(idx, 1);
+                        }
+                    }
+                }
+            }
+
+            // 2. Sync Canvas Devices Status
             for (const backendDevice of state.devices) {
                 const localDevice = devices.find(d => d.id === backendDevice.name);
                 if (localDevice && backendDevice.status !== localDevice.status) {
@@ -234,7 +265,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             }
             
-            // 2. Dispatch event to let WEL know about new logs
+            // 3. Dispatch event to let WEL know about new logs
             if (state.events.length > 0) {
                 const newEventsCount = state.events.length;
                 if (newEventsCount !== lastEventCount) {
@@ -1236,6 +1267,54 @@ document.addEventListener("DOMContentLoaded", () => {
             console.error("[CHL:API] Failed to save layout", e);
         }
     }
+
+    function renameDevice(oldId, newId) {
+        if (!oldId || !newId || oldId === newId) return false;
+        const dev = devices.find(d => d.id === oldId);
+        if (!dev) return false;
+
+        dev.id = newId;
+        dev.element.dataset.id = newId;
+        if (dev.label) dev.label.textContent = newId;
+
+        if (selectedDeviceId === oldId) {
+            selectedDeviceId = newId;
+        }
+
+        updateDeviceConnectedLinks(newId);
+
+        // Also update open NCM window if open under oldId
+        if (typeof ncmWindows !== 'undefined' && ncmWindows.has(oldId)) {
+            const win = ncmWindows.get(oldId);
+            ncmWindows.delete(oldId);
+            ncmWindows.set(newId, win);
+            win.dataset.device = newId;
+            const titleEl = win.querySelector(".ncm-title span");
+            if (titleEl) titleEl.innerText = newId;
+            const termPrompt = win.querySelector(".ncm-terminal-prompt");
+            if (termPrompt) {
+                termPrompt.id = `term-prompt-${newId}`;
+                termPrompt.innerText = `root@${newId.toLowerCase()}:~$`;
+            }
+            const termInput = win.querySelector(".ncm-terminal-input");
+            if (termInput) {
+                termInput.setAttribute("onkeydown", `handleTerminalInput(event, '${newId}')`);
+            }
+            const closeBtn = win.querySelector(".ncm-close");
+            if (closeBtn) {
+                closeBtn.onclick = () => closeNCM(newId);
+            }
+            if (typeof loadNCMDevice === "function") {
+                loadNCMDevice(newId, win);
+            }
+        }
+
+        saveLayout();
+        window.dispatchEvent(new CustomEvent("device-renamed", { detail: { oldId, newId } }));
+        console.log(`[CHL] Renamed canvas device ${oldId} -> ${newId}`);
+        return true;
+    }
+    CHL.renameDevice = renameDevice;
 
     // REPLACE window.addEventListener("mouseup") WITH:
     window.addEventListener("pointerup", handlePointerRelease);

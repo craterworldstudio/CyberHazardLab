@@ -29,6 +29,7 @@ class Simulation:
 
         self.is_running: bool = False
         self.settings: dict = {"auto_routes": True, "auto_mac_learning": True}
+        self.rename_map: dict[str, str] = {}
         self._tick_thread: threading.Thread | None = None
         
         self.network.on_event = self._handle_network_event
@@ -142,6 +143,44 @@ class Simulation:
             if any(link.endpointA == p or link.endpointB == p for p in switch.ports.values()):
                 self.disconnect(link)
         return switch
+
+    def rename_device(self, old_name: str, new_name: str):
+        if not new_name or not isinstance(new_name, str) or not new_name.strip():
+            raise ValueError("New device name cannot be empty.")
+        new_name = new_name.strip()
+        if old_name == new_name:
+            return self.get_device(old_name)
+
+        if new_name in self.hosts or new_name in self.routers or new_name in self.switches:
+            raise ValueError(f"Device '{new_name}' already exists.")
+
+        device = None
+        if old_name in self.hosts:
+            device = self.hosts.pop(old_name)
+            self.hosts[new_name] = device
+        elif old_name in self.routers:
+            device = self.routers.pop(old_name)
+            self.routers[new_name] = device
+        elif old_name in self.switches:
+            device = self.switches.pop(old_name)
+            self.switches[new_name] = device
+        else:
+            raise ValueError(f"Device '{old_name}' not found.")
+
+        # Update network.hosts dictionary if applicable (used by Host and Router)
+        if hasattr(self, "network") and self.network and hasattr(self.network, "hosts"):
+            if old_name in self.network.hosts:
+                self.network.hosts[new_name] = self.network.hosts.pop(old_name)
+
+        if not hasattr(self, "rename_map") or self.rename_map is None:
+            self.rename_map = {}
+        for k, v in list(self.rename_map.items()):
+            if v == old_name:
+                self.rename_map[k] = new_name
+        self.rename_map[old_name] = new_name
+
+        device.name = new_name
+        return device
 
     # ========================================================
     # INTERFACE LIFECYCLE
@@ -297,19 +336,37 @@ class Simulation:
         for host in self.hosts.values():
             has_default = any(str(r["destination"]) == "0.0.0.0/0" for r in host.routes)
             if not has_default:
-                for intf in host.interfaces:
-                    if intf.ip and intf.ip != "0.0.0.0" and intf.subnet:
-                        gw = None
-                        for router in self.routers.values():
-                            for r_intf in router.interfaces:
-                                if r_intf.subnet == intf.subnet and r_intf.ip and r_intf.ip != "0.0.0.0":
-                                    gw = r_intf.ip
+                gw = host.default_gateway
+                out_intf = host.interfaces[0] if host.interfaces else None
+                if not gw:
+                    for intf in host.interfaces:
+                        if intf.ip and intf.ip != "0.0.0.0" and intf.subnet:
+                            for router in self.routers.values():
+                                for r_intf in router.interfaces:
+                                    if r_intf.subnet == intf.subnet and r_intf.ip and r_intf.ip != "0.0.0.0":
+                                        gw = r_intf.ip
+                                        out_intf = intf
+                                        break
+                                if gw:
                                     break
                             if gw:
                                 break
-                        if gw:
-                            host.add_route("0.0.0.0/0", intf, next_hop=gw)
-                            break
+                if gw and out_intf:
+                    host.add_route("0.0.0.0/0", out_intf, next_hop=gw)
+
+        # 1b. Provision connected routes for routers if auto_routes enabled
+        for router in self.routers.values():
+            router_auto = router.auto_routes if router.auto_routes in (True, False) else self.settings.get("auto_routes", True)
+            if router_auto:
+                for r_intf in router.interfaces:
+                    if r_intf.subnet and r_intf.subnet not in ("0.0.0.0/0", "0.0.0.0"):
+                        has_route = any(str(r["destination"]) == str(r_intf.subnet) for r in router.routes)
+                        if not has_route:
+                            router.add_route(str(r_intf.subnet), r_intf, next_hop=None)
+            if getattr(router, "default_gateway", None) and router.interfaces:
+                has_default = any(str(r["destination"]) == "0.0.0.0/0" for r in router.routes)
+                if not has_default:
+                    router.add_route("0.0.0.0/0", router.interfaces[0], next_hop=router.default_gateway)
 
         # 2. Provision DHCP scopes for subnets if not already configured
         for router in self.routers.values():

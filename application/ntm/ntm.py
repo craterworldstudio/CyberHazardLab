@@ -55,6 +55,9 @@ class NetworkTopologyManager:
 
         return devices[name]
 
+    def rename_device(self, old_name, new_name):
+        return self.simulation.rename_device(old_name, new_name)
+
     # ========================================================
     # CONNECTION MANAGEMENT
     # ========================================================

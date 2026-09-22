@@ -50,8 +50,13 @@ class TerminalCommandHandler:
                 if res.get("success"):
                     curr["state"] = "CONNECTED"
                     curr["password"] = entered_pass
+                    remote_dev = curr.get("remote_device")
                     remote_name = curr["remote_device_name"]
                     local_ip = device.interfaces[0].ip if device.interfaces else "127.0.0.1"
+                    ssh_svc = next((s for s in getattr(remote_dev, "services", []) if s.name.upper() in ("SSH_SERVER", "SSH")), None) if remote_dev else None
+                    custom_motd = (ssh_svc.config.get("motd") or ssh_svc.config.get("banner")) if ssh_svc and getattr(ssh_svc, "config", None) else None
+                    if custom_motd:
+                        return f"{custom_motd}\nLast login: {time.strftime('%a %b %d %H:%M:%S %Y')} from {local_ip}"
                     return (
                         f"Welcome to Nox OS on {remote_name}!\n"
                         f" * Documentation:  https://noxos.org\n"
@@ -115,6 +120,17 @@ class TerminalCommandHandler:
         if cmd == "help":
             return self._handle_help(parts)
         elif cmd == "hostname":
+            if len(parts) > 1 and parts[1].strip():
+                new_name = parts[1].strip()
+                old_name = device.name
+                if new_name != old_name:
+                    try:
+                        self.sim.rename_device(old_name, new_name)
+                        if self.state_manager:
+                            self.state_manager.rename_device(old_name, new_name)
+                        return f"Hostname updated to '{new_name}'"
+                    except ValueError as e:
+                        return f"hostname: {e}"
             return device.name
         elif cmd == "ip":
             return self._handle_ip(device, parts)
@@ -865,6 +881,10 @@ class TerminalCommandHandler:
                         "password_attempts": 0
                     })
                     local_ip = device.interfaces[0].ip if device.interfaces else "127.0.0.1"
+                    ssh_svc = next((s for s in getattr(target_device, "services", []) if s.name.upper() in ("SSH_SERVER", "SSH")), None)
+                    custom_motd = (ssh_svc.config.get("motd") or ssh_svc.config.get("banner")) if ssh_svc and getattr(ssh_svc, "config", None) else None
+                    if custom_motd:
+                        return f"{custom_motd}\nLast login: {time.strftime('%a %b %d %H:%M:%S %Y')} from {local_ip}"
                     return (
                         f"Welcome to Nox OS on {target_device.name}!\n"
                         f" * Documentation:  https://noxos.org\n"

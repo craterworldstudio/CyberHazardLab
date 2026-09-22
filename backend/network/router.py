@@ -5,6 +5,16 @@ class Router(Node):
     def __init__(self, name: str, network=None):
         super().__init__(name=name, device_type=DeviceType.OTHER, network=network)
         self.forwarding_enabled = True
+        self.auto_routes = "inherit"
+        self.default_gateway = None
+
+    @property
+    def ip_forwarding(self):
+        return self.forwarding_enabled
+
+    @ip_forwarding.setter
+    def ip_forwarding(self, val):
+        self.forwarding_enabled = bool(val)
 
     def __getattr__(self, item: str):
         if item.startswith("eth"):

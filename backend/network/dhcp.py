@@ -30,9 +30,15 @@ class DHCPScope:
         self._cleanup_expired()
         mac = mac.upper()
         if mac in self.leases:
-            self.leases[mac]["expires_at"] = time.time() + 30
-            self.leases[mac]["state"] = "OFFERED"
-            return self.leases[mac]["ip"]
+            existing_ip = self.leases[mac]["ip"]
+            try:
+                if int(self.start_ip) <= int(ipaddress.ip_address(existing_ip)) <= int(self.end_ip):
+                    self.leases[mac]["expires_at"] = time.time() + 30
+                    self.leases[mac]["state"] = "OFFERED"
+                    return existing_ip
+            except Exception:
+                pass
+            del self.leases[mac]
 
         used_ips = {lease["ip"] for lease in self.leases.values()}
         used_ips.add(self.gateway)

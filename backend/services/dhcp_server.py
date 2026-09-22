@@ -39,6 +39,29 @@ class DHCPServerDaemon(ServiceDaemon):
             if not scope:
                 return None
 
+            # Apply any custom scope config defined on DHCP service
+            dhcp_svc = next((s for s in getattr(self.host, "services", []) if s.name.upper() == "DHCP"), None)
+            if dhcp_svc and getattr(dhcp_svc, "config", None):
+                cfg = dhcp_svc.config
+                if "gateway" in cfg and cfg["gateway"]:
+                    scope.gateway = str(cfg["gateway"]).strip()
+                if "dns" in cfg and cfg["dns"]:
+                    scope.dns_server = str(cfg["dns"]).strip()
+                if "domain_name" in cfg and cfg["domain_name"]:
+                    scope.domain_name = str(cfg["domain_name"]).strip()
+                if "lease_time" in cfg and cfg["lease_time"]:
+                    try:
+                        scope.lease_time = int(cfg["lease_time"])
+                    except Exception:
+                        pass
+                if "pool_start" in cfg and "pool_end" in cfg and cfg["pool_start"] and cfg["pool_end"]:
+                    try:
+                        import ipaddress
+                        scope.start_ip = ipaddress.IPv4Address(cfg["pool_start"])
+                        scope.end_ip = ipaddress.IPv4Address(cfg["pool_end"])
+                    except Exception:
+                        pass
+
             if msg.message_type == DHCPDISCOVER:
                 try:
                     offered_ip = scope.offer(msg.chaddr)

@@ -85,3 +85,7 @@ SUCCESS: Added event SERV-01 is not part of this network. Total events now: 3
 SUCCESS: Added event None does not appear to be an IPv4 or IPv6 address. Total events now: 6
 SUCCESS: Added event HOST-01 already has service DHCP_CLIENT. Total events now: 7
 SUCCESS: Added event None does not appear to be an IPv4 or IPv6 address. Total events now: 11
+SUCCESS: Added event Unknown device: DHCP%20Server. Total events now: 11
+SUCCESS: Added event Unknown device: HOST-04. Total events now: 12
+SUCCESS: Added event Unknown device: HOST-04. Total events now: 11
+SUCCESS: Added event Unknown device: SERV-01. Total events now: 12

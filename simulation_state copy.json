@@ -11,12 +11,32 @@
                 "type": "pc"
             },
             {
+                "name": "HOST-03",
+                "type": "pc"
+            },
+            {
+                "name": "HOST-04",
+                "type": "pc"
+            },
+            {
+                "name": "HOST-05",
+                "type": "pc"
+            },
+            {
+                "name": "HOST-06",
+                "type": "pc"
+            },
+            {
+                "name": "HOST-07",
+                "type": "pc"
+            },
+            {
                 "name": "SERV-01",
                 "type": "server"
             },
             {
-                "name": "HOST-03",
-                "type": "pc"
+                "name": "SERV-02",
+                "type": "server"
             },
             {
                 "name": "SWT-01",
@@ -24,6 +44,10 @@
             },
             {
                 "name": "SWT-02",
+                "type": "switch"
+            },
+            {
+                "name": "SWT-03",
                 "type": "switch"
             },
             {
@@ -41,78 +65,141 @@
                 "endpoint_b": "SWT-01"
             },
             {
+                "endpoint_a": "HOST-03",
+                "endpoint_b": "SWT-01"
+            },
+            {
+                "endpoint_a": "HOST-06",
+                "endpoint_b": "SWT-02"
+            },
+            {
+                "endpoint_a": "HOST-04",
+                "endpoint_b": "SWT-02"
+            },
+            {
+                "endpoint_a": "HOST-05",
+                "endpoint_b": "SWT-02"
+            },
+            {
+                "endpoint_a": "RUT-01",
+                "endpoint_b": "SWT-02"
+            },
+            {
+                "endpoint_a": "RUT-01",
+                "endpoint_b": "SWT-03"
+            },
+            {
+                "endpoint_a": "HOST-07",
+                "endpoint_b": "SWT-03"
+            },
+            {
+                "endpoint_a": "SERV-01",
+                "endpoint_b": "SWT-03"
+            },
+            {
                 "endpoint_a": "RUT-01",
                 "endpoint_b": "SWT-01"
             },
             {
-                "endpoint_a": "RUT-01",
-                "endpoint_b": "SWT-02"
-            },
-            {
-                "endpoint_a": "SERV-01",
-                "endpoint_b": "SWT-02"
-            },
-            {
-                "endpoint_a": "HOST-03",
-                "endpoint_b": "SWT-02"
+                "endpoint_a": "SERV-02",
+                "endpoint_b": "SWT-03"
             }
         ],
         "interfaces": {
             "HOST-01": [
                 {
                     "name": "eth0",
-                    "mac": "02:1c:08:82:fe:8b",
-                    "ip": "10.0.0.2",
-                    "subnet": "10.0.0.0/24"
+                    "mac": "02:3a:cb:c7:46:5b",
+                    "ip": "10.0.3.2",
+                    "subnet": "10.0.3.0/24"
                 }
             ],
             "HOST-02": [
                 {
                     "name": "eth0",
-                    "mac": "02:6a:e7:83:93:50",
-                    "ip": "10.0.0.3",
-                    "subnet": "10.0.0.0/24"
-                }
-            ],
-            "SERV-01": [
-                {
-                    "name": "eth0",
-                    "mac": "02:11:e6:36:aa:f7",
-                    "ip": "10.0.1.2",
-                    "subnet": "10.0.1.0/24"
+                    "mac": "02:f2:78:fc:ef:db",
+                    "ip": "10.0.3.1",
+                    "subnet": "10.0.3.0/24"
                 }
             ],
             "HOST-03": [
                 {
                     "name": "eth0",
-                    "mac": "02:e3:e1:30:db:72",
-                    "ip": "10.0.1.3",
+                    "mac": "02:c8:b4:27:25:ce",
+                    "ip": "10.0.3.3",
+                    "subnet": "10.0.3.0/24"
+                }
+            ],
+            "HOST-04": [
+                {
+                    "name": "eth0",
+                    "mac": "02:16:26:fa:1e:69",
+                    "ip": "10.0.0.11",
+                    "subnet": "10.0.0.0/24"
+                }
+            ],
+            "HOST-05": [
+                {
+                    "name": "eth0",
+                    "mac": "02:e1:d7:cb:9a:92",
+                    "ip": "10.0.0.12",
+                    "subnet": "10.0.0.0/24"
+                }
+            ],
+            "HOST-06": [
+                {
+                    "name": "eth0",
+                    "mac": "02:25:4e:6b:ec:18",
+                    "ip": "10.0.0.10",
+                    "subnet": "10.0.0.0/24"
+                }
+            ],
+            "HOST-07": [
+                {
+                    "name": "eth0",
+                    "mac": "02:cb:79:61:eb:b1",
+                    "ip": "10.0.1.12",
+                    "subnet": "10.0.1.0/24"
+                }
+            ],
+            "SERV-01": [
+                {
+                    "name": "eth0",
+                    "mac": "02:65:42:e7:95:55",
+                    "ip": "10.0.1.10",
+                    "subnet": "10.0.1.0/24"
+                }
+            ],
+            "SERV-02": [
+                {
+                    "name": "eth0",
+                    "mac": "02:43:d7:98:83:93",
+                    "ip": "10.0.1.11",
                     "subnet": "10.0.1.0/24"
                 }
             ],
             "RUT-01": [
                 {
                     "name": "eth0",
-                    "mac": "02:ea:62:ca:ff:75",
-                    "ip": "10.0.0.1",
+                    "mac": "02:1d:28:ac:b3:2c",
+                    "ip": "10.0.0.5",
                     "subnet": "10.0.0.0/24"
                 },
                 {
                     "name": "eth1",
-                    "mac": "02:e0:73:9b:48:86",
-                    "ip": "10.0.1.1",
+                    "mac": "02:7e:41:5c:a0:30",
+                    "ip": "10.0.1.5",
                     "subnet": "10.0.1.0/24"
+                },
+                {
+                    "name": "eth2",
+                    "mac": "02:48:c0:78:ca:f1",
+                    "ip": "10.0.3.0",
+                    "subnet": "10.0.3.0/24"
                 }
             ]
         },
-        "subnets": {
-            "10.0.0.0/24": {
-                "gateway": "10.0.0.1"
-            },
-            "10.0.1.0/24": {
-                "gateway": "10.0.1.1"
-            }
-        },
+        "subnets": {},
         "routes": {
             "RUT-01": [
                 {
@@ -124,52 +211,199 @@
                     "destination": "10.0.1.0/24",
                     "interface": "eth1",
                     "next_hop": null
+                },
+                {
+                    "destination": "10.0.3.0/24",
+                    "interface": "eth2",
+                    "next_hop": null
                 }
             ]
         },
         "mac_tables": {
-            "SWT-01": {
-                "02:61:41:ae:20:5e": 1,
-                "02:1f:42:17:95:51": 3
+            "SWT-02": {
+                "02:25:4e:6b:ec:18": 1,
+                "02:16:26:fa:1e:69": 2,
+                "02:e1:d7:cb:9a:92": 3,
+                "02:1d:28:ac:b3:2c": 4
+            },
+            "SWT-03": {
+                "02:cb:79:61:eb:b1": 2,
+                "02:43:d7:98:83:93": 4,
+                "02:7e:41:5c:a0:30": 1,
+                "02:65:42:e7:95:55": 3
             }
         },
         "arp_caches": {
-            "HOST-01": {
+            "HOST-07": {
                 "eth0": {
-                    "10.0.0.1": "02:1f:42:17:95:51"
+                    "10.0.1.5": "02:7e:41:5c:a0:30"
+                }
+            },
+            "SERV-01": {
+                "eth0": {
+                    "10.0.1.5": "02:7e:41:5c:a0:30"
+                }
+            },
+            "RUT-01": {
+                "eth0": {
+                    "10.0.1.10": "02:65:42:e7:95:55"
+                },
+                "eth1": {
+                    "10.0.1.10": "02:65:42:e7:95:55"
+                },
+                "eth2": {
+                    "10.0.1.10": "02:65:42:e7:95:55"
                 }
             }
         },
-        "services": {}
+        "services": {
+            "HOST-04": [
+                {
+                    "name": "DHCP_CLIENT",
+                    "protocol": "UDP",
+                    "port": 68,
+                    "status": "running",
+                    "config": {}
+                },
+                {
+                    "name": "SSH_SERVER",
+                    "protocol": "TCP",
+                    "port": 22,
+                    "status": "running",
+                    "config": {}
+                }
+            ],
+            "HOST-05": [
+                {
+                    "name": "DHCP_CLIENT",
+                    "protocol": "UDP",
+                    "port": 68,
+                    "status": "running",
+                    "config": {}
+                }
+            ],
+            "HOST-06": [
+                {
+                    "name": "DHCP_CLIENT",
+                    "protocol": "UDP",
+                    "port": 68,
+                    "status": "running",
+                    "config": {}
+                }
+            ],
+            "HOST-07": [
+                {
+                    "name": "DHCP_CLIENT",
+                    "protocol": "UDP",
+                    "port": 68,
+                    "status": "running",
+                    "config": {}
+                }
+            ],
+            "SERV-01": [
+                {
+                    "name": "DHCP",
+                    "protocol": "UDP",
+                    "port": 67,
+                    "status": "running",
+                    "config": {}
+                },
+                {
+                    "name": "SSH_SERVER",
+                    "protocol": "TCP",
+                    "port": 22,
+                    "status": "running",
+                    "config": {}
+                }
+            ],
+            "SERV-02": [
+                {
+                    "name": "DHCP_CLIENT",
+                    "protocol": "UDP",
+                    "port": 68,
+                    "status": "running",
+                    "config": {}
+                },
+                {
+                    "name": "ECHO",
+                    "protocol": "TCP",
+                    "port": 7,
+                    "status": "running",
+                    "config": {}
+                },
+                {
+                    "name": "SSH_CLIENT",
+                    "protocol": "TCP",
+                    "port": 22,
+                    "status": "running",
+                    "config": {}
+                }
+            ],
+            "RUT-01": [
+                {
+                    "name": "DHCP_RELAY",
+                    "protocol": "UDP",
+                    "port": 67,
+                    "status": "running",
+                    "config": {
+                        "target_ip": "10.0.1.10"
+                    }
+                }
+            ]
+        }
     },
     "layout": {
         "HOST-01": {
-            "x": 135,
-            "y": 435
+            "x": 125,
+            "y": 89
         },
         "HOST-02": {
             "x": 134,
-            "y": 134
-        },
-        "SERV-01": {
-            "x": 750,
-            "y": 435
+            "y": 237
         },
         "HOST-03": {
-            "x": 582,
-            "y": 495
+            "x": 361,
+            "y": 291
+        },
+        "HOST-04": {
+            "x": 745,
+            "y": 623
+        },
+        "HOST-05": {
+            "x": 997,
+            "y": 539
+        },
+        "HOST-06": {
+            "x": 557,
+            "y": 530
+        },
+        "HOST-07": {
+            "x": 1094,
+            "y": 318
+        },
+        "SERV-01": {
+            "x": 1236,
+            "y": 63
+        },
+        "SERV-02": {
+            "x": 1260,
+            "y": 219
         },
         "SWT-01": {
-            "x": 300,
-            "y": 285
+            "x": 284,
+            "y": 102
         },
         "SWT-02": {
-            "x": 600,
-            "y": 285
+            "x": 726,
+            "y": 352
+        },
+        "SWT-03": {
+            "x": 969,
+            "y": 97
         },
         "RUT-01": {
-            "x": 450,
-            "y": 200
+            "x": 643,
+            "y": 93
         }
     }
 }
