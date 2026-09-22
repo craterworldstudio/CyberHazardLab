@@ -1,53 +1,205 @@
 # Simulation Engine
 
-The simulation engine is the software-defined environment in which CHL's network exists.
+The simulation engine is the runtime world of Cyber Hazard Lab.
 
-It models entities rather than opening real sockets or transmitting real Ethernet frames.
-
-## Simulation objects
-
-A typical network scenario contains:
+The central class is `Simulation` in:
 
 ```text
-Network
- ├── Device
- │    ├── Interface
- │    └── Services
- └── Links / forwarding relationships
+backend/orchestrator.py
 ```
 
-Network activity then produces objects such as:
+`Simulation` composes the major backend subsystems and owns the lifecycle of simulated devices.
+
+## Simulation object
+
+At initialization, the simulation creates:
+
+```python
+self.network = Network(name)
+self.dhcp = DHCP(self.network)
+
+self.hosts = {}
+self.switches = {}
+self.routers = {}
+```
+
+It also maintains:
+
+```python
+self.is_running
+self.settings
+self.rename_map
+```
+
+The simulation therefore acts as the top-level runtime container.
+
+---
+
+## Device lifecycle
+
+Devices are created through the simulation rather than directly by the frontend.
+
+### Host
 
 ```text
-Ethernet Frame
-    ↓
-IP Packet
-    ↓
-TCP/UDP Segment
-    ↓
-Application Protocol
+Simulation.add_host()
+        ↓
+Host()
+        ↓
+Network.add_host()
+        ↓
+simulation.hosts[name]
 ```
 
-Not every communication path contains every layer. ARP, for example, operates differently from TCP-based traffic.
+### Router
 
-## Orchestration
+```text
+Simulation.add_router()
+        ↓
+Router()
+        ↓
+Network.add_host()
+        ↓
+simulation.routers[name]
+```
 
-`backend/orchestrator.py` coordinates simulation activity and provides a place for higher-level interactions to be connected without putting all behavior into individual device classes.
+### Switch
 
-## Events
+```text
+Simulation.add_switch()
+        ↓
+Switch()
+        ↓
+simulation.switches[name]
+```
 
-Events provide telemetry about important changes and actions in the simulated world.
+Hosts and routers are also registered with `Network.hosts`; switches are maintained separately because their architecture differs from Layer-3 nodes.
 
-Examples used by the project include events corresponding to DHCP leases, service creation, ARP replies, received frames, and flooded frames.
+---
 
-The event system is also an architectural foundation for the future SOC/observer interface.
+## Device lookup
 
-## Determinism
+`Simulation.get_device()` searches all three device collections:
 
-Simulation behavior should be as deterministic as practical. Randomness may be used for generated identifiers or scenario behavior, but protocol logic should remain understandable and reproducible.
+```text
+hosts
+switches
+routers
+```
 
-## Educational fidelity
+This gives application managers a unified device lookup mechanism.
 
-CHL does not attempt to reproduce every implementation detail of Linux, Cisco IOS, TCP/IP, or real Ethernet hardware.
+---
 
-Instead, it models the concepts necessary to make network behavior visible and interactive.
+## Naming
+
+Device names are treated as unique across the entire simulation.
+
+Creating a device whose name already exists in another device collection raises an error.
+
+Renaming is also centralized in `Simulation.rename_device()`.
+
+The simulation maintains:
+
+```python
+rename_map
+```
+
+This is important because persisted topology layouts may refer to an older device name.
+
+---
+
+## Running state
+
+The simulation tracks whether it is running through:
+
+```python
+is_running
+```
+
+NCM uses this state when restarting devices.
+
+When the simulation is running, a restarted device receives:
+
+```text
+status = ONLINE
+boot_time = current time
+```
+
+Otherwise it returns to:
+
+```text
+status = OFFLINE
+boot_time = None
+```
+
+---
+
+## Event handling
+
+`Simulation` attaches a callback to the network:
+
+```python
+self.network.on_event = self._handle_network_event
+```
+
+Network events therefore have two effects:
+
+1. they are stored by `Network`
+2. they can trigger simulation-level handling
+
+Currently, high-severity events can place an affected device into an `ERROR` state when the event metadata identifies that device.
+
+---
+
+## Protocol processing
+
+The simulation itself does not implement every protocol.
+
+Instead, it composes protocol implementations:
+
+```text
+Simulation
+   ↓
+Node
+   ├── ARP
+   ├── routing
+   ├── ICMP
+   ├── TCP
+   ├── UDP
+   └── services
+```
+
+Switches independently compose:
+
+```text
+Switch
+ ├── SwitchPort
+ ├── Link
+ └── MAC table
+```
+
+---
+
+## Tick/update model
+
+Interfaces and switches process received-frame buffers through update methods.
+
+For example:
+
+```python
+NetworkInterface.process_rx_buffer()
+Switch.update()
+```
+
+This gives the simulation an explicit mechanism for processing queued frames rather than requiring every operation to happen immediately inside `send()`.
+
+---
+
+## Validation
+
+The simulation exposes validation functionality through the application API.
+
+Validation is intended to check and repair/normalize simulation relationships before state is persisted.
+
+The important architectural point is that validation belongs to the simulation layer rather than the frontend.
