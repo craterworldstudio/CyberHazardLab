@@ -1,51 +1,165 @@
 # Network Stack
 
-CHL represents networking as a layered simulation.
+Cyber Hazard Lab implements a software-defined network stack using Python objects.
 
-A simplified stack is:
+It does not use the host operating system's TCP/IP stack for simulated traffic.
+
+## Objects
+
+The primary packet/frame objects are defined in:
 
 ```text
-Application
-   │
-TCP / UDP
-   │
-IP
-   │
-Ethernet
-   │
-Interface / Link
+backend/network/packet.py
+backend/network/frame.py
 ```
 
-Supporting protocols such as ARP and DHCP interact with multiple layers.
+### IP packet
 
-## Layer responsibilities
+```python
+Packet(
+    source_ip,
+    destination_ip,
+    protocol,
+    payload,
+    ttl=64
+)
+```
 
-### Ethernet
+### Ethernet frame
 
-Moves simulated frames between interfaces and switching infrastructure.
+```python
+EthernetFrame(
+    source_mac,
+    destination_mac,
+    payload
+)
+```
 
-### ARP
+The payload of a `Packet` may contain a transport or control protocol object.
 
-Resolves IPv4 addresses to simulated MAC addresses.
+---
 
-### IP
+## Layer relationship
 
-Provides logical addressing and determines whether traffic is local or requires routing.
+A normal TCP application request conceptually becomes:
 
-### TCP
+```text
+HTTP payload
+      ↓
+TCPPacket
+      ↓
+Packet(protocol="TCP")
+      ↓
+EthernetFrame
+      ↓
+NetworkInterface
+      ↓
+Link / Switch
+```
 
-Provides connection-oriented transport semantics.
+A UDP service follows the equivalent path with `UDPPacket`.
 
-### UDP
+ARP is different because `ARPPacket` is carried directly inside an `EthernetFrame`.
 
-Provides connectionless datagram transport.
+---
 
-### Application services
+## Layer-3 processing
 
-Services such as HTTP, DNS, SSH, and Echo sit above the transport layer.
+`Node.receive_frame()` first checks the Ethernet destination.
 
-## Why use objects?
+If the frame is accepted, its payload is dispatched:
 
-Representing frames and packets as Python objects allows CHL to inspect and visualize traffic instead of hiding everything inside operating-system networking.
+```text
+ARPPacket → ARP subsystem
 
-This also makes protocol behavior suitable for educational exercises and future offensive/defensive simulations.
+Packet → receive_packet()
+```
+
+`Node.receive_packet()` then determines whether the IP packet is:
+
+1. local
+2. broadcast
+3. routable
+4. undeliverable
+
+For local packets, the transport protocol determines the next step.
+
+```text
+ICMP → receive_icmp()
+UDP  → receive_udp()
+TCP  → receive_tcp()
+```
+
+---
+
+## Routing
+
+If a packet is not local and forwarding is enabled, the node performs a routing-table lookup.
+
+The implementation uses longest-prefix matching.
+
+```text
+Destination IP
+      ↓
+lookup_route()
+      ↓
+best matching route
+      ↓
+outgoing interface
+      ↓
+ARP next-hop resolution
+      ↓
+Ethernet transmission
+```
+
+Routers enable forwarding; ordinary hosts do not.
+
+---
+
+## ARP
+
+Before an IPv4 packet can be transmitted on an Ethernet segment, the sender may need to resolve the next-hop IP to a MAC address.
+
+If resolution is unavailable:
+
+```text
+ARP request
+     ↓
+packet placed in pending queue
+     ↓
+ARP reply
+     ↓
+cache updated
+     ↓
+pending packets retransmitted
+```
+
+---
+
+## Transport
+
+TCP and UDP are implemented as simulation objects.
+
+TCP maintains connection state using `TCPConnection`.
+
+UDP uses `UDPConnection` for datagram transmission/telemetry.
+
+---
+
+## Application services
+
+Once TCP or UDP receives a packet for a configured running service, the node obtains the corresponding service daemon and passes the application payload to it.
+
+```text
+Node
+ ↓
+transport handler
+ ↓
+Service lookup
+ ↓
+ServiceDaemon
+ ↓
+application response
+```
+
+This is the most important connection between the simulated network stack and the service system.
