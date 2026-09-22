@@ -612,22 +612,22 @@ class API:
             self.state_manager.save()
             return {"success": True}
 
-        # POST /api/ncm/devices/<device>/terminal
-        if method == "POST" and len(resource) == 3 and resource[0] == "devices" and resource[2] == "terminal":
-            command = body.get("command", "")
-            
-            # Simple terminal logic placeholder
-            output = f"Nox OS > Command '{command}' not recognized."
+        # GET/POST /api/ncm/devices/<device>/terminal
+        if len(resource) == 3 and resource[0] == "devices" and resource[2] == "terminal":
             sim = self.ntm.simulation
             device = sim.hosts.get(resource[1]) or sim.routers.get(resource[1]) or sim.switches.get(resource[1])
             if not device:
                 return {"output": "Device not found."}
 
-            
             handler = TerminalCommandHandler(sim, self.ncm, self.state_manager)
-            output = handler.execute(device, command)
+            if method == "GET":
+                return {"prompt": handler.get_prompt(device)}
             
-            return {"output": output}
+            if method == "POST":
+                command = body.get("command", "")
+                output = handler.execute(device, command)
+                prompt = handler.get_prompt(device)
+                return {"output": output, "prompt": prompt}
 
         # POST /api/ncm/devices/<device>/restart
         if method == "POST" and len(resource) == 3 and resource[0] == "devices" and resource[2] == "restart":

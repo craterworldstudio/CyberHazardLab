@@ -226,6 +226,7 @@ class Node:
         return None
 
     def receive_packet(self, interface: NetworkInterface, packet: Packet):
+        packet.in_interface = interface
         # Check if local destination
         my_ips = [i.ip for i in self.interfaces if i.ip]
         is_local = (
@@ -292,6 +293,19 @@ class Node:
             return None
 
         if icmp.type == "ECHO_REQUEST":
+            # Check if this node has an ECHO service: if registered, it must be running to reply
+            echo_svc = None
+            for s in self.services:
+                if s.name.upper() == "ECHO":
+                    echo_svc = s
+                    break
+            if echo_svc is not None and echo_svc.status.lower() != "running":
+                # Echo service exists but is stopped -> drop request without reply
+                return None
+
+            if getattr(self, "echo_reply_enabled", True) is False:
+                return None
+
             if self.network:
                 self.network.add_event(Event(
                     type="ICMP_ECHO_REQUEST_RECEIVED",
@@ -385,14 +399,28 @@ class Node:
         if not isinstance(udp, UDPPacket):
             return None
 
-        # Find registered service on this port
+        # 1. Find registered service on this port
         service = None
         for s in self.services:
-            if s.protocol.upper() == "UDP" and s.port == udp.destination_port:
-                service = s
-                break
+            if s.port == udp.destination_port:
+                if s.protocol.upper() in ("UDP", "TCP/UDP", "ALL") or (s.name.upper() == "ECHO" and s.port == 7):
+                    service = s
+                    break
 
+        # 2. Check for existing client connection awaiting reply if no service
         if service is None:
+            key = (packet.source_ip, udp.source_port, packet.destination_ip, udp.destination_port)
+            connection = self.udp_connections.get(key)
+            if connection:
+                payload = connection.receive(udp)
+                connection.last_payload = payload
+                self.last_udp_result = {
+                    "source": packet.source_ip,
+                    "port": udp.source_port,
+                    "payload": payload
+                }
+                return payload
+
             if packet.destination_ip == "255.255.255.255":
                 return None
             if self.network:
@@ -422,17 +450,13 @@ class Node:
 
         # UDP Connection abstraction for event logging
         from backend.network.udp import UDPConnection
-        key = (packet.source_ip, udp.source_port, packet.destination_ip, udp.destination_port)
-        connection = self.udp_connections.get(key)
-        if not connection:
-            connection = UDPConnection(
-                local_ip=packet.destination_ip,
-                local_port=udp.destination_port,
-                remote_ip=packet.source_ip,
-                remote_port=udp.source_port,
-                network=self.network
-            )
-            self.udp_connections[key] = connection
+        connection = UDPConnection(
+            local_ip=packet.destination_ip,
+            local_port=udp.destination_port,
+            remote_ip=packet.source_ip,
+            remote_port=udp.source_port,
+            network=self.network
+        )
 
         payload = connection.receive(udp)
         daemon = self.get_service_daemon(service.name)
@@ -454,12 +478,41 @@ class Node:
         connection_key = (packet.source_ip, tcp_packet.source_port, packet.destination_ip, tcp_packet.destination_port)
         connection = self.tcp_connections.get(connection_key)
 
+        # 1. Existing client connection handling
+        if connection is not None:
+            response = connection.receive(tcp_packet)
+            if tcp_packet.payload is not None:
+                connection.receive_data(tcp_packet)
+                connection.last_payload = tcp_packet.payload
+                if hasattr(connection, "on_data_received") and callable(connection.on_data_received):
+                    connection.on_data_received(tcp_packet.payload)
+            if response:
+                resp_packet = Packet(
+                    source_ip=interface.ip,
+                    destination_ip=packet.source_ip,
+                    protocol="TCP",
+                    payload=response
+                )
+                self.send_ip_packet(resp_packet, out_interface=interface)
+            return None
+
+        # 2. Inbound server connection: find listening service
         service = None
         for s in self.services:
             if s.protocol.upper() == "TCP" and s.port == tcp_packet.destination_port and s.status.lower() == "running":
                 service = s
                 break
         if service is None:
+            if self.network and "RST" not in getattr(tcp_packet, "flags", set()):
+                self.network.add_event(Event(
+                    type="TCP_PORT_CLOSED",
+                    severity="WARNING",
+                    source=packet.source_ip,
+                    destination=packet.destination_ip,
+                    protocol="TCP",
+                    port=tcp_packet.destination_port,
+                    metadata={"host": self.name, "reason": "PORT_CLOSED"}
+                ))
             return None
 
         if connection is None:
@@ -522,9 +575,12 @@ class Node:
             if name == "HTTP":
                 from backend.services.http import HTTPServerDaemon
                 self.daemons[service_name] = HTTPServerDaemon(self)
-            elif name == "SSH":
+            elif name in ("SSH", "SSH_SERVER"):
                 from backend.services.ssh import SSHServerDaemon
                 self.daemons[service_name] = SSHServerDaemon(self)
+            elif name == "SSH_CLIENT":
+                from backend.services.ssh import SSHClientDaemon
+                self.daemons[service_name] = SSHClientDaemon(self)
             elif name in ("DNS", "DNS_SERVER"):
                 from backend.services.dns import DNSServerDaemon
                 self.daemons[service_name] = DNSServerDaemon(self)

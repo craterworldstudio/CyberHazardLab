@@ -113,7 +113,7 @@ function createNCMWindow(deviceName, deviceType) {
                         <div style="color: #5c6b73; margin-bottom: 15px;">System version 1.0.0. Type 'help' for available commands.</div>
                     </div>
                     <div style="display: flex; align-items: center; border: 1px solid rgba(0, 229, 255, 0.3); background: #06090e; padding: 8px;">
-                        <span style="color: #00e5ff; font-family: monospace; font-weight: bold; margin-right: 8px;">root@${deviceName.toLowerCase()}:~$</span>
+                        <span class="ncm-terminal-prompt" id="term-prompt-${deviceName}" style="color: #00e5ff; font-family: monospace; font-weight: bold; margin-right: 8px;">root@${deviceName.toLowerCase()}:~$</span>
                         <input type="text" class="ncm-terminal-input" placeholder="_" style="flex: 1; background: transparent; border: none; color: #d5ebf2; font-family: monospace; font-size: 12px; outline: none;" onkeydown="handleTerminalInput(event, '${deviceName}')">
                     </div>
                 </div>
@@ -129,7 +129,7 @@ function createNCMWindow(deviceName, deviceType) {
                         <div style="color: #5c6b73; margin-bottom: 15px;">System version 1.0.0. Type 'help' for available commands.</div>
                     </div>
                     <div style="display: flex; align-items: center; border: 1px solid rgba(0, 229, 255, 0.3); background: #06090e; padding: 8px;">
-                        <span style="color: #00e5ff; font-family: monospace; font-weight: bold; margin-right: 8px;">root@${deviceName.toLowerCase()}:~$</span>
+                        <span class="ncm-terminal-prompt" id="term-prompt-${deviceName}" style="color: #00e5ff; font-family: monospace; font-weight: bold; margin-right: 8px;">root@${deviceName.toLowerCase()}:~$</span>
                         <input type="text" class="ncm-terminal-input" placeholder="_" style="flex: 1; background: transparent; border: none; color: #d5ebf2; font-family: monospace; font-size: 12px; outline: none;" onkeydown="handleTerminalInput(event, '${deviceName}')">
                     </div>
                 </div>
@@ -548,10 +548,26 @@ async function handleTerminalInput(event, deviceName) {
         const win = ncmWindows.get(deviceName);
         if (!win) return;
         
+        const promptSpan = win.querySelector('.ncm-terminal-prompt');
+        const currentPrompt = promptSpan ? promptSpan.textContent : `root@${deviceName.toLowerCase()}:~$ `;
+        
+        const escapeHtml = (unsafe) => {
+            return (unsafe || "").toString()
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        };
+        
         const outputDiv = win.querySelector('.ncm-terminal-output');
         
         // Echo command
-        outputDiv.innerHTML += `<div style="color: #00e5ff; margin-top: 5px;">root@${deviceName.toLowerCase()}:~$ ${commandStr}</div>`;
+        if (currentPrompt.toLowerCase().includes("password:")) {
+            outputDiv.innerHTML += `<div style="color: #00e5ff; margin-top: 5px;">${escapeHtml(currentPrompt)}</div>`;
+        } else {
+            outputDiv.innerHTML += `<div style="color: #00e5ff; margin-top: 5px;">${escapeHtml(currentPrompt)} ${escapeHtml(commandStr)}</div>`;
+        }
         inputField.value = '';
         inputField.disabled = true;
         
@@ -561,15 +577,15 @@ async function handleTerminalInput(event, deviceName) {
             const response = await apiRequest("POST", `/api/ncm/devices/${encodeURIComponent(deviceName)}/terminal`, {
                 command: commandStr
             });
-            
-            const escapeHtml = (unsafe) => {
-                return (unsafe || "").toString()
-                    .replace(/&/g, "&amp;")
-                    .replace(/</g, "&lt;")
-                    .replace(/>/g, "&gt;")
-                    .replace(/"/g, "&quot;")
-                    .replace(/'/g, "&#039;");
-            };
+
+            if (response.prompt && promptSpan) {
+                promptSpan.textContent = response.prompt;
+                if (response.prompt.toLowerCase().includes("password:")) {
+                    inputField.type = "password";
+                } else {
+                    inputField.type = "text";
+                }
+            }
 
             if (response.output) {
                 // Render multiline response with artificial latency
@@ -869,8 +885,9 @@ function renderNCMServices(window, deviceName, services) {
         { value: "DHCP", label: "DHCP SERVER (UDP/67)" },
         { value: "DHCP_CLIENT", label: "DHCP CLIENT (UDP/68)" },
         { value: "DHCP_RELAY", label: "DHCP RELAY (UDP/67)" },
-        { value: "SSH", label: "SSH DAEMON (TCP/22)" },
-        { value: "ECHO", label: "ECHO RESPONDER (ICMP/0)" }
+        { value: "SSH", label: "SSH SERVER (TCP/22)" },
+        { value: "SSH_CLIENT", label: "SSH CLIENT (AGENT)" },
+        { value: "ECHO", label: "ECHO SERVER (TCP/7)" }
     ];
     
     let optionsHtml = "";
@@ -975,8 +992,9 @@ async function addNCMService(deviceName, win) {
             config.target_ip = targetIpInput.value;
         }
     }
-    else if (preset === "SSH") { proto = "TCP"; port = 22; }
-    else if (preset === "ECHO") { proto = "ICMP"; port = 0; }
+    else if (preset === "SSH" || preset === "SSH_SERVER") { proto = "TCP"; port = 22; }
+    else if (preset === "SSH_CLIENT") { proto = "TCP"; port = 0; }
+    else if (preset === "ECHO") { proto = "TCP"; port = 7; }
 
     try {
         await apiRequest("POST", `/api/ncm/devices/${encodeURIComponent(deviceName)}/services`, {

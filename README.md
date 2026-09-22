@@ -36,7 +36,7 @@ Designed specifically for students and aspiring network/security professionals, 
 | **Phase 2** | Local Networking         | `████████████████████` 9/9   | ✅ Done |
 | **Phase 3** | Transport Layer          | `████████████████████` 8/8   | ✅ Done |
 | **Phase 4** | Network Infrastructure   | `████████████░░░░░░░░` 7/12  | 🟡 In Progress |
-| **Phase 5** | Application Layer        | `████░░░░░░░░░░░░░░░░` 1/4   | 🟡 In Progress |
+| **Phase 5** | Application Layer        | `███████████░░░░░░░░░` 3/6   | 🟡 In Progress |
 | **Phase 6** | Interactive Lab Frontend | `███████████████████░` 14/15 | 🟡 In Progress |
 | **Phase 7** | SOC Integration          | `███░░░░░░░░░░░░░░░░░` 1/6   | 🟡 In Progress |
 | **Phase 8** | Penetrator Dashboard     | `░░░░░░░░░░░░░░░░░░░░` 0/5   | ❌ Not Started |
@@ -90,7 +90,8 @@ Designed specifically for students and aspiring network/security professionals, 
 #### PHASE 5 — Application Layer 🟡
 - [ ] HTTP/HTTPS protocol support
 - [ ] Core DNS services
-- [ ] Secure Shell (SSH) emulation
+- [x] Secure Shell (SSH) emulation
+- [x] Echo Service Integration
 - [ ] Custom Service Script Execution Engine
 - [x] Fully integrated DHCP services
 

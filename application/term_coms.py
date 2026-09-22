@@ -1,5 +1,6 @@
 import ipaddress
 import traceback
+import time
 
 class TerminalCommandHandler:
     def __init__(self, sim, ncm=None, state_manager=None):
@@ -16,12 +17,100 @@ class TerminalCommandHandler:
                 return i
         return None
 
+    def get_prompt(self, device):
+        sessions = getattr(device, "_terminal_sessions", None)
+        if not sessions:
+            return f"root@{device.name.lower()}:~$ "
+        curr = sessions[-1]
+        if curr.get("state") == "AWAITING_PASSWORD":
+            return f"{curr['user']}@{curr['remote_ip']}'s password: "
+        if curr.get("state") == "CONNECTED":
+            remote_dev = curr.get("remote_device")
+            if remote_dev and getattr(remote_dev, "_terminal_sessions", None):
+                return self.get_prompt(remote_dev)
+            return f"{curr['user']}@{curr['remote_device_name'].lower()}:~$ "
+        return f"root@{device.name.lower()}:~$ "
+
     def execute(self, device, command_str):
+        # 1. Handle active remote terminal session (e.g. SSH)
+        sessions = getattr(device, "_terminal_sessions", None)
+        if sessions:
+            curr = sessions[-1]
+            if curr.get("state") == "AWAITING_PASSWORD":
+                entered_pass = command_str.strip()
+                from backend.services.ssh import SSHClientDaemon
+                client_daemon = SSHClientDaemon(device)
+                res = client_daemon.execute_remote(
+                    remote_ip=curr["remote_ip"],
+                    command="",
+                    username=curr["user"],
+                    password=entered_pass,
+                    port=curr["port"]
+                )
+                if res.get("success"):
+                    curr["state"] = "CONNECTED"
+                    curr["password"] = entered_pass
+                    remote_name = curr["remote_device_name"]
+                    local_ip = device.interfaces[0].ip if device.interfaces else "127.0.0.1"
+                    return (
+                        f"Welcome to Nox OS on {remote_name}!\n"
+                        f" * Documentation:  https://noxos.org\n"
+                        f" * Management:     NCM v2.4\n"
+                        f"Last login: {time.strftime('%a %b %d %H:%M:%S %Y')} from {local_ip}"
+                    )
+                else:
+                    curr["password_attempts"] = curr.get("password_attempts", 0) + 1
+                    if curr["password_attempts"] >= 3:
+                        device._terminal_sessions.pop()
+                        return f"Permission denied (publickey,password).\nConnection to {curr['remote_ip']} closed."
+                    return "Permission denied, please try again."
+
+            elif curr.get("state") == "CONNECTED":
+                trimmed = command_str.strip()
+                remote_dev = curr.get("remote_device")
+                if remote_dev and getattr(remote_dev, "_terminal_sessions", None):
+                    # Forward to remote device (which handles its own nested session/exit)
+                    from backend.services.ssh import SSHClientDaemon
+                    client_daemon = SSHClientDaemon(device)
+                    res = client_daemon.execute_remote(
+                        remote_ip=curr["remote_ip"],
+                        command=command_str,
+                        username=curr["user"],
+                        password=curr["password"],
+                        port=curr["port"]
+                    )
+                    return res.get("output", "")
+
+                if trimmed in ("exit", "logout"):
+                    remote_ip = curr["remote_ip"]
+                    device._terminal_sessions.pop()
+                    return f"logout\nConnection to {remote_ip} closed."
+                if not trimmed:
+                    return ""
+                from backend.services.ssh import SSHClientDaemon
+                client_daemon = SSHClientDaemon(device)
+                res = client_daemon.execute_remote(
+                    remote_ip=curr["remote_ip"],
+                    command=command_str,
+                    username=curr["user"],
+                    password=curr["password"],
+                    port=curr["port"]
+                )
+                if not res.get("success"):
+                    if res.get("auth_failed"):
+                        device._terminal_sessions.pop()
+                        return f"Connection to {curr['remote_ip']} closed by remote host."
+                    return f"ssh: {res.get('error', 'Unknown error')}"
+                return res.get("output", "")
+
+        # 2. Local command execution
         parts = command_str.split()
         if not parts:
             return ""
             
         cmd = parts[0]
+        if cmd in ("exit", "logout"):
+            return "logout\n[Process completed - Nox OS local shell cannot be exited]"
         
         if cmd == "help":
             return self._handle_help(parts)
@@ -43,6 +132,10 @@ class TerminalCommandHandler:
             # Just an alias mapping for our ip addr logic
             parts = ["ip", "addr", "show"]
             return self._handle_ip(device, parts)
+        elif cmd == "echo":
+            return self._handle_echo(device, parts)
+        elif cmd == "ssh":
+            return self._handle_ssh(device, parts)
         elif cmd == "service":
             return self._handle_service(device, parts)
         else:
@@ -59,13 +152,33 @@ class TerminalCommandHandler:
             output += "  ip         - Show / manipulate routing, devices, policy routing and tunnels\n"
             output += "  arp        - (Legacy) Display the local ARP cache\n"
             output += "  route      - (Legacy) Display the routing table\n"
+            output += "  echo       - Send RFC 862 Echo probe (TCP/UDP)\n"
+            output += "  ssh        - Connect to remote host via SSH\n"
             output += "  service    - Manage daemon services\n"
             output += "  hostname   - Show current system hostname"
             return output
             
         topic = parts[1]
         
-        if topic == "ping":
+        if topic == "echo":
+            return """echo - send RFC 862 echo probe to network host
+  Usage: echo [-p port] [-t tcp|udp] destination [message]
+
+  Options:
+    -p port      Target port number (default: 7)
+    -t proto     Transport protocol: tcp or udp (default: tcp)
+    destination  Target IP or hostname
+    message      Payload string to echo"""
+        elif topic == "ssh":
+            return """ssh - OpenSSH client / remote terminal execution
+  Usage: ssh [-p port] [-P password] [user@]destination [command]
+
+  Options:
+    -p port      Target port number (default: 22)
+    -P password  Password for user authentication (default: password)
+    destination  Target IP or hostname
+    command      Optional remote command to execute"""
+        elif topic == "ping":
             return """ping - send ICMP ECHO_REQUEST to network hosts
   Usage: ping [-c count] [-i interval] [-s size] [-t ttl] [-q] [-v] destination
   
@@ -536,8 +649,6 @@ class TerminalCommandHandler:
 
     def _handle_netstat(self, device, parts):
         args = parts[1:]
-        # Dummy netstat based on active tcp/udp services if we have them
-        # Nox OS currently doesn't simulate full socket layer, but we can list active services if any
         output = "Active Internet connections (w/o servers)\n"
         output += "Proto Recv-Q Send-Q Local Address           Foreign Address         State\n"
         
@@ -545,10 +656,10 @@ class TerminalCommandHandler:
         
         # Check if device has any ports open/listening
         if hasattr(device, "services"):
-            for srv_name, srv in device.services.items():
-                if getattr(srv, "is_running", False):
+            for srv in device.services:
+                if getattr(srv, "status", "").lower() == "running":
                     port = getattr(srv, "port", 0)
-                    proto = getattr(srv, "protocol", "tcp")
+                    proto = getattr(srv, "protocol", "tcp").lower()
                     local = f"0.0.0.0:{port}"
                     output += f"{proto:<5} 0      0      {local:<23} 0.0.0.0:*               LISTEN\n"
                     has_sockets = True
@@ -557,6 +668,247 @@ class TerminalCommandHandler:
             output = "Active Internet connections (w/o servers)\nProto Recv-Q Send-Q Local Address           Foreign Address         State\n(No active sockets found)"
             
         return output
+
+    def _handle_echo(self, device, parts):
+        if len(parts) < 2:
+            return "Usage: echo [-p port] [-t tcp|udp] destination [message]"
+
+        port = 7
+        proto = "TCP"
+        target_ip = None
+        message_parts = []
+
+        i = 1
+        while i < len(parts):
+            p = parts[i]
+            if p == "-p" and i + 1 < len(parts):
+                try:
+                    port = int(parts[i+1])
+                    i += 2
+                    continue
+                except:
+                    pass
+            if p == "-t" and i + 1 < len(parts):
+                proto = parts[i+1].upper()
+                i += 2
+                continue
+            if not target_ip and not p.startswith("-"):
+                target_ip = p
+                i += 1
+                continue
+            message_parts.append(p)
+            i += 1
+
+        if not target_ip:
+            return "Usage: echo [-p port] [-t tcp|udp] destination [message]"
+
+        message = " ".join(message_parts) if message_parts else "CyberHazardLab Echo Probe"
+
+        if not device or not getattr(device, "interfaces", []):
+            return "Device has no network interfaces configured."
+
+        intf = device.interfaces[0]
+        if not intf.ip or intf.ip == "0.0.0.0":
+            return "Device has no valid IP assigned."
+
+        network = getattr(device, "network", None)
+        if not network:
+            return "Device is not connected to a network."
+
+        # Resolve destination if hostname given
+        dest_node = network.get_host_by_ip(target_ip)
+        if not dest_node:
+            dest_node = network.get_host(target_ip)
+            if dest_node and getattr(dest_node, "interfaces", []):
+                target_ip = dest_node.interfaces[0].ip
+            else:
+                return f"echo: Could not resolve hostname {target_ip}: Name or service not known"
+
+        route, out_intf = network.get_route(device, target_ip)
+        if not route or not out_intf:
+            return f"Network is unreachable: No route from {device.name} to {target_ip}"
+
+        # Check if destination has Echo service running on port
+        echo_svc = None
+        for s in getattr(dest_node, "services", []):
+            if s.port == port and s.status.lower() == "running":
+                if s.protocol.upper() in (proto, "TCP/UDP", "ALL") or (s.name.upper() == "ECHO" and port == 7):
+                    echo_svc = s
+                    break
+
+        if not echo_svc:
+            if network:
+                from backend.core.event import Event
+                network.add_event(Event(
+                    type=f"{proto}_PORT_CLOSED",
+                    severity="WARNING",
+                    source=f"{out_intf.ip}:54321",
+                    destination=f"{target_ip}:{port}",
+                    protocol=proto,
+                    metadata={"reason": "Port closed / Echo service not running", "target": target_ip}
+                ))
+            return f"Connecting to {target_ip}:{port} ({proto})...\nConnection refused: Port {port} is closed on {target_ip} (Echo service not running)."
+
+        # Target has Echo service running -> execute probe
+        daemon = dest_node.get_service_daemon(echo_svc.name)
+        mock_packet = type("MockPacket", (), {
+            "source_ip": out_intf.ip,
+            "destination_ip": target_ip,
+            "payload": type("MockTransport", (), {"destination_port": port, "source_port": 54321})()
+        })()
+
+        if proto == "TCP":
+            from backend.network.tcp import TCPConnection, TCPState
+            conn = TCPConnection(local_ip=target_ip, local_port=port, remote_ip=out_intf.ip, remote_port=54321, network=network)
+            conn.state = TCPState.ESTABLISHED
+            reply = daemon.handle_tcp(message, conn, mock_packet)
+        else:
+            from backend.network.udp import UDPConnection
+            conn = UDPConnection(local_ip=target_ip, local_port=port, remote_ip=out_intf.ip, remote_port=54321, network=network)
+            reply = daemon.handle_udp(message, conn, mock_packet)
+
+        output = f"Connecting to {target_ip}:{port} ({proto})...\n"
+        output += f"Sent: '{message}' ({len(message)} bytes)\n"
+        output += f"Received Echo Reply from {target_ip}:{port}: '{reply}' ({len(reply or '')} bytes, RTT < 1ms)"
+        return output
+
+    def _handle_ssh(self, device, parts):
+        if len(parts) < 2:
+            return "Usage: ssh [-p port] [-P password] [user@]destination [command]"
+
+        port = 22
+        password = "password"
+        user_host = None
+        command_parts = []
+
+        i = 1
+        while i < len(parts):
+            p = parts[i]
+            if p == "-p" and i + 1 < len(parts):
+                try:
+                    port = int(parts[i+1])
+                    i += 2
+                    continue
+                except:
+                    pass
+            if p == "-P" and i + 1 < len(parts):
+                password = parts[i+1]
+                i += 2
+                continue
+            if not user_host and not p.startswith("-"):
+                user_host = p
+                i += 1
+                continue
+            command_parts.append(p)
+            i += 1
+
+        if not user_host:
+            return "Usage: ssh [-p port] [-P password] [user@]destination [command]"
+
+        if "@" in user_host:
+            username, remote_host_str = user_host.split("@", 1)
+        else:
+            username = "admin"
+            remote_host_str = user_host
+
+        command = " ".join(command_parts) if command_parts else ""
+
+        network = getattr(device, "network", None)
+        if not network:
+            return "Device is not connected to a network."
+
+        # Resolve remote_host_str (IP or hostname)
+        remote_ip = remote_host_str
+        target_device = network.get_host_by_ip(remote_host_str)
+        if not target_device:
+            target_device = network.get_host(remote_host_str)
+            if target_device and getattr(target_device, "interfaces", []):
+                remote_ip = target_device.interfaces[0].ip
+            else:
+                return f"ssh: Could not resolve hostname {remote_host_str}: Name or service not known"
+
+        # Check route to destination
+        route, intf = network.get_route(device, remote_ip)
+        if not route or not intf:
+            return f"ssh: connect to host {remote_ip} port {port}: No route to host"
+
+        # Check if destination host exists and SSH service is listening
+        ssh_server = next((s for s in getattr(target_device, "services", []) if s.protocol.upper() == "TCP" and s.port == port and s.status.lower() == "running"), None)
+        if not ssh_server:
+            return f"ssh: connect to host {remote_ip} port {port}: Connection refused"
+
+        from backend.services.ssh import SSHClientDaemon
+        client_daemon = SSHClientDaemon(device)
+
+        if not command:
+            # Interactive continual SSH session
+            if not hasattr(device, "_terminal_sessions") or device._terminal_sessions is None:
+                device._terminal_sessions = []
+
+            if "-P" in parts:
+                res = client_daemon.execute_remote(
+                    remote_ip=remote_ip,
+                    command="",
+                    username=username,
+                    password=password,
+                    port=port
+                )
+                if res.get("success"):
+                    device._terminal_sessions.append({
+                        "state": "CONNECTED",
+                        "user": username,
+                        "remote_ip": remote_ip,
+                        "remote_device_name": target_device.name,
+                        "remote_device": target_device,
+                        "port": port,
+                        "password": password,
+                        "password_attempts": 0
+                    })
+                    local_ip = device.interfaces[0].ip if device.interfaces else "127.0.0.1"
+                    return (
+                        f"Welcome to Nox OS on {target_device.name}!\n"
+                        f" * Documentation:  https://noxos.org\n"
+                        f" * Management:     NCM v2.4\n"
+                        f"Last login: {time.strftime('%a %b %d %H:%M:%S %Y')} from {local_ip}"
+                    )
+                else:
+                    device._terminal_sessions.append({
+                        "state": "AWAITING_PASSWORD",
+                        "user": username,
+                        "remote_ip": remote_ip,
+                        "remote_device_name": target_device.name,
+                        "remote_device": target_device,
+                        "port": port,
+                        "password": "",
+                        "password_attempts": 1
+                    })
+                    return "Permission denied, please try again."
+            else:
+                device._terminal_sessions.append({
+                    "state": "AWAITING_PASSWORD",
+                    "user": username,
+                    "remote_ip": remote_ip,
+                    "remote_device_name": target_device.name,
+                    "remote_device": target_device,
+                    "port": port,
+                    "password": "",
+                    "password_attempts": 0
+                })
+                return ""
+
+        # Single command execution mode
+        res = client_daemon.execute_remote(
+            remote_ip=remote_ip,
+            command=command,
+            username=username,
+            password=password,
+            port=port
+        )
+
+        if not res.get("success"):
+            return f"ssh: {res.get('error', 'Unknown error')}"
+
+        return res.get("output", "")
 
     def _handle_service(self, device, parts):
         if not hasattr(device, "services"):

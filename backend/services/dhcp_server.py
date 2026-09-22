@@ -1,8 +1,8 @@
 from .base import ServiceDaemon
 from backend.network.packet import UDPPacket, Packet
 from backend.network.dhcp_packet import (
-    DHCPMessage, DHCPDISCOVER, DHCPOFFER, DHCPREQUEST, DHCPACK,
-    OPT_MESSAGE_TYPE, OPT_SUBNET_MASK, OPT_ROUTER, OPT_LEASE_TIME, OPT_SERVER_ID, OPT_RELAY_AGENT
+    DHCPMessage, DHCPDISCOVER, DHCPOFFER, DHCPREQUEST, DHCPACK, DHCPNAK,
+    OPT_MESSAGE_TYPE, OPT_SUBNET_MASK, OPT_ROUTER, OPT_LEASE_TIME, OPT_SERVER_ID, OPT_RELAY_AGENT, OPT_REQUESTED_IP
 )
 from backend.core.event import Event
 
@@ -75,10 +75,35 @@ class DHCPServerDaemon(ServiceDaemon):
                 return None
 
             elif msg.message_type == DHCPREQUEST:
-                req_ip = msg.yiaddr if (msg.yiaddr and msg.yiaddr != "0.0.0.0") else msg.ciaddr
-                if not scope.commit(msg.chaddr, req_ip):
+                req_ip = msg.get_option(OPT_REQUESTED_IP) or (msg.yiaddr if (msg.yiaddr and msg.yiaddr != "0.0.0.0") else msg.ciaddr)
+                dest_ip = relay_ip if relay_ip else "255.255.255.255"
+                dest_port = 67 if relay_ip else 68
+
+                if not req_ip or not scope.validate_lease(msg.chaddr, req_ip):
+                    # RFC 2131: Send DHCPNAK if requested IP is invalid or unavailable
+                    nak = DHCPMessage(
+                        op=2,
+                        xid=msg.xid,
+                        siaddr=server_ip,
+                        giaddr=msg.giaddr,
+                        chaddr=msg.chaddr
+                    )
+                    nak.message_type = DHCPNAK
+                    nak.set_option(OPT_SERVER_ID, server_ip)
+                    if msg.get_option(OPT_RELAY_AGENT):
+                        nak.set_option(OPT_RELAY_AGENT, msg.get_option(OPT_RELAY_AGENT))
+
+                    udp = UDPPacket(source_port=67, destination_port=dest_port, payload=nak)
+                    resp_pkt = Packet(
+                        source_ip=server_ip,
+                        destination_ip=dest_ip,
+                        protocol="UDP",
+                        payload=udp
+                    )
+                    self.host.send_ip_packet(resp_pkt)
                     return None
 
+                # Lease valid and confirmed: Send DHCPACK
                 reply = DHCPMessage(
                     op=2,
                     xid=msg.xid,
@@ -94,9 +119,6 @@ class DHCPServerDaemon(ServiceDaemon):
                 reply.set_option(OPT_SERVER_ID, server_ip)
                 if msg.get_option(OPT_RELAY_AGENT):
                     reply.set_option(OPT_RELAY_AGENT, msg.get_option(OPT_RELAY_AGENT))
-
-                dest_ip = relay_ip if relay_ip else "255.255.255.255"
-                dest_port = 67 if relay_ip else 68
 
                 udp = UDPPacket(source_port=67, destination_port=dest_port, payload=reply)
                 resp_pkt = Packet(

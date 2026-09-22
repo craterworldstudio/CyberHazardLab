@@ -3,13 +3,14 @@ import time
 from typing import Any
 
 class DHCPScope:
-    def __init__(self, subnet: str, start_ip: str, end_ip: str, gateway: str, dns: str = "8.8.8.8", lease_time: int = 120):
+    def __init__(self, subnet: str, start_ip: str, end_ip: str, gateway: str, dns: str = "8.8.8.8", lease_time: int = 120, dhcp=None):
         self.network = ipaddress.ip_network(subnet, strict=False)
         self.start_ip = ipaddress.ip_address(start_ip)
         self.end_ip = ipaddress.ip_address(end_ip)
         self.gateway = gateway
         self.dns = dns
         self.lease_time = lease_time
+        self.dhcp = dhcp
         # mac -> {"ip": str, "expires_at": float, "state": "OFFERED" | "COMMITTED"}
         self.leases: dict[str, dict] = {}
 
@@ -34,9 +35,13 @@ class DHCPScope:
             return self.leases[mac]["ip"]
 
         used_ips = {lease["ip"] for lease in self.leases.values()}
+        used_ips.add(self.gateway)
+        if self.dhcp:
+            used_ips.update(self.dhcp.get_configured_ips(exclude_mac=mac))
+
         for val in range(int(self.start_ip), int(self.end_ip) + 1):
             cand = str(ipaddress.ip_address(val))
-            if cand not in used_ips and cand != self.gateway:
+            if cand not in used_ips:
                 self.leases[mac] = {
                     "ip": cand,
                     "expires_at": time.time() + 30,
@@ -46,22 +51,37 @@ class DHCPScope:
 
         raise RuntimeError(f"DHCP Pool Exhausted in {self.network}")
 
-    def commit(self, mac: str, req_ip: str) -> bool:
+    def validate_lease(self, mac: str, req_ip: str) -> bool:
+        """Validates whether a client's requested IP is acceptable (RFC 2131 INIT-REBOOT / Renewal)."""
         self._cleanup_expired()
         mac = mac.upper()
+        if not self.contains(req_ip):
+            return False
+
+        # If already leased to this MAC, refresh and return True
         if mac in self.leases and self.leases[mac]["ip"] == req_ip:
             self.leases[mac]["expires_at"] = time.time() + self.lease_time
             self.leases[mac]["state"] = "COMMITTED"
             return True
-        # Allow committing if unoffered but available in range
-        if req_ip not in [l["ip"] for l in self.leases.values()] and self.contains(req_ip):
+
+        # Check if leased to someone else or matches static gateway / server
+        used_ips = {l["ip"] for m, l in self.leases.items() if m != mac}
+        used_ips.add(self.gateway)
+        if self.dhcp:
+            used_ips.update(self.dhcp.get_configured_ips(exclude_mac=mac))
+
+        if req_ip not in used_ips:
             self.leases[mac] = {
                 "ip": req_ip,
                 "expires_at": time.time() + self.lease_time,
                 "state": "COMMITTED"
             }
             return True
+
         return False
+
+    def commit(self, mac: str, req_ip: str) -> bool:
+        return self.validate_lease(mac, req_ip)
 
     def release(self, mac: str) -> bool:
         mac = mac.upper()
@@ -112,6 +132,29 @@ class DHCP:
             interface.owner._install_connected_route(interface)
         return ip
 
+    def get_configured_ips(self, exclude_mac: str | None = None) -> set[str]:
+        ips = set()
+        if not self.network:
+            return ips
+        devices = []
+        if hasattr(self.network, "hosts"):
+            devices.extend(self.network.hosts.values())
+        if hasattr(self.network, "routers"):
+            devices.extend(self.network.routers.values())
+        orch = getattr(self.network, "orchestrator", None)
+        if orch:
+            if hasattr(orch, "hosts"):
+                devices.extend(orch.hosts.values())
+            if hasattr(orch, "routers"):
+                devices.extend(orch.routers.values())
+        for dev in set(devices):
+            for intf in getattr(dev, "interfaces", []):
+                if intf.ip and intf.ip not in ("0.0.0.0", ""):
+                    if exclude_mac and intf.mac.upper() == exclude_mac.upper():
+                        continue
+                    ips.add(intf.ip)
+        return ips
+
     def add_scope(self, subnet: str, start_ip: str, end_ip: str, gateway: str, dns: str = "8.8.8.8", lease_time: int = 120) -> DHCPScope:
         # Avoid duplicate scope for same network
         net = ipaddress.ip_network(subnet, strict=False)
@@ -122,9 +165,10 @@ class DHCP:
                 s.gateway = gateway
                 s.dns = dns
                 s.lease_time = lease_time
+                s.dhcp = self
                 return s
 
-        scope = DHCPScope(subnet, start_ip, end_ip, gateway, dns, lease_time)
+        scope = DHCPScope(subnet, start_ip, end_ip, gateway, dns, lease_time, dhcp=self)
         self.scopes.append(scope)
         return scope
 
@@ -168,7 +212,7 @@ class DHCP:
                 return None
 
             gateway = default_gateway or str(hosts[0])
-            start_ip = str(hosts[9]) if len(hosts) > 10 else str(hosts[1])
+            start_ip = str(hosts[10]) if len(hosts) > 11 else str(hosts[1])
             end_ip = str(hosts[-2])
 
             return self.add_scope(str(net), start_ip, end_ip, gateway)

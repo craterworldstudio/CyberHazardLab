@@ -24,14 +24,31 @@ class DHCPRelayDaemon(ServiceDaemon):
 
             # Client -> Server (BOOTREQUEST: DISCOVER or REQUEST)
             if msg.op == 1:
+                # Loop prevention
+                if msg.hops >= 16:
+                    return None
+
                 # Determine which local interface received this request
-                # Inbound interface is the one on the client's subnet (or default to first)
-                in_intf = self.host.interfaces[0] if self.host.interfaces else None
-                for i in self.host.interfaces:
-                    if i.ip and i.ip != "0.0.0.0":
-                        # If packet came from local subnet or broadcast on that link
-                        in_intf = i
-                        break
+                in_intf = getattr(packet, "in_interface", None)
+                if not in_intf:
+                    for i in self.host.interfaces:
+                        if i.ip and i.ip != "0.0.0.0":
+                            in_intf = i
+                            break
+
+                if not in_intf:
+                    return None
+
+                # If the inbound interface is on the same subnet as the target DHCP server,
+                # the client and DHCP server are already on the same broadcast domain. Do not relay!
+                if in_intf.subnet and in_intf.subnet not in ("0.0.0.0/0", "0.0.0.0"):
+                    try:
+                        import ipaddress
+                        net = ipaddress.IPv4Network(in_intf.subnet, strict=False)
+                        if ipaddress.IPv4Address(target_server_ip) in net:
+                            return None
+                    except Exception:
+                        pass
 
                 msg.giaddr = in_intf.ip
                 msg.set_option(OPT_RELAY_AGENT, in_intf.ip)

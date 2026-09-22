@@ -263,10 +263,10 @@ class Simulation:
         self.network.add_service(host, service)
         return service
 
-    def start_service(self, host, service_name: str):
+    def start_service(self, host, service_name: str, force: bool = False):
         if isinstance(host, str):
             host = self.get_host(host)
-        self.network.start_service(host, service_name)
+        self.network.start_service(host, service_name, force=force)
 
     def stop_service(self, host, service_name: str):
         if isinstance(host, str):
@@ -325,7 +325,7 @@ class Simulation:
             node.boot_time = now
             for s in node.services:
                 if getattr(s, "enabled", True):
-                    self.start_service(node, s.name)
+                    self.start_service(node, s.name, force=True)
 
         for switch in self.switches.values():
             switch.status = "ONLINE"

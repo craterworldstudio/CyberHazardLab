@@ -34,6 +34,38 @@ class Network:
 		host.network = self
 		self.hosts[host.name] = host
 
+	def get_host(self, name_or_ip: str):
+		if name_or_ip in self.hosts:
+			return self.hosts[name_or_ip]
+		return self.get_host_by_ip(name_or_ip)
+
+	def get_host_by_ip(self, ip: str):
+		for host in self.hosts.values():
+			for intf in getattr(host, "interfaces", []):
+				if intf.ip == ip:
+					return host
+		if hasattr(self, "orchestrator") and self.orchestrator:
+			for router in self.orchestrator.routers.values():
+				for intf in router.interfaces:
+					if intf.ip == ip:
+						return router
+		return None
+
+	def get_route(self, source, destination_ip: str):
+		if hasattr(source, "lookup_route"):
+			route = source.lookup_route(destination_ip)
+			if route:
+				return route, route.get("interface")
+		for intf in getattr(source, "interfaces", []):
+			if intf.subnet and intf.ip:
+				try:
+					net = ipaddress.ip_network(intf.subnet, strict=False)
+					if ipaddress.ip_address(destination_ip) in net:
+						return {"destination": net, "interface": intf, "next_hop": None}, intf
+				except Exception:
+					pass
+		return None, None
+
 	def add_event(self, event: Event):
 		self.events.append(event)
 		print(event)
@@ -163,7 +195,7 @@ class Network:
 			}
 		))
 
-	def start_service(self, host: Host, service_name: str):
+	def start_service(self, host: Host, service_name: str, force: bool = False):
 
 		service = self.get_services(host, service_name)
 
@@ -172,7 +204,8 @@ class Network:
 				f"{host.name} does not have service {service_name}"
 			)
 
-		if service.status == "running": return
+		if service.status == "running" and not force:
+			return
 
 		service.status = "running"
 		if hasattr(host, 'get_service_daemon'):
