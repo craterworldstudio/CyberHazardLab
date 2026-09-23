@@ -130,3 +130,38 @@ Designed specifically for students and aspiring network/security professionals, 
 
 
 ---
+
+---
+
+## 🛠️ Installation & Local Setup
+
+Because the backend utilizes state-centric memory structures to execute live routing topologies, **local execution via loopback (`127.0.0.1`) is the recommended way to experience isolated laboratory environments.**
+
+### Prerequisites
+* **Python 3.10+** (No third-party package dependencies required for core execution)
+* Any modern web browser
+
+### Setup Instructions
+
+1. **Clone the repository framework:**
+   ```bash
+   git clone https://github.com
+   cd cyberhazardlab
+   ```
+
+2. **Initialize the local orchestration server:**
+   ```bash
+   python application/main.py
+   ```
+   *The server dynamically binds to `127.0.0.1:8000` locally. If deployed to cloud runtimes ([CyberHazard Lab](https://cyberhazardlab.onrender.com)), it automatically switches interface bindings to comply with host proxy architecture.*
+
+3. **Access the Interface:**
+   Launch your browser and navigate to: `http://127.0.0.1:8000`
+---
+
+## 🔒 Threat Vector Insulation & Sandboxing
+
+Cyber Hazard Lab is built from the ground up to guarantee environment containment:
+* **Air-Gapped Execution:** Packet processing engines (`Packet`, `TCPPacket`) exist purely as structured Python object instances. The backend handles no raw host socket hooks (`socket.AF_PACKET`), preventing traffic leakage outside the application process.
+* **Deterministic Lexical Terminal:** The integrated console uses an isolated token parsing matrix (`if command.startswith("ping")`) rather than exposing input arguments to system execution environments (`os.system` / `subprocess`). The application is natively safe from command injection bypasses.
+
