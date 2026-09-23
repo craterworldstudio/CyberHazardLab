@@ -238,10 +238,13 @@ class StateManager:
                         str(interface.subnet)
                         if interface.subnet is not None
                         else None
-                    )
+                    ),
+                    # Persist gateway from the owning node so it survives restart
+                    "gateway": getattr(device, "default_gateway", None)
                 })
 
         return interfaces
+
 
     def serialize_subnets(self):
         return self.serialize_value(

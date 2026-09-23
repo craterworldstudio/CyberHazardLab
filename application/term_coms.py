@@ -154,6 +154,8 @@ class TerminalCommandHandler:
             return self._handle_ssh(device, parts)
         elif cmd == "service":
             return self._handle_service(device, parts)
+        elif cmd == "nslookup":
+            return self._handle_nslookup(device, parts)
         else:
             return f"Nox OS > Command '{cmd}' not recognized."
             
@@ -171,6 +173,7 @@ class TerminalCommandHandler:
             output += "  echo       - Send RFC 862 Echo probe (TCP/UDP)\n"
             output += "  ssh        - Connect to remote host via SSH\n"
             output += "  service    - Manage daemon services\n"
+            output += "  nslookup   - Query DNS server for name resolution\n"
             output += "  hostname   - Show current system hostname"
             return output
             
@@ -569,12 +572,17 @@ class TerminalCommandHandler:
         if not device:
             return "Cannot run ping from this device."
             
-        output = f"PING {target_ip} ({target_ip}) {size}({size+28}) bytes of data.\n" if not quiet else ""
+        from application.dns_resolver import resolve_hostname
+        resolved_ip = resolve_hostname(device, target_ip)
+        if not resolved_ip:
+            return f"ping: {target_ip}: Name or service not known"
+            
+        output = f"PING {target_ip} ({resolved_ip}) {size}({size+28}) bytes of data.\n" if not quiet else ""
         success_count = 0
         
         try:
             for j in range(count):
-                result = self.sim.ping(device, target_ip, ttl=ttl, payload="0"*size)
+                result = self.sim.ping(device, resolved_ip, ttl=ttl, payload="0"*size)
                 
                 # Format response
                 line = ""
@@ -640,13 +648,18 @@ class TerminalCommandHandler:
         if not target_ip:
             return "Usage: tracert [-d] [-h maximum_hops] [-w timeout] target_name"
             
-        output = f"Tracing route to {target_ip} over a maximum of {max_hops} hops:\n\n"
+        from application.dns_resolver import resolve_hostname
+        resolved_ip = resolve_hostname(device, target_ip)
+        if not resolved_ip:
+            return f"Unable to resolve target system name {target_ip}."
+            
+        output = f"Tracing route to {target_ip} [{resolved_ip}] over a maximum of {max_hops} hops:\n\n"
         
         if not hasattr(self.sim, "traceroute"):
             return "Traceroute is not implemented on the simulation engine."
             
         try:
-            hops = self.sim.traceroute(device, target_ip, max_hops=max_hops)
+            hops = self.sim.traceroute(device, resolved_ip, max_hops=max_hops)
             for hop in hops:
                 ttl = hop.get("ttl", "*")
                 addr = hop.get("address")
@@ -935,8 +948,17 @@ class TerminalCommandHandler:
             return "Services not supported on this device."
             
         if len(parts) == 1 or parts[1] == "list":
-            if not device.services:
-                return "No services configured."
+            if len(parts) > 2 and parts[2] == "-a":
+                output = "AVAILABLE SERVICES:\n"
+                supported = ["ECHO", "HTTP", "SSH_SERVER", "SSH_CLIENT", "DHCP", "DHCP_CLIENT", "DHCP_RELAY", "DNS", "DNS_CLIENT"]
+                running = {s.name.upper() for s in getattr(device, "services", []) if s.status.lower() == "running"}
+                for s in supported:
+                    state = " (RUNNING)" if s in running else ""
+                    output += f"  - {s}{state}\n"
+                return output
+                
+            if not getattr(device, "services", None):
+                return "No services configured. (Use 'service list -a' to view all available types)"
             output = "SERVICES:\n"
             for s in device.services:
                 output += f"  [{s.status.upper()}] {s.name} (Port {s.port}/{s.protocol})\n"
@@ -999,3 +1021,69 @@ class TerminalCommandHandler:
             
         else:
             return "Usage: service {list|add|start|stop|remove}"
+
+    def _handle_nslookup(self, device, parts):
+        if len(parts) < 2:
+            return "Usage: nslookup <hostname> [dns_server_ip]"
+        
+        hostname = parts[1]
+        
+        # Determine DNS Server to use
+        dns_ip = None
+        if len(parts) >= 3:
+            dns_ip = parts[2]
+        else:
+            dns_ip = getattr(device, "dns_server", None)
+            
+        if not dns_ip:
+            return "Server:  UnKnown\nAddress:  UnKnown\n\n*** No DNS server configured for local system."
+            
+        output = f"Server:  UnKnown\nAddress:  {dns_ip}\n\n"
+        
+        # Send DNS query (UDP to port 53)
+        if not device.interfaces:
+            return "No interface to send DNS request."
+            
+        intf = device.interfaces[0]
+        from backend.network.packet import UDPPacket, Packet
+        
+        udp = UDPPacket(source_port=53535, destination_port=53, payload=hostname)
+        pkt = Packet(
+            source_ip=intf.ip,
+            destination_ip=dns_ip,
+            protocol="UDP",
+            payload=udp,
+            ttl=64
+        )
+        
+        # We need a way to capture the response, similar to ping.
+        # But `ping` relies on `source.last_icmp_result`.
+        # Since this is a quick simulation, we will add a small hook or use `ping`-like blocking.
+        # Alternatively, we can use the Orchestrator's internal resolve directly for simplicity if it's the exact DNS Server.
+        # But the prompt asks for real UDP integration.
+        
+        # Let's add `device.last_dns_result` logic.
+        device.last_dns_result = None
+        device.send_ip_packet(pkt, out_interface=intf)
+        
+        start_wait = time.time()
+        while time.time() - start_wait < 0.3:
+            if hasattr(device, "last_dns_result") and device.last_dns_result is not None:
+                break
+            time.sleep(0.01)
+            
+        res = getattr(device, "last_dns_result", None)
+        if not res:
+            return output + f"DNS request timed out.\n*** Request to UnKnown timed-out"
+            
+        if res.startswith("DNS_NXDOMAIN"):
+            return output + f"*** UnKnown can't find {hostname}: Non-existent domain"
+            
+        if res.startswith("DNS_RESPONSE"):
+            # format: DNS_RESPONSE: HOST -> IP
+            parts = res.split("->")
+            if len(parts) == 2:
+                ip = parts[1].strip()
+                return output + f"Non-authoritative answer:\nName:    {hostname}\nAddress:  {ip}"
+                
+        return output + f"*** UnKnown failed: {res}"

@@ -139,6 +139,11 @@ class DHCPClientDaemon(ServiceDaemon):
                 assigned_ip = msg.yiaddr
                 mask = msg.get_option(OPT_SUBNET_MASK, "255.255.255.0")
                 gateway = msg.get_option(OPT_ROUTER)
+                
+                from backend.network.dhcp_packet import OPT_DNS_SERVER
+                dns = msg.get_option(OPT_DNS_SERVER)
+                if dns:
+                    self.host.dns_server = dns
 
                 # Apply IP & subnet to interface
                 net = ipaddress.IPv4Network(f"{assigned_ip}/{mask}", strict=False)

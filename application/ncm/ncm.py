@@ -163,32 +163,57 @@ class NetworkConfigurationManager:
             f"Interfaces cannot be removed from {device.name}"
         )
 
-    def update_interface(self, device, interface_name, ip=None, subnet=None, mac=None):
+    def update_interface(self, device, interface_name, ip=None, subnet=None, mac=None, netmask=None, gateway=None):
+        import ipaddress
         device_obj = self.get_device(device)
         for intf in getattr(device_obj, 'interfaces', []):
             if intf.name == interface_name:
                 if mac is not None:
                     intf.mac = mac
-                
-                # Split CIDR if provided in IP field
+
+                # --- IP / Subnet resolution ---
+                # Priority: explicit subnet > netmask > CIDR in IP field > existing subnet > /24 fallback
+
+                # 1. If IP comes with CIDR notation, split it
                 if ip and "/" in ip:
                     parts = ip.split("/")
                     ip = parts[0]
-                    # Convert prefix len to actual IP Network string (e.g. 192.168.1.0/24)
-                    import ipaddress
                     try:
                         net = ipaddress.ip_network(f"{ip}/{parts[1]}", strict=False)
                         subnet = str(net)
                     except ValueError:
                         subnet = f"{ip}/{parts[1]}"
-                elif ip and ip != "0.0.0.0" and (not subnet or subnet in ("0.0.0.0/0", "0.0.0.0")):
-                    import ipaddress
+
+                # 2. Convert dotted-decimal netmask to CIDR subnet string
+                if netmask and ip and not subnet:
+                    clean_ip = ip.split("/")[0] if ip else "0.0.0.0"
                     try:
-                        net = ipaddress.ip_network(f"{ip}/24", strict=False)
+                        net = ipaddress.ip_network(f"{clean_ip}/{netmask}", strict=False)
                         subnet = str(net)
                     except Exception:
                         pass
-                
+
+                # 3. If we still have no subnet but have an IP, also try converting existing stored netmask
+                if not subnet and ip and ip != "0.0.0.0":
+                    # Keep existing subnet if it's already set and matches same network
+                    existing = getattr(intf, "subnet", None)
+                    if existing and existing not in ("0.0.0.0/0", "0.0.0.0"):
+                        try:
+                            # Recalculate network with new IP but same prefix
+                            pfx = ipaddress.ip_network(existing, strict=False).prefixlen
+                            net = ipaddress.ip_network(f"{ip}/{pfx}", strict=False)
+                            subnet = str(net)
+                        except Exception:
+                            pass
+
+                # 4. Final fallback: /24 if still nothing
+                if not subnet and ip and ip != "0.0.0.0":
+                    try:
+                        subnet = str(ipaddress.ip_network(f"{ip}/24", strict=False))
+                    except Exception:
+                        pass
+
+                # Apply IP + subnet to the interface
                 if hasattr(device_obj, 'update_intf'):
                     device_obj.update_intf(intf, ip=ip, subnet=subnet)
                 else:
@@ -196,8 +221,26 @@ class NetworkConfigurationManager:
                         intf.ip = ip
                     if subnet is not None:
                         intf.subnet = subnet
+
+                # --- Gateway handling ---
+                # Accepting empty string means "clear the gateway"
+                if gateway is not None:
+                    gw_val = str(gateway).strip()
+                    device_obj.default_gateway = gw_val if gw_val else None
+
+                    # Rebuild default route for this device
+                    # Remove any existing 0.0.0.0/0 route first
+                    device_obj.routes = [
+                        r for r in device_obj.routes
+                        if str(r.get("destination", "")) != "0.0.0.0/0"
+                    ]
+                    if gw_val and hasattr(device_obj, 'add_route'):
+                        out_intf = intf  # use the interface we just configured
+                        device_obj.add_route("0.0.0.0/0", out_intf, next_hop=gw_val)
+
                 return intf
         raise ValueError(f"Interface {interface_name} not found on {device_obj.name}")
+
 
     # ========================================================
     # NETWORK / SUBNET MANAGEMENT

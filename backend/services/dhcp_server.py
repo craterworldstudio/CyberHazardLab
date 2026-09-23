@@ -16,6 +16,7 @@ class DHCPServerDaemon(ServiceDaemon):
         return None
 
     def handle_udp(self, payload, connection, packet):
+        with open('/tmp/dhcp_debug.txt', 'a') as f: f.write(f'DHCP handle_udp called! {payload}\n')
         dhcp_mgr = self._get_dhcp_manager()
         if not dhcp_mgr:
             return None
@@ -43,25 +44,52 @@ class DHCPServerDaemon(ServiceDaemon):
             dhcp_svc = next((s for s in getattr(self.host, "services", []) if s.name.upper() == "DHCP"), None)
             if dhcp_svc and getattr(dhcp_svc, "config", None):
                 cfg = dhcp_svc.config
-                if "gateway" in cfg and cfg["gateway"]:
-                    scope.gateway = str(cfg["gateway"]).strip()
-                if "dns" in cfg and cfg["dns"]:
-                    scope.dns_server = str(cfg["dns"]).strip()
-                if "domain_name" in cfg and cfg["domain_name"]:
-                    scope.domain_name = str(cfg["domain_name"]).strip()
-                if "lease_time" in cfg and cfg["lease_time"]:
-                    try:
-                        scope.lease_time = int(cfg["lease_time"])
-                    except Exception:
-                        pass
-                if "pool_start" in cfg and "pool_end" in cfg and cfg["pool_start"] and cfg["pool_end"]:
-                    try:
-                        import ipaddress
-                        scope.start_ip = ipaddress.IPv4Address(cfg["pool_start"])
-                        scope.end_ip = ipaddress.IPv4Address(cfg["pool_end"])
-                    except Exception:
-                        pass
+                # Support new multiple scopes format if present
+                if "scopes" in cfg and isinstance(cfg["scopes"], list):
+                    for sc in cfg["scopes"]:
+                        if "subnet" in sc and sc["subnet"]:
+                            # Check if this scope config applies to our target network
+                            import ipaddress
+                            try:
+                                net = ipaddress.IPv4Network(sc["subnet"], strict=False)
+                                target_ip_obj = ipaddress.IPv4Address(lookup_target.split('/')[0])
+                                if target_ip_obj in net:
+                                    if "gateway" in sc and sc["gateway"]:
+                                        scope.gateway = str(sc["gateway"]).strip()
+                                    if "dns" in sc and sc["dns"]:
+                                        scope.dns_server = str(sc["dns"]).strip()
+                                    if "domain_name" in sc and sc["domain_name"]:
+                                        scope.domain_name = str(sc["domain_name"]).strip()
+                                    if "lease_time" in sc and sc["lease_time"]:
+                                        scope.lease_time = int(sc["lease_time"])
+                                    if "pool_start" in sc and "pool_end" in sc and sc["pool_start"] and sc["pool_end"]:
+                                        scope.start_ip = ipaddress.IPv4Address(sc["pool_start"])
+                                        scope.end_ip = ipaddress.IPv4Address(sc["pool_end"])
+                                    break
+                            except Exception:
+                                pass
+                else:
+                    # Fallback to old single-scope format
+                    if "gateway" in cfg and cfg["gateway"]:
+                        scope.gateway = str(cfg["gateway"]).strip()
+                    if "dns" in cfg and cfg["dns"]:
+                        scope.dns_server = str(cfg["dns"]).strip()
+                    if "domain_name" in cfg and cfg["domain_name"]:
+                        scope.domain_name = str(cfg["domain_name"]).strip()
+                    if "lease_time" in cfg and cfg["lease_time"]:
+                        try:
+                            scope.lease_time = int(cfg["lease_time"])
+                        except Exception:
+                            pass
+                    if "pool_start" in cfg and "pool_end" in cfg and cfg["pool_start"] and cfg["pool_end"]:
+                        try:
+                            import ipaddress
+                            scope.start_ip = ipaddress.IPv4Address(cfg["pool_start"])
+                            scope.end_ip = ipaddress.IPv4Address(cfg["pool_end"])
+                        except Exception:
+                            pass
 
+            with open('/tmp/dhcp_debug.txt', 'a') as f: f.write(f'DHCP DISCOVER RECEIVED. lookup: {lookup_target}, scope: {scope}\n');
             if msg.message_type == DHCPDISCOVER:
                 try:
                     offered_ip = scope.offer(msg.chaddr)

@@ -60,7 +60,7 @@ let ncmWindowZIndex = 50;
 
 
 function createNCMWindow(deviceName, deviceType) {
-
+    const safeDev = deviceName.replace(/'/g, "\\'");
     const window = document.createElement("section");
 
     window.className = "ncm-window";
@@ -129,7 +129,7 @@ function createNCMWindow(deviceName, deviceType) {
                     </div>
                     <div style="display: flex; align-items: center; border: 1px solid rgba(0, 229, 255, 0.3); background: #06090e; padding: 8px;">
                         <span class="ncm-terminal-prompt" id="term-prompt-${deviceName}" style="color: #00e5ff; font-family: monospace; font-weight: bold; margin-right: 8px;">root@${deviceName.toLowerCase()}:~$</span>
-                        <input type="text" class="ncm-terminal-input" placeholder="_" style="flex: 1; background: transparent; border: none; color: #d5ebf2; font-family: monospace; font-size: 12px; outline: none;" onkeydown="handleTerminalInput(event, '${deviceName}')">
+                        <input type="text" class="ncm-terminal-input" placeholder="_" style="flex: 1; background: transparent; border: none; color: #d5ebf2; font-family: monospace; font-size: 12px; outline: none;" onkeydown="handleTerminalInput(event, '${safeDev}')">
                     </div>
                 </div>
             </div>
@@ -145,7 +145,7 @@ function createNCMWindow(deviceName, deviceType) {
                     </div>
                     <div style="display: flex; align-items: center; border: 1px solid rgba(0, 229, 255, 0.3); background: #06090e; padding: 8px;">
                         <span class="ncm-terminal-prompt" id="term-prompt-${deviceName}" style="color: #00e5ff; font-family: monospace; font-weight: bold; margin-right: 8px;">root@${deviceName.toLowerCase()}:~$</span>
-                        <input type="text" class="ncm-terminal-input" placeholder="_" style="flex: 1; background: transparent; border: none; color: #d5ebf2; font-family: monospace; font-size: 12px; outline: none;" onkeydown="handleTerminalInput(event, '${deviceName}')">
+                        <input type="text" class="ncm-terminal-input" placeholder="_" style="flex: 1; background: transparent; border: none; color: #d5ebf2; font-family: monospace; font-size: 12px; outline: none;" onkeydown="handleTerminalInput(event, '${safeDev}')">
                     </div>
                 </div>
             </div>
@@ -276,6 +276,7 @@ async function loadNCMDevice(deviceName, window) {
             "GET",
             `/api/ntm/devices/${encodeURIComponent(deviceName)}`
         );
+        deviceData.services = services;
         if (deviceData.type.toUpperCase() === 'SWITCH') {
             renderNCMMacTable(window, deviceName, deviceData.mac_table || {});
             window._renderedMacKey = JSON.stringify(deviceData.mac_table || {});
@@ -317,11 +318,12 @@ async function restartNCMDevice(deviceName, win) {
 }
 
 function renderNCMConfig(win, deviceName, deviceData) {
+    const safeDev = deviceName.replace(/'/g, "\\'");
     const container = win.querySelector('[data-content="config"]');
     if (!container) return;
     
     // Do not re-render if user is currently focused/typing in an input
-    if (container.querySelector(':focus')) return;
+    if (container.querySelector('input:focus, textarea:focus, select:focus')) return;
 
     win._lastDeviceData = deviceData;
     const devType = (deviceData.type || "HOST").toUpperCase();
@@ -395,13 +397,13 @@ function renderNCMConfig(win, deviceName, deviceData) {
                     <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// NODE HOSTNAME</div>
                     <input type="text" id="ncm-cfg-hostname-${deviceName}" value="${deviceData.name}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 7px; font-family: monospace; font-size: 11px;">
                 </div>
-                <div>
-                    <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// DEFAULT GATEWAY IP</div>
-                    <input type="text" id="ncm-cfg-gateway-${deviceName}" value="${deviceData.default_gateway || ''}" placeholder="e.g. 10.0.1.5 (Static Override)" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 7px; font-family: monospace; font-size: 11px;">
+                <div style="font-size: 10px; color: #5c6b73; border: 1px dashed rgba(0,229,255,0.15); padding: 8px; letter-spacing: 1px;">
+                    // IP ADDRESS, SUBNET MASK &amp; DEFAULT GATEWAY are configured per-interface in the INTERFACES tab.
                 </div>
             </div>
         `;
     }
+
 
     // Lower Section: Installed Services Dropdown
     let serviceOptionsHtml = "";
@@ -410,7 +412,8 @@ function renderNCMConfig(win, deviceName, deviceData) {
     } else {
         serviceOptionsHtml = services.map(s => {
             const isRun = (s.status || "").toLowerCase() === "running";
-            return `<option value="${s.name}">[${isRun ? 'RUNNING' : 'STOPPED'}] ${s.name} (${s.protocol}/${s.port})</option>`;
+            const sel = (s.name === win._selectedConfigService) ? 'selected' : '';
+            return `<option value="${s.name}" ${sel}>[${isRun ? 'RUNNING' : 'STOPPED'}] ${s.name} (${s.protocol}/${s.port})</option>`;
         }).join("");
     }
 
@@ -436,9 +439,9 @@ function renderNCMConfig(win, deviceName, deviceData) {
                 ${nodeConfigHtml}
                 
                 <div style="display: flex; gap: 10px; margin-top: 15px;">
-                    <button id="btn-save-node-cfg-${deviceName}" style="flex: 2; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; color: #00e5ff; padding: 8px 12px; font-family: monospace; font-weight: bold; letter-spacing: 1px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0, 229, 255, 0.1)'; this.style.color='#00e5ff';" onclick="saveNCMNodeConfig('${deviceName}', this.closest('.ncm-window'))">[ SAVE NODE CONFIG ]</button>
+                    <button id="btn-save-node-cfg-${deviceName}" style="flex: 2; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; color: #00e5ff; padding: 8px 12px; font-family: monospace; font-weight: bold; letter-spacing: 1px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0, 229, 255, 0.1)'; this.style.color='#00e5ff';" onclick="saveNCMNodeConfig('${safeDev}', this.closest('.ncm-window'))">[ SAVE NODE CONFIG ]</button>
                     
-                    <button style="flex: 1; background: rgba(255, 170, 0, 0.1); border: 1px solid #ffaa00; color: #ffaa00; padding: 8px 12px; font-family: monospace; font-weight: bold; letter-spacing: 1px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#ffaa00'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(255, 170, 0, 0.1)'; this.style.color='#ffaa00';" onclick="restartNCMDevice('${deviceName}', this.closest('.ncm-window'))">[ REBOOT ]</button>
+                    <button style="flex: 1; background: rgba(255, 170, 0, 0.1); border: 1px solid #ffaa00; color: #ffaa00; padding: 8px 12px; font-family: monospace; font-weight: bold; letter-spacing: 1px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#ffaa00'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(255, 170, 0, 0.1)'; this.style.color='#ffaa00';" onclick="restartNCMDevice('${safeDev}', this.closest('.ncm-window'))">[ REBOOT ]</button>
                 </div>
             </div>
         </div>
@@ -451,7 +454,7 @@ function renderNCMConfig(win, deviceName, deviceData) {
 
             <div style="border: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); padding: 15px;">
                 <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 6px; font-weight: bold;">// SELECT TARGET SERVICE ROUTINE</div>
-                <select id="ncm-svc-select-${deviceName}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; cursor: pointer; margin-bottom: 15px;" onchange="renderNCMSelectedServiceConfig('${deviceName}', this.closest('.ncm-window'), this.value)">
+                <select id="ncm-svc-select-${deviceName}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; cursor: pointer; margin-bottom: 15px;" onchange="renderNCMSelectedServiceConfig('${safeDev}', this.closest('.ncm-window'), this.value)">
                     ${serviceOptionsHtml}
                 </select>
 
@@ -465,8 +468,9 @@ function renderNCMConfig(win, deviceName, deviceData) {
 }
 
 function renderNCMSelectedServiceConfig(deviceName, win, serviceName) {
+    const safeDev = deviceName.replace(/'/g, "\\'");
     win._selectedConfigService = serviceName;
-    const container = win.querySelector(`#ncm-svc-details-container-${deviceName}`);
+    const container = document.getElementById(`ncm-svc-details-container-${deviceName}`);
     if (!container) return;
 
     const deviceData = win._lastDeviceData || {};
@@ -527,40 +531,67 @@ function renderNCMSelectedServiceConfig(deviceName, win, serviceName) {
                 </div>
             </div>
         `;
-    } else if (sName === "DHCP") {
-        formHtml = `
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <div style="grid-column: span 2;">
-                    <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// SUBNET SCOPE</div>
-                    <input type="text" id="ncm-cfg-svc-subnet-${deviceName}" value="${cfg.subnet || ''}" placeholder="e.g. 10.0.1.0/24" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
-                </div>
-                <div>
-                    <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// POOL START IP</div>
-                    <input type="text" id="ncm-cfg-svc-pool-start-${deviceName}" value="${cfg.pool_start || ''}" placeholder="e.g. 10.0.1.11" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
-                </div>
-                <div>
-                    <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// POOL END IP</div>
-                    <input type="text" id="ncm-cfg-svc-pool-end-${deviceName}" value="${cfg.pool_end || ''}" placeholder="e.g. 10.0.1.254" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
-                </div>
-                <div>
-                    <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// ADVERTISED GATEWAY (OPT 3)</div>
-                    <input type="text" id="ncm-cfg-svc-gateway-${deviceName}" value="${cfg.gateway || ''}" placeholder="e.g. 10.0.1.5" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
-                </div>
-                <div>
-                    <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// ADVERTISED DNS (OPT 6)</div>
-                    <input type="text" id="ncm-cfg-svc-dns-${deviceName}" value="${cfg.dns || ''}" placeholder="e.g. 10.0.1.10" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
-                </div>
-                <div>
-                    <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// DOMAIN NAME (OPT 15)</div>
-                    <input type="text" id="ncm-cfg-svc-domain-${deviceName}" value="${cfg.domain_name || ''}" placeholder="e.g. lab.local" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
-                </div>
-                <div>
-                    <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// LEASE DURATION (SEC)</div>
-                    <input type="number" id="ncm-cfg-svc-lease-${deviceName}" value="${cfg.lease_time || 86400}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
-                </div>
-            </div>
-        `;
-    } else if (sName === "DHCP_CLIENT") {
+        } else if (sName === "DHCP") {
+        let scopes = [];
+        if (cfg.scopes && Array.isArray(cfg.scopes) && cfg.scopes.length > 0) {
+            scopes = cfg.scopes;
+        } else if (cfg.subnet) {
+            // Migration from old single-scope format
+            scopes.push(cfg);
+        }
+
+        let trs = scopes.map((sc, idx) => {
+            return "<tr style='border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2);'>" +
+                "<td style='padding: 6px; color: #00ff00; font-weight: bold;'>[ ACTIVE ]</td>" +
+                "<td style='padding: 6px; color: #00e5ff;' class='dhcp-subnet'>" + (sc.subnet || '') + "</td>" +
+                "<td style='padding: 6px; color: #ffaa00;' class='dhcp-start'>" + (sc.pool_start || '') + "</td>" +
+                "<td style='padding: 6px; color: #ffaa00;' class='dhcp-end'>" + (sc.pool_end || '') + "</td>" +
+                "<td style='padding: 6px; color: #d5ebf2;' class='dhcp-gw'>" + (sc.gateway || '') + "</td>" +
+                "<td style='padding: 6px; color: #d5ebf2;' class='dhcp-dns'>" + (sc.dns || '') + "</td>" +
+                "<td style='padding: 6px; color: #d5ebf2; display: none;' class='dhcp-domain'>" + (sc.domain_name || '') + "</td>" +
+                "<td style='padding: 6px; color: #d5ebf2; display: none;' class='dhcp-lease'>" + (sc.lease_time || 86400) + "</td>" +
+                "<td style='padding: 6px; text-align: right;'>" +
+                    "<button type='button' style='background: rgba(255,51,51,0.1); border: 1px solid #ff3333; color: #ff3333; padding: 2px 6px; font-family: monospace; font-size: 9px; cursor: pointer;' onclick='this.closest(\"tr\").remove()'>[ DEL ]</button>" +
+                "</td>" +
+            "</tr>";
+        }).join('');
+        
+        if (scopes.length === 0) {
+            trs = "<tr class='dhcp-no-records'><td colspan='7' style='padding: 10px; text-align: center; color: #5c6b73; font-style: italic;'>No DHCP Scopes Defined.</td></tr>";
+        }
+
+        formHtml = "<div style='display: grid; grid-template-columns: 1fr; gap: 10px;'>" +
+            "<div>" +
+                "<div style='font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;'>// DHCP SCOPES TABLE</div>" +
+                "<table style='width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 10px; border: 1px solid rgba(0, 229, 255, 0.2);'>" +
+                    "<thead style='background: rgba(0, 229, 255, 0.1); color: #00e5ff; text-align: left;'>" +
+                        "<tr>" +
+                            "<th style='padding: 6px;'>STATUS</th>" +
+                            "<th style='padding: 6px;'>SUBNET (CIDR)</th>" +
+                            "<th style='padding: 6px;'>POOL START</th>" +
+                            "<th style='padding: 6px;'>POOL END</th>" +
+                            "<th style='padding: 6px;'>GATEWAY</th>" +
+                            "<th style='padding: 6px;'>DNS</th>" +
+                            "<th style='padding: 6px; text-align: right;'>ACTION</th>" +
+                        "</tr>" +
+                    "</thead>" +
+                    "<tbody class='dhcp-tbody'>" + trs + "</tbody>" +
+                "</table>" +
+                "<div style='background: rgba(0,0,0,0.3); border: 1px dashed rgba(0,229,255,0.3); padding: 8px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; align-items: center; margin-bottom: 8px;'>" +
+                    "<input type='text' class='dhcp-new-subnet' placeholder='Subnet (10.0.0.0/24)' style='background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 4px; font-family: monospace; font-size: 10px; outline: none;'>" +
+                    "<input type='text' class='dhcp-new-start' placeholder='Pool Start (10.0.0.10)' style='background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #ffaa00; padding: 4px; font-family: monospace; font-size: 10px; outline: none;'>" +
+                    "<input type='text' class='dhcp-new-end' placeholder='Pool End (10.0.0.254)' style='background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #ffaa00; padding: 4px; font-family: monospace; font-size: 10px; outline: none;'>" +
+                "</div>" +
+                "<div style='background: rgba(0,0,0,0.3); border: 1px dashed rgba(0,229,255,0.3); border-top: none; padding: 8px; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 8px; align-items: center;'>" +
+                    "<input type='text' class='dhcp-new-gw' placeholder='Gateway (10.0.0.1)' style='background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #d5ebf2; padding: 4px; font-family: monospace; font-size: 10px; outline: none;'>" +
+                    "<input type='text' class='dhcp-new-dns' placeholder='DNS (8.8.8.8)' style='background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #d5ebf2; padding: 4px; font-family: monospace; font-size: 10px; outline: none;'>" +
+                    "<input type='text' class='dhcp-new-domain' placeholder='Domain (.local)' style='background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #d5ebf2; padding: 4px; font-family: monospace; font-size: 10px; outline: none;'>" +
+                    "<input type='number' class='dhcp-new-lease' value='86400' placeholder='Lease (86400)' style='background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #d5ebf2; padding: 4px; font-family: monospace; font-size: 10px; outline: none;'>" +
+                    "<button type='button' style='background: rgba(0,229,255,0.1); border: 1px solid #00e5ff; color: #00e5ff; font-family: monospace; font-size: 10px; font-weight: bold; padding: 4px 8px; cursor: pointer;' onclick='window.addDhcpScope(this)'>[ ADD SCOPE ]</button>" +
+                "</div>" +
+            "</div>" +
+        "</div>";
+} else if (sName === "DHCP_CLIENT") {
         formHtml = `
             <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
                 <div>
@@ -609,6 +640,95 @@ function renderNCMSelectedServiceConfig(deviceName, win, serviceName) {
                 </div>
             </div>
         `;
+        } else if (sName === "DNS" || sName === "DNS_SERVER") {
+            // 1. Normalize Records
+            let records = [];
+            if (cfg.records) {
+                if (Array.isArray(cfg.records)) {
+                    records = cfg.records;
+                } else if (typeof cfg.records === 'string') {
+                    for (const line of cfg.records.split('\n')) {
+                        const t = line.trim();
+                        if (!t || !t.includes('=')) continue;
+                        const [h, i] = t.split('=');
+                        records.push({ name: h.trim(), type: 'A', target: i.trim(), status: 'ONLINE' });
+                    }
+                } else if (typeof cfg.records === 'object') {
+                    for (const [h, i] of Object.entries(cfg.records)) {
+                        records.push({ name: h, type: 'A', target: i, status: 'ONLINE' });
+                    }
+                }
+            }
+        
+            // 2. Build Rows
+            let trs = records.map((r) => `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2);">
+                    <td style="padding: 6px; color: #00ff00; font-weight: bold;">[ ONLINE ]</td>
+                    <td style="padding: 6px; color: #ffaa00;" class="dns-type">${r.type || 'A'}</td>
+                    <td style="padding: 6px; color: #00e5ff;" class="dns-name">${r.name}</td>
+                    <td style="padding: 6px; color: #d5ebf2;" class="dns-target">${r.target}</td>
+                    <td style="padding: 6px; text-align: right;">
+                        <button type="button" style="background: rgba(255,51,51,0.1); border: 1px solid #ff3333; color: #ff3333; padding: 2px 6px; font-family: monospace; font-size: 9px; cursor: pointer;" onclick="this.closest('tr').remove()">[ DEL ]</button>
+                    </td>
+                </tr>
+            `).join('');
+        
+            if (records.length === 0) {
+                trs = `<tr class="dns-no-records"><td colspan="5" style="padding: 10px; text-align: center; color: #5c6b73; font-style: italic;">No DNS Records Found.</td></tr>`;
+            }
+        
+            // 3. Render Panel (using wrapper class 'dns-panel')
+            formHtml = `
+                <div class="dns-panel" style="display: grid; grid-template-columns: 1fr; gap: 10px;">
+                    <div>
+                        <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// HEALTH CHECK INTERVAL (s)</div>
+                        <input type="number" class="dns-health" value="${cfg.health_interval || 30}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
+                    </div>
+        
+                    <div>
+                        <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// DNS RECORD TABLE</div>
+                        <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 10px; border: 1px solid rgba(0, 229, 255, 0.2);">
+                            <thead style="background: rgba(0, 229, 255, 0.1); color: #00e5ff; text-align: left;">
+                                <tr>
+                                    <th style="padding: 6px;">STATUS</th>
+                                    <th style="padding: 6px;">TYPE</th>
+                                    <th style="padding: 6px;">DOMAIN</th>
+                                    <th style="padding: 6px;">TARGET</th>
+                                    <th style="padding: 6px; text-align: right;">ACTION</th>
+                                </tr>
+                            </thead>
+                            <tbody class="dns-tbody">${trs}</tbody>
+                        </table>
+        
+                        <!-- Input Row -->
+                        <div style="background: rgba(0,0,0,0.3); border: 1px dashed rgba(0,229,255,0.3); padding: 8px; display: grid; grid-template-columns: 80px 1fr 1fr auto; gap: 8px; align-items: center;">
+                            <select class="dns-new-type" style="background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #ffaa00; padding: 4px; font-family: monospace; font-size: 10px; outline: none;">
+                                <option value="A">A</option>
+                                <option value="AAAA">AAAA</option>
+                                <option value="CNAME">CNAME</option>
+                                <option value="MX">MX</option>
+                            </select>
+        
+                            <input type="text" class="dns-new-name" placeholder="Domain (e.g. www)" style="background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 4px; font-family: monospace; font-size: 10px; outline: none;">
+                            
+                            <input type="text" class="dns-new-target" placeholder="Target (e.g. 10.0.0.1)" style="background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #d5ebf2; padding: 4px; font-family: monospace; font-size: 10px; outline: none;">
+                            
+                            <button type="button" style="background: rgba(0,229,255,0.1); border: 1px solid #00e5ff; color: #00e5ff; font-family: monospace; font-size: 10px; font-weight: bold; padding: 4px 8px; cursor: pointer;" onclick="window.addDnsRecord(this)">[ ADD RECORD ]</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+                
+    } else if (sName === "DNS_CLIENT") {
+            formHtml = `
+                <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
+                <div>
+                    <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// NAMESERVER IP</div>
+                    <div style="font-size: 9px; color: #5c6b73; margin-bottom: 4px;">The IP address of the DNS server to query. (Auto-configured by DHCP if empty)</div>
+                    <input type="text" id="ncm-cfg-svc-nameserver-${deviceName}" value="${cfg.nameserver || ''}" placeholder="e.g., 8.8.8.8" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
+                </div>
+            </div>
+        `;
     } else {
         // Generic service
         formHtml = `
@@ -630,31 +750,31 @@ function renderNCMSelectedServiceConfig(deviceName, win, serviceName) {
                 </div>
                 <div style="display: flex; gap: 8px;">
                     ${isRunning ?
-                        `<button style="background: rgba(255, 170, 0, 0.1); border: 1px solid #ffaa00; color: #ffaa00; font-family: monospace; padding: 4px 10px; cursor: pointer;" onclick="manageService('${deviceName}', '${svc.name}', 'stop', this.closest('.ncm-window'))">[ STOP ]</button>` :
-                        `<button style="background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; color: #00e5ff; font-family: monospace; padding: 4px 10px; cursor: pointer;" onclick="manageService('${deviceName}', '${svc.name}', 'start', this.closest('.ncm-window'))">[ START ]</button>`
+                        `<button style="background: rgba(255, 170, 0, 0.1); border: 1px solid #ffaa00; color: #ffaa00; font-family: monospace; padding: 4px 10px; cursor: pointer;" onclick="manageService('${safeDev}', '${svc.name}', 'stop', this.closest('.ncm-window'))">[ STOP ]</button>` :
+                        `<button style="background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; color: #00e5ff; font-family: monospace; padding: 4px 10px; cursor: pointer;" onclick="manageService('${safeDev}', '${svc.name}', 'start', this.closest('.ncm-window'))">[ START ]</button>`
                     }
-                    <button style="background: rgba(255, 51, 51, 0.1); border: 1px solid #ff3333; color: #ff3333; font-family: monospace; padding: 4px 10px; cursor: pointer;" onclick="manageService('${deviceName}', '${svc.name}', 'remove', this.closest('.ncm-window'))">[ DEL ]</button>
+                    <button style="background: rgba(255, 51, 51, 0.1); border: 1px solid #ff3333; color: #ff3333; font-family: monospace; padding: 4px 10px; cursor: pointer;" onclick="manageService('${safeDev}', '${svc.name}', 'remove', this.closest('.ncm-window'))">[ DEL ]</button>
                 </div>
             </div>
 
             ${formHtml}
 
             <div style="margin-top: 15px;">
-                <button id="btn-save-svc-cfg-${deviceName}" style="width: 100%; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; color: #00e5ff; padding: 8px; font-family: monospace; font-weight: bold; letter-spacing: 1px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0, 229, 255, 0.1)'; this.style.color='#00e5ff';" onclick="saveNCMServiceConfig('${deviceName}', '${svc.name}', this.closest('.ncm-window'))">[ SAVE SERVICE CONFIG ]</button>
+                <button id="btn-save-svc-cfg-${deviceName}" style="width: 100%; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; color: #00e5ff; padding: 8px; font-family: monospace; font-weight: bold; letter-spacing: 1px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0, 229, 255, 0.1)'; this.style.color='#00e5ff';" onclick="saveNCMServiceConfig('${safeDev}', '${svc.name}', this.closest('.ncm-window'))">[ SAVE SERVICE CONFIG ]</button>
             </div>
         </div>
     `;
 }
 
 async function saveNCMNodeConfig(deviceName, win) {
-    const btn = win.querySelector(`#btn-save-node-cfg-${deviceName}`);
-    const hostInput = win.querySelector(`#ncm-cfg-hostname-${deviceName}`);
-    const gwInput = win.querySelector(`#ncm-cfg-gateway-${deviceName}`);
-    const fwdInput = win.querySelector(`#ncm-cfg-ip-forwarding-${deviceName}`);
-    const routesInput = win.querySelector(`#ncm-cfg-auto-routes-${deviceName}`);
-    const macLearnInput = win.querySelector(`#ncm-cfg-mac-learning-${deviceName}`);
-    const macAgingInput = win.querySelector(`#ncm-cfg-mac-aging-${deviceName}`);
-    const stpInput = win.querySelector(`#ncm-cfg-stp-${deviceName}`);
+    const btn = document.getElementById(`btn-save-node-cfg-${deviceName}`);
+    const hostInput = document.getElementById(`ncm-cfg-hostname-${deviceName}`);
+    const gwInput = document.getElementById(`ncm-cfg-gateway-${deviceName}`);
+    const fwdInput = document.getElementById(`ncm-cfg-ip-forwarding-${deviceName}`);
+    const routesInput = document.getElementById(`ncm-cfg-auto-routes-${deviceName}`);
+    const macLearnInput = document.getElementById(`ncm-cfg-mac-learning-${deviceName}`);
+    const macAgingInput = document.getElementById(`ncm-cfg-mac-aging-${deviceName}`);
+    const stpInput = document.getElementById(`ncm-cfg-stp-${deviceName}`);
 
     const payload = {};
     if (hostInput && hostInput.value) payload.hostname = hostInput.value.trim();
@@ -699,7 +819,8 @@ async function saveNCMNodeConfig(deviceName, win) {
             }
             const termInput = win.querySelector(".ncm-terminal-input");
             if (termInput) {
-                termInput.setAttribute("onkeydown", `handleTerminalInput(event, '${newDeviceName}')`);
+                const safeNewName = newDeviceName.replace(/'/g, "\\'");
+                termInput.setAttribute("onkeydown", `handleTerminalInput(event, '${safeNewName}')`);
             }
 
             // 4. Update canvas device in CHL
@@ -719,51 +840,89 @@ async function saveNCMNodeConfig(deviceName, win) {
 }
 
 async function saveNCMServiceConfig(deviceName, serviceName, win) {
-    const btn = win.querySelector(`#btn-save-svc-cfg-${deviceName}`);
+    const safeDev = deviceName.replace(/'/g, "\\'");
+    const btn = document.getElementById(`btn-save-svc-cfg-${safeDev}`);
     const sName = serviceName.toUpperCase();
     const config = {};
 
     if (sName === "SSH" || sName === "SSH_SERVER") {
-        const motd = win.querySelector(`#ncm-cfg-svc-motd-${deviceName}`);
-        const permitRoot = win.querySelector(`#ncm-cfg-svc-permit-root-${deviceName}`);
-        const users = win.querySelector(`#ncm-cfg-svc-users-${deviceName}`);
+        const motd = document.getElementById(`ncm-cfg-svc-motd-${safeDev}`);
+        const permitRoot = document.getElementById(`ncm-cfg-svc-permit-root-${safeDev}`);
+        const users = document.getElementById(`ncm-cfg-svc-users-${safeDev}`);
         if (motd) config.motd = motd.value;
         if (permitRoot) config.permit_root = permitRoot.value === "true";
         if (users) config.users = users.value;
     } else if (sName === "SSH_CLIENT") {
-        const port = win.querySelector(`#ncm-cfg-svc-port-${deviceName}`);
-        const user = win.querySelector(`#ncm-cfg-svc-username-${deviceName}`);
-        const timeout = win.querySelector(`#ncm-cfg-svc-timeout-${deviceName}`);
+        const port = document.getElementById(`ncm-cfg-svc-port-${safeDev}`);
+        const user = document.getElementById(`ncm-cfg-svc-username-${safeDev}`);
+        const timeout = document.getElementById(`ncm-cfg-svc-timeout-${safeDev}`);
         if (port) config.default_port = parseInt(port.value, 10);
         if (user) config.username = user.value;
         if (timeout) config.timeout = parseInt(timeout.value, 10);
-    } else if (sName === "DHCP") {
-        const subnet = win.querySelector(`#ncm-cfg-svc-subnet-${deviceName}`);
-        const pStart = win.querySelector(`#ncm-cfg-svc-pool-start-${deviceName}`);
-        const pEnd = win.querySelector(`#ncm-cfg-svc-pool-end-${deviceName}`);
-        const gw = win.querySelector(`#ncm-cfg-svc-gateway-${deviceName}`);
-        const dns = win.querySelector(`#ncm-cfg-svc-dns-${deviceName}`);
-        const domain = win.querySelector(`#ncm-cfg-svc-domain-${deviceName}`);
-        const lease = win.querySelector(`#ncm-cfg-svc-lease-${deviceName}`);
-        if (subnet) config.subnet = subnet.value.trim();
-        if (pStart) config.pool_start = pStart.value.trim();
-        if (pEnd) config.pool_end = pEnd.value.trim();
-        if (gw) config.gateway = gw.value.trim();
-        if (dns) config.dns = dns.value.trim();
-        if (domain) config.domain_name = domain.value.trim();
-        if (lease) config.lease_time = parseInt(lease.value, 10);
-    } else if (sName === "DHCP_CLIENT") {
-        const intf = win.querySelector(`#ncm-cfg-svc-intf-${deviceName}`);
-        const reqHost = win.querySelector(`#ncm-cfg-svc-req-hostname-${deviceName}`);
-        const acceptDns = win.querySelector(`#ncm-cfg-svc-accept-dns-${deviceName}`);
+        } else if (sName === "DHCP") {
+        const tbody = win.querySelector('.dhcp-tbody');
+        let scopes = [];
+        if (tbody && !tbody.innerHTML.includes('No DHCP Scopes Defined')) {
+            const rows = tbody.querySelectorAll('tr');
+            rows.forEach(tr => {
+                const subEl = tr.querySelector('.dhcp-subnet');
+                const stEl = tr.querySelector('.dhcp-start');
+                const endEl = tr.querySelector('.dhcp-end');
+                const gwEl = tr.querySelector('.dhcp-gw');
+                const dnsEl = tr.querySelector('.dhcp-dns');
+                const domEl = tr.querySelector('.dhcp-domain');
+                const leaseEl = tr.querySelector('.dhcp-lease');
+                
+                if (subEl && stEl && endEl) {
+                    scopes.push({
+                        subnet: subEl.innerText.trim(),
+                        pool_start: stEl.innerText.trim(),
+                        pool_end: endEl.innerText.trim(),
+                        gateway: gwEl ? gwEl.innerText.trim() : '',
+                        dns: dnsEl ? dnsEl.innerText.trim() : '',
+                        domain_name: domEl ? domEl.innerText.trim() : '',
+                        lease_time: leaseEl ? parseInt(leaseEl.innerText.trim(), 10) : 86400
+                    });
+                }
+            });
+        }
+        config.scopes = scopes;
+} else if (sName === "DHCP_CLIENT") {
+        const intf = document.getElementById(`ncm-cfg-svc-intf-${safeDev}`);
+        const reqHost = document.getElementById(`ncm-cfg-svc-req-hostname-${safeDev}`);
+        const acceptDns = document.getElementById(`ncm-cfg-svc-accept-dns-${safeDev}`);
         if (intf) config.interface = intf.value.trim();
         if (reqHost) config.req_hostname = reqHost.value === "true";
         if (acceptDns) config.accept_dns = acceptDns.value === "true";
     } else if (sName === "DHCP_RELAY") {
-        const targetIp = win.querySelector(`#ncm-cfg-svc-target-ip-${deviceName}`);
-        const hops = win.querySelector(`#ncm-cfg-svc-hops-${deviceName}`);
+        const targetIp = document.getElementById(`ncm-cfg-svc-target-ip-${safeDev}`);
+        const hops = document.getElementById(`ncm-cfg-svc-hops-${safeDev}`);
         if (targetIp) config.target_ip = targetIp.value.trim();
         if (hops) config.max_hops = parseInt(hops.value, 10);
+    } else if (sName === "DNS" || sName === "DNS_SERVER") {
+        const tbody = win.querySelector('.dns-tbody');
+        const health = win.querySelector('.dns-health');
+        let records = [];
+        if (tbody && !tbody.innerHTML.includes('No DNS Records Found')) {
+            const rows = tbody.querySelectorAll('tr');
+            rows.forEach(tr => {
+                const typeEl = tr.querySelector('.dns-type');
+                const nameEl = tr.querySelector('.dns-name');
+                const targetEl = tr.querySelector('.dns-target');
+                if (nameEl && targetEl) {
+                    records.push({
+                        type: typeEl ? typeEl.innerText.trim() : 'A',
+                        name: nameEl.innerText.trim(),
+                        target: targetEl.innerText.trim()
+                    });
+                }
+            });
+        }
+        config.records = records;
+        if (health) config.health_interval = parseInt(health.value, 10);
+    } else if (sName === "DNS_CLIENT") {
+        const nameserver = document.getElementById(`ncm-cfg-svc-nameserver-${safeDev}`);
+        if (nameserver) config.nameserver = nameserver.value.trim();
     }
 
     try {
@@ -788,76 +947,175 @@ async function saveNCMServiceConfig(deviceName, serviceName, win) {
     }
 }
 
-function renderNCMInterfaces(window, deviceName, interfaces) {
-    const container = window.querySelector(".ncm-interface-list");
+// Global helper to safely add a pending DNS record row
+window.addDnsRecord = function(btn) {
+    const container = btn.closest('div').parentElement;
+    const tbody = container.querySelector('.dns-tbody');
+    const typeInput = container.querySelector('.dns-new-type');
+    const nameInput = container.querySelector('.dns-new-name');
+    const targetInput = container.querySelector('.dns-new-target');
+
+    if (!tbody || !typeInput || !nameInput || !targetInput) {
+        console.error("DNS record input elements not found for:", btn);
+        return;
+    }
+
+    const type = typeInput.value;
+    const name = nameInput.value.trim();
+    const target = targetInput.value.trim();
+
+    if (!name || !target) return;
+
+    // Remove empty placeholder row if present
+    const emptyRow = tbody.querySelector('.dns-no-records');
+    if (emptyRow) {
+        emptyRow.remove();
+    }
+
+    // Build row
+    const tr = document.createElement("tr");
+    tr.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
+    tr.style.background = "rgba(0,0,0,0.2)";
+    tr.innerHTML = `
+        <td style="padding: 6px; color: #ffaa00; font-weight: bold;">[ PENDING ]</td>
+        <td style="padding: 6px; color: #ffaa00;" class="dns-type">${type}</td>
+        <td style="padding: 6px; color: #00e5ff;" class="dns-name">${name}</td>
+        <td style="padding: 6px; color: #d5ebf2;" class="dns-target">${target}</td>
+        <td style="padding: 6px; text-align: right;">
+            <button type="button" style="background: rgba(255,51,51,0.1); border: 1px solid #ff3333; color: #ff3333; padding: 2px 6px; font-family: monospace; font-size: 9px; cursor: pointer;" onclick="this.closest('tr').remove()">[ DEL ]</button>
+        </td>
+    `;
+
+    tbody.appendChild(tr);
+
+    // Clear input fields
+    nameInput.value = "";
+    targetInput.value = "";
+    nameInput.focus();
+};
+function renderNCMInterfaces(win, deviceName, interfaces) {
+    const safeDev = deviceName.replace(/'/g, "\\'");
+    const container = win.querySelector(".ncm-interface-list");
     container.innerHTML = "";
+
+    const isSWT = deviceName.startsWith('SWT') || (interfaces.length > 0 && interfaces[0].port_number !== undefined);
+    const label = isSWT ? 'PORT' : 'INTERFACE';
+
+    // The edit/add form — shown when user clicks + or Edit
+    const formSection = isSWT ? `` : `
+        <div id="add-intf-form-${deviceName}" style="display: none; margin-top: 15px; border: 1px dashed rgba(0, 229, 255, 0.3); background: rgba(0, 0, 0, 0.2); padding: 15px;">
+            <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 10px; font-weight: bold;">// CONFIGURE INTERFACE</div>
+
+            <div style="font-size: 10px; color: #5c6b73; margin-bottom: 3px; letter-spacing: 1px;">INTERFACE NAME</div>
+            <input type="text" id="cfg-intf-name-${deviceName}" placeholder="e.g. eth0" style="width: 100%; margin-bottom: 8px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; box-sizing: border-box;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+
+            <div style="font-size: 10px; color: #5c6b73; margin-bottom: 3px; letter-spacing: 1px;">IP ASSIGNMENT MODE</div>
+            <div style="margin-bottom: 12px; display: flex; gap: 15px;">
+                <label style="color: #00e5ff; font-family: monospace; font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                    <input type="radio" name="cfg-intf-mode-${deviceName}" value="static" checked onchange="document.getElementById('intf-static-fields-${safeDev}').style.display='block';"> STATIC
+                </label>
+                <label style="color: #00e5ff; font-family: monospace; font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                    <input type="radio" name="cfg-intf-mode-${deviceName}" value="dhcp" onchange="document.getElementById('intf-static-fields-${safeDev}').style.display='none';"> AUTOMATIC (DHCP)
+                </label>
+            </div>
+
+            <div id="intf-static-fields-${deviceName}">
+                <div style="font-size: 10px; color: #5c6b73; margin-bottom: 3px; letter-spacing: 1px;">IPv4 ADDRESS</div>
+                <input type="text" id="cfg-intf-ip-${deviceName}" placeholder="e.g. 192.168.1.10" style="width: 100%; margin-bottom: 8px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; box-sizing: border-box;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+
+                <div style="font-size: 10px; color: #5c6b73; margin-bottom: 3px; letter-spacing: 1px;">SUBNET MASK</div>
+                <input type="text" id="cfg-intf-mask-${deviceName}" placeholder="e.g. 255.255.255.0" style="width: 100%; margin-bottom: 8px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; box-sizing: border-box;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+
+                <div style="font-size: 10px; color: #5c6b73; margin-bottom: 3px; letter-spacing: 1px;">DEFAULT GATEWAY <span style="opacity:0.5;">(optional)</span></div>
+                <input type="text" id="cfg-intf-gw-${deviceName}" placeholder="e.g. 192.168.1.1" style="width: 100%; margin-bottom: 12px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; box-sizing: border-box;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+            </div>
+
+            <button style="width: 100%; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; color: #00e5ff; padding: 8px; font-family: monospace; font-weight: bold; letter-spacing: 2px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0, 229, 255, 0.1)'; this.style.color='#00e5ff';" onclick="updateNCMInterface('${safeDev}', document.getElementById('cfg-intf-name-${safeDev}').value, this.closest('.ncm-window'))">SAVE CONFIG</button>
+        </div>
+    `;
 
     let html = `
         <div class="ncm-config-section">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(0, 229, 255, 0.15); padding-bottom: 8px;">
-                <div class="ncm-section-title" style="color: #00e5ff; font-weight: bold; letter-spacing: 2px;">>_ ${deviceName.startsWith('SWT') ? 'PORT' : 'INTERFACE'} CONFIG</div>
-                <button style="background: rgba(0,229,255,0.1); border: 1px solid #00e5ff; color: #00e5ff; font-family: monospace; font-weight: bold; padding: 2px 10px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0,229,255,0.1)'; this.style.color='#00e5ff';" onclick="const f = document.getElementById('add-intf-form-${deviceName}'); f.style.display = f.style.display === 'none' ? 'block' : 'none';"> + </button>
+                <div class="ncm-section-title" style="color: #00e5ff; font-weight: bold; letter-spacing: 2px;">>_ ${label} CONFIG</div>
+                ${isSWT ? '' : `<button style="background: rgba(0,229,255,0.1); border: 1px solid #00e5ff; color: #00e5ff; font-family: monospace; font-weight: bold; padding: 2px 10px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0,229,255,0.1)'; this.style.color='#00e5ff';" onclick="const f=document.getElementById('add-intf-form-${safeDev}'); if(f){delete f.dataset.editing; const nm=document.getElementById('cfg-intf-name-${safeDev}'); if(nm){nm.readOnly=false; nm.style.opacity='1'; nm.value='';} const ip=document.getElementById('cfg-intf-ip-${safeDev}'); if(ip)ip.value=''; const mk=document.getElementById('cfg-intf-mask-${safeDev}'); if(mk)mk.value=''; const gw=document.getElementById('cfg-intf-gw-${safeDev}'); if(gw)gw.value=''; const t=document.querySelector('input[name=\\'cfg-intf-mode-' + CSS.escape('${safeDev}') + '\\'][value=\\'static\\']'); if(t)t.checked=true; const sf=document.getElementById('intf-static-fields-${safeDev}'); if(sf)sf.style.display='block'; f.style.display=f.style.display==='none'?'block':'none';}"> + </button>`}
             </div>
-            
-            <div id="add-intf-form-${deviceName}" style="display: none; margin-top: 15px; border: 1px dashed rgba(0, 229, 255, 0.3); background: rgba(0, 0, 0, 0.2); padding: 15px;">
-                <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 10px; font-weight: bold;">// CONFIGURE ${deviceName.startsWith('SWT') ? 'PORT' : 'INTERFACE'} TARGET</div>
-                
-                <input type="text" id="cfg-intf-name-${deviceName}" placeholder="${deviceName.startsWith('SWT') ? 'PORT (e.g. 1)' : 'INTERFACE (e.g. eth0)'}" style="width: 100%; margin-bottom: 8px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
-                
-                <input type="text" id="cfg-intf-ip-${deviceName}" placeholder="IP ADDRESS (e.g. 10.0.0.1/24)" style="width: 100%; margin-bottom: 8px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
-                
-                <button style="width: 100%; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; color: #00e5ff; padding: 8px; font-family: monospace; font-weight: bold; letter-spacing: 2px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0, 229, 255, 0.1)'; this.style.color='#00e5ff';" onclick="updateNCMInterface('${deviceName}', document.getElementById('cfg-intf-name-${deviceName}').value, this.closest('.ncm-window'))">SAVE CONFIG</button>
-            </div>
-            
+
+            ${formSection}
+
             <div style="margin-top: 15px;">
     `;
 
     if (!interfaces.length) {
-        html += `<div style="color: #5c6b73; font-style: italic; text-align: center; padding: 20px 0;">>_ NO ${deviceName.startsWith('SWT') ? 'PORTS' : 'INTERFACES'} DETECTED</div>`;
+        html += `<div style="color: #5c6b73; font-style: italic; text-align: center; padding: 20px 0;">>_ NO ${label}S DETECTED</div>`;
     } else {
         interfaces.forEach(intf => {
-
             const isLinkUp = intf.connected && intf.status === 'up';
             const isAdminDown = intf.status === 'down';
-            let statusText = isAdminDown ? "ADMIN_DOWN" : (intf.connected ? "LINK_UP" : "LINK_DOWN");
-            let statusColor = isAdminDown ? '#ff3333' : (intf.connected ? '#00e5ff' : '#5c6b73');
+            const statusText = isAdminDown ? "ADMIN_DOWN" : (intf.connected ? "LINK_UP" : "LINK_DOWN");
+            const statusColor = isAdminDown ? '#ff3333' : (intf.connected ? '#00e5ff' : '#5c6b73');
             const statusGlow = isLinkUp ? `text-shadow: 0 0 5px ${statusColor};` : '';
-            
-            if (deviceName.startsWith('SWT')) {
+
+            if (isSWT) {
                 html += `
                     <div style="border: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.02); padding: 12px; margin-bottom: 8px; transition: border 0.2s;" onmouseover="this.style.borderColor='rgba(0,229,255,0.3)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.05)'">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                             <div>
                                 <strong style="color: #fff; font-size: 12px;">${intf.name || "UNKNOWN"}</strong>
                                 <span style="font-size: 9px; color: ${statusColor}; margin-left: 10px; font-weight: bold; letter-spacing: 1px; ${statusGlow}">[ ${statusText} ]</span>
-                                <div style="font-size: 11px; margin-top: 8px; color: #8a9ba8; display: grid; grid-template-columns: 50px 1fr; gap: 4px;">
+                                <div style="font-size: 11px; margin-top: 8px; display: grid; grid-template-columns: 50px 1fr; gap: 4px;">
                                     <div style="color: #5c6b73;">PORT</div><div style="color: #d5ebf2;">${intf.port_number || "—"}</div>
                                     <div style="color: #5c6b73;">MODE</div><div style="color: #00e5ff;">${intf.mode || "ACCESS"}</div>
                                     <div style="color: #5c6b73;">LINK</div><div style="color: #d5ebf2;">${intf.connected_to || "—"}</div>
                                 </div>
                             </div>
-                            <div style="display: flex; gap: 6px;">
-                                <button style="background: rgba(255, 51, 51, 0.05); border: 1px solid rgba(255, 51, 51, 0.2); color: #ff3333; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(255, 51, 51, 0.2)'; this.style.borderColor='#ff3333';" onmouseout="this.style.background='rgba(255, 51, 51, 0.05)'; this.style.borderColor='rgba(255, 51, 51, 0.2)';" title="Delete" onclick="deleteNCMInterface('${deviceName}', '${intf.name}', this.closest('.ncm-window'))">[ DEL ]</button>
-                            </div>
+                            <button style="background: rgba(255,51,51,0.05); border: 1px solid rgba(255,51,51,0.2); color: #ff3333; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(255,51,51,0.2)'; this.style.borderColor='#ff3333';" onmouseout="this.style.background='rgba(255,51,51,0.05)'; this.style.borderColor='rgba(255,51,51,0.2)';" onclick="deleteNCMInterface('${safeDev}', '${intf.name}', this.closest('.ncm-window'))">[ DEL ]</button>
                         </div>
                     </div>
                 `;
             } else {
+                // Derive display values
+                const dispIP   = intf.ip_only || intf.ip || "—";
+                const dispMask = intf.netmask || "—";
+                const dispGW   = intf.gateway  || "—";
+                // Pre-fill values for the edit form
+                const editIP   = intf.ip_only  || "";
+                const editMask = intf.netmask  || "";
+                const editGW   = intf.gateway  || "";
+
                 html += `
                     <div style="border: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.02); padding: 12px; margin-bottom: 8px; transition: border 0.2s;" onmouseover="this.style.borderColor='rgba(0,229,255,0.3)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.05)'">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                            <div>
+                            <div style="flex: 1;">
                                 <strong style="color: #fff; font-size: 12px;">${intf.name || "UNKNOWN"}</strong>
                                 <span style="font-size: 9px; color: ${statusColor}; margin-left: 10px; font-weight: bold; letter-spacing: 1px; ${statusGlow}">[ ${statusText} ]</span>
-                                <div style="font-size: 11px; margin-top: 8px; color: #8a9ba8; display: grid; grid-template-columns: 50px 1fr; gap: 4px;">
-                                    <div style="color: #5c6b73;">MAC</div><div style="color: #d5ebf2;">${intf.mac || "—"}</div>
-                                    <div style="color: #5c6b73;">IP</div><div style="color: #00e5ff;">${intf.ip ? (intf.subnet && intf.subnet.includes('/') ? intf.ip + '/' + intf.subnet.split('/')[1] : intf.ip) : "—"}</div>
+                                <div style="font-size: 11px; margin-top: 8px; display: grid; grid-template-columns: 46px 1fr; gap: 3px;">
+                                    <div style="color: #5c6b73;">MAC</div><div style="color: #d5ebf2; font-size: 10px;">${intf.mac || "—"}</div>
+                                    <div style="color: #5c6b73;">IP</div><div style="color: #00e5ff;">${dispIP}</div>
+                                    <div style="color: #5c6b73;">MASK</div><div style="color: #d5ebf2;">${dispMask}</div>
+                                    <div style="color: #5c6b73;">GW</div><div style="color: ${dispGW !== '—' ? '#00ff88' : '#5c6b73'};">${dispGW}</div>
+                                    ${intf.connected_to ? `<div style="color: #5c6b73;">LINK</div><div style="color: #d5ebf2;">${intf.connected_to}</div>` : ''}
                                 </div>
                             </div>
-                            <div style="display: flex; gap: 6px;">
-                                <button style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #8a9ba8; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#fff'; this.style.borderColor='rgba(255,255,255,0.3)';" onmouseout="this.style.color='#8a9ba8'; this.style.borderColor='rgba(255,255,255,0.1)';" title="Edit" onclick="const form = document.getElementById('add-intf-form-${deviceName}'); form.style.display='block'; form.dataset.editing='${intf.name}'; document.getElementById('cfg-intf-name-${deviceName}').value='${intf.name}'; document.getElementById('cfg-intf-name-${deviceName}').readOnly=true; document.getElementById('cfg-intf-name-${deviceName}').style.opacity='0.5'; document.getElementById('cfg-intf-ip-${deviceName}').value='${intf.ip ? (intf.subnet && intf.subnet.includes('/') ? intf.ip + '/' + intf.subnet.split('/')[1] : intf.ip) : ''}';">[ EDIT ]</button>
-                                
-                                <button style="background: rgba(255, 51, 51, 0.05); border: 1px solid rgba(255, 51, 51, 0.2); color: #ff3333; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(255, 51, 51, 0.2)'; this.style.borderColor='#ff3333';" onmouseout="this.style.background='rgba(255, 51, 51, 0.05)'; this.style.borderColor='rgba(255, 51, 51, 0.2)';" title="Delete" onclick="deleteNCMInterface('${deviceName}', '${intf.name}', this.closest('.ncm-window'))">[ DEL ]</button>
+                            <div style="display: flex; gap: 6px; margin-left: 8px;">
+                                <button style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #8a9ba8; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#fff'; this.style.borderColor='rgba(255,255,255,0.3)';" onmouseout="this.style.color='#8a9ba8'; this.style.borderColor='rgba(255,255,255,0.1)';" title="Edit" onclick="
+                                    const f=document.getElementById('add-intf-form-${safeDev}');
+                                    f.style.display='block';
+                                    f.dataset.editing='${intf.name}';
+                                    const nm=document.getElementById('cfg-intf-name-${safeDev}');
+                                    nm.value='${intf.name}'; nm.readOnly=true; nm.style.opacity='0.5';
+                                    document.getElementById('cfg-intf-ip-${safeDev}').value='${editIP}';
+                                    document.getElementById('cfg-intf-mask-${safeDev}').value='${editMask}';
+                                    document.getElementById('cfg-intf-gw-${safeDev}').value='${editGW}';
+                                    const dData = this.closest('.ncm-window')._lastDeviceData || {};
+                                    const isDhcp = (dData.services || []).some(s => s.name === 'DHCP_CLIENT' && s.status === 'running' && s.config && s.config.interface === '${intf.name}');
+                                    const modeToggle = document.querySelector('input[name=\\'cfg-intf-mode-' + CSS.escape('${safeDev}') + '\\'][value=\\'' + (isDhcp ? 'dhcp' : 'static') + '\\']');
+                                    if(modeToggle) { modeToggle.checked = true; }
+                                    const sf = document.getElementById('intf-static-fields-${safeDev}');
+                                    if(sf) { sf.style.display = isDhcp ? 'none' : 'block'; }
+                                    f.scrollIntoView({behavior:'smooth', block:'nearest'});
+                                ">[ EDIT ]</button>
+                                <button style="background: rgba(255,51,51,0.05); border: 1px solid rgba(255,51,51,0.2); color: #ff3333; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(255,51,51,0.2)'; this.style.borderColor='#ff3333';" onmouseout="this.style.background='rgba(255,51,51,0.05)'; this.style.borderColor='rgba(255,51,51,0.2)';" onclick="deleteNCMInterface('${safeDev}', '${intf.name}', this.closest('.ncm-window'))">[ DEL ]</button>
                             </div>
                         </div>
                     </div>
@@ -870,7 +1128,11 @@ function renderNCMInterfaces(window, deviceName, interfaces) {
     container.innerHTML = html;
 }
 
+
+
+
 function renderNCMMacTable(window, deviceName, macTable) {
+    const safeDev = deviceName.replace(/'/g, "\\'");
     const container = window.querySelector(".ncm-mac-table");
     if (!container) return;
     
@@ -918,6 +1180,7 @@ function renderNCMMacTable(window, deviceName, macTable) {
 }
 
 function renderNCMRoutingTable(window, deviceName, routes) {
+    const safeDev = deviceName.replace(/'/g, "\\'");
     const container = window.querySelector(".ncm-routing-table");
     if (!container) return;
     
@@ -1086,44 +1349,96 @@ async function handleTerminalInput(event, deviceName) {
 }
 
 async function updateNCMInterface(deviceName, interfaceName, win) {
-    const ipInput = document.getElementById(`cfg-intf-ip-${deviceName}`);
-    const form = document.getElementById(`add-intf-form-${deviceName}`);
-    
+    const ipInput   = document.getElementById(`cfg-intf-ip-${deviceName}`);
+    const maskInput = document.getElementById(`cfg-intf-mask-${deviceName}`);
+    const gwInput   = document.getElementById(`cfg-intf-gw-${deviceName}`);
+    const form      = document.getElementById(`add-intf-form-${deviceName}`);
+
     // Use the original name we're editing, or the field value if it's a new interface
     const isNew = !form.dataset.editing;
     const targetName = form.dataset.editing || interfaceName;
-    
+
     if (!targetName) return;
+
+    const modeToggle = document.querySelector(`input[name="cfg-intf-mode-${CSS.escape(deviceName)}"]:checked`);
+    const mode = modeToggle ? modeToggle.value : "static";
+
+    let ipVal = "", maskVal = "", gwVal = null;
+    
+    if (mode === "static") {
+        ipVal   = ipInput   ? ipInput.value.trim()   : "";
+        maskVal = maskInput ? maskInput.value.trim()  : "";
+        gwVal   = gwInput   ? gwInput.value.trim()    : null; // null = don't touch, "" = clear
+    } else {
+        // DHCP mode: clear IP settings
+        ipVal = "";
+        maskVal = "";
+        gwVal = "";
+    }
+
+    const payload = {
+        ip:      ipVal   || null,
+        netmask: maskVal || null,
+        gateway: gwVal !== null ? gwVal : undefined  // send "" to clear, undefined to leave alone
+    };
+    // If gateway field doesn't exist on old interfaces tabs, don't send it
+    if (!gwInput) delete payload.gateway;
 
     try {
         if (isNew) {
+            // First create the bare interface
             await apiRequest("POST", `/api/ncm/interfaces`, {
                 device: deviceName,
-                name: targetName,
-                ip: ipInput.value || null
+                name: targetName
             });
-            // If IP provided, we also need to update it since POST only sets the name/mac
-            if (ipInput.value) {
-                await apiRequest("PUT", `/api/ncm/devices/${encodeURIComponent(deviceName)}/interfaces/${encodeURIComponent(targetName)}`, {
-                    ip: ipInput.value || null
-                });
-            }
+            // Then set all fields via PUT
+            await apiRequest("PUT", `/api/ncm/devices/${encodeURIComponent(deviceName)}/interfaces/${encodeURIComponent(targetName)}`, payload);
         } else {
-            await apiRequest("PUT", `/api/ncm/devices/${encodeURIComponent(deviceName)}/interfaces/${encodeURIComponent(targetName)}`, {
-                ip: ipInput.value || null
-            });
+            await apiRequest("PUT", `/api/ncm/devices/${encodeURIComponent(deviceName)}/interfaces/${encodeURIComponent(targetName)}`, payload);
         }
         
+        // Handle DHCP client configuration
+        if (mode === "dhcp") {
+            try {
+                // Add DHCP Client service
+                await apiRequest("POST", `/api/ncm/devices/${encodeURIComponent(deviceName)}/services`, {
+                    name: "DHCP_CLIENT",
+                    protocol: "UDP",
+                    port: 68
+                });
+            } catch(e) {} // Ignore if already exists
+            
+            // Set service config to use this interface
+            await apiRequest("POST", `/api/ncm/devices/${encodeURIComponent(deviceName)}/services/DHCP_CLIENT/config`, {
+                interface: targetName,
+                req_hostname: true,
+                accept_dns: true
+            });
+            
+            // Start the service
+            await apiRequest("POST", `/api/ncm/devices/${encodeURIComponent(deviceName)}/services/DHCP_CLIENT/start`);
+        } else if (mode === "static") {
+            try {
+                // Stop DHCP Client service if switching to static
+                await apiRequest("POST", `/api/ncm/devices/${encodeURIComponent(deviceName)}/services/DHCP_CLIENT/stop`);
+            } catch(e) {}
+        }
+
         // Reset form state
         delete form.dataset.editing;
-        document.getElementById(`cfg-intf-name-${deviceName}`).readOnly = false;
-        document.getElementById(`cfg-intf-name-${deviceName}`).style.opacity = '1';
-        
+        const nameEl = document.getElementById(`cfg-intf-name-${deviceName}`);
+        if (nameEl) { nameEl.readOnly = false; nameEl.style.opacity = '1'; nameEl.value = ''; }
+        if (ipInput)   ipInput.value   = '';
+        if (maskInput) maskInput.value = '';
+        if (gwInput)   gwInput.value   = '';
+        form.style.display = 'none';
+
         loadNCMDevice(deviceName, win);
     } catch (error) {
         console.error("[CHL:NCM] Failed to update interface", error);
     }
 }
+
 
 async function deleteNCMInterface(deviceName, interfaceName, win) {
     try {
@@ -1184,7 +1499,7 @@ setInterval(() => {
                     }
                     
                     // Only update Interfaces if form is not actively editing and interface data changed
-                    const form = win.querySelector(`#add-intf-form-${deviceName}`);
+                    const form = document.getElementById(`add-intf-form-${deviceName}`);
                     const isFormOpen = form && form.style.display !== 'none' && form.style.display !== '';
                     const isEditing = form && Boolean(form.dataset.editing);
                     
@@ -1200,10 +1515,11 @@ setInterval(() => {
                     const svcs = deviceData.services || [];
 
                     // Sync Services if data changed & add-service form not open
-                    const sForm = win.querySelector(`#add-svc-form-${deviceName}`);
+                    const sForm = document.getElementById(`add-svc-form-${deviceName}`);
                     const isSFormOpen = sForm && sForm.style.display !== 'none' && sForm.style.display !== '';
                     if (!isSFormOpen) {
                         renderNCMServices(win, deviceName, svcs);
+
                     }
                     
                     // Update Health with real telemetry metrics
@@ -1327,6 +1643,7 @@ function renderNCMHealth(window, health) {
 }
 
 function renderNCMServices(window, deviceName, services) {
+    const safeDev = deviceName.replace(/'/g, "\\'");
     const container = window.querySelector('[data-content="services"]');
     if (!container) return;
     
@@ -1344,6 +1661,7 @@ function renderNCMServices(window, deviceName, services) {
         { value: "DHCP", label: "DHCP SERVER (UDP/67)" },
         { value: "DHCP_CLIENT", label: "DHCP CLIENT (UDP/68)" },
         { value: "DHCP_RELAY", label: "DHCP RELAY (UDP/67)" },
+        { value: "DNS_CLIENT", label: "DNS CLIENT (UDP/53)"},
         { value: "SSH", label: "SSH SERVER (TCP/22)" },
         { value: "SSH_CLIENT", label: "SSH CLIENT (AGENT)" },
         { value: "ECHO", label: "ECHO SERVER (TCP/7)" }
@@ -1359,20 +1677,20 @@ function renderNCMServices(window, deviceName, services) {
         <div class="ncm-config-section">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(0, 229, 255, 0.15); padding-bottom: 8px;">
                 <div class="ncm-section-title" style="color: #00e5ff; font-weight: bold; letter-spacing: 2px;">>_ DAEMON CONTROL</div>
-                <button style="background: rgba(0,229,255,0.1); border: 1px solid #00e5ff; color: #00e5ff; font-family: monospace; font-weight: bold; padding: 2px 10px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0,229,255,0.1)'; this.style.color='#00e5ff';" onclick="const f = document.getElementById('add-svc-form-${deviceName}'); f.style.display = f.style.display === 'none' ? 'block' : 'none';">[ + ] INIT</button>
+                <button style="background: rgba(0,229,255,0.1); border: 1px solid #00e5ff; color: #00e5ff; font-family: monospace; font-weight: bold; padding: 2px 10px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0,229,255,0.1)'; this.style.color='#00e5ff';" onclick="const f = document.getElementById('add-svc-form-${safeDev}'); f.style.display = f.style.display === 'none' ? 'block' : 'none';">[ + ] INIT</button>
             </div>
             
             <div id="add-svc-form-${deviceName}" style="display: none; margin-top: 15px; border: 1px dashed rgba(0, 229, 255, 0.3); background: rgba(0, 0, 0, 0.2); padding: 15px;">
                 <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 10px; font-weight: bold;">// INITIALIZE NEW SERVICE ROUTINE</div>
                 <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
-                    <select id="new-svc-preset-${deviceName}" onchange="document.getElementById('svc-config-wrapper-'+'${deviceName}').style.display = (this.value === 'DHCP_RELAY') ? 'block' : 'none';" style="background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s; cursor: pointer;">
+                    <select id="new-svc-preset-${deviceName}" onchange="document.getElementById('svc-config-wrapper-'+'${safeDev}').style.display = (this.value === 'DHCP_RELAY') ? 'block' : 'none';" style="background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s; cursor: pointer;">
                         ${optionsHtml}
                     </select>
                     <div id="svc-config-wrapper-${deviceName}" style="display: none;">
                         <input type="text" id="svc-target-ip-${deviceName}" placeholder="Target Server IP (e.g. 10.0.1.254)" style="background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s; width: 100%;">
                     </div>
                     
-                    <button style="background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; color: #00e5ff; padding: 8px; font-family: monospace; font-weight: bold; letter-spacing: 2px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0, 229, 255, 0.1)'; this.style.color='#00e5ff';" onclick="addNCMService('${deviceName}', this.closest('.ncm-window'))">SPAWN SERVICE</button>
+                    <button style="background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; color: #00e5ff; padding: 8px; font-family: monospace; font-weight: bold; letter-spacing: 2px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0, 229, 255, 0.1)'; this.style.color='#00e5ff';" onclick="addNCMService('${safeDev}', this.closest('.ncm-window'))">SPAWN SERVICE</button>
                 </div>
             </div>
             
@@ -1403,11 +1721,11 @@ function renderNCMServices(window, deviceName, services) {
                     </div>
                     <div style="display: flex; gap: 6px; align-items: flex-start;">
                         ${isRunning ? 
-                            `<button style="background: rgba(255, 170, 0, 0.05); border: 1px solid rgba(255, 170, 0, 0.3); color: #ffaa00; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(255, 170, 0, 0.2)'; this.style.borderColor='#ffaa00';" onmouseout="this.style.background='rgba(255, 170, 0, 0.05)'; this.style.borderColor='rgba(255, 170, 0, 0.3)';" title="Stop" onclick="manageService('${deviceName}', '${s.name}', 'stop', this.closest('.ncm-window'))">[ STOP ]</button>` :
-                            `<button style="background: rgba(0, 229, 255, 0.05); border: 1px solid rgba(0, 229, 255, 0.3); color: #00e5ff; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(0, 229, 255, 0.2)'; this.style.borderColor='#00e5ff';" onmouseout="this.style.background='rgba(0, 229, 255, 0.05)'; this.style.borderColor='rgba(0, 229, 255, 0.3)';" title="Start" onclick="manageService('${deviceName}', '${s.name}', 'start', this.closest('.ncm-window'))">[ START ]</button>`
+                            `<button style="background: rgba(255, 170, 0, 0.05); border: 1px solid rgba(255, 170, 0, 0.3); color: #ffaa00; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(255, 170, 0, 0.2)'; this.style.borderColor='#ffaa00';" onmouseout="this.style.background='rgba(255, 170, 0, 0.05)'; this.style.borderColor='rgba(255, 170, 0, 0.3)';" title="Stop" onclick="manageService('${safeDev}', '${s.name}', 'stop', this.closest('.ncm-window'))">[ STOP ]</button>` :
+                            `<button style="background: rgba(0, 229, 255, 0.05); border: 1px solid rgba(0, 229, 255, 0.3); color: #00e5ff; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(0, 229, 255, 0.2)'; this.style.borderColor='#00e5ff';" onmouseout="this.style.background='rgba(0, 229, 255, 0.05)'; this.style.borderColor='rgba(0, 229, 255, 0.3)';" title="Start" onclick="manageService('${safeDev}', '${s.name}', 'start', this.closest('.ncm-window'))">[ START ]</button>`
                         }
                         
-                        <button style="background: rgba(255, 51, 51, 0.05); border: 1px solid rgba(255, 51, 51, 0.2); color: #ff3333; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(255, 51, 51, 0.2)'; this.style.borderColor='#ff3333';" onmouseout="this.style.background='rgba(255, 51, 51, 0.05)'; this.style.borderColor='rgba(255, 51, 51, 0.2)';" title="Delete" onclick="manageService('${deviceName}', '${s.name}', 'remove', this.closest('.ncm-window'))">[ DEL ]</button>
+                        <button style="background: rgba(255, 51, 51, 0.05); border: 1px solid rgba(255, 51, 51, 0.2); color: #ff3333; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(255, 51, 51, 0.2)'; this.style.borderColor='#ff3333';" onmouseout="this.style.background='rgba(255, 51, 51, 0.05)'; this.style.borderColor='rgba(255, 51, 51, 0.2)';" title="Delete" onclick="manageService('${safeDev}', '${s.name}', 'remove', this.closest('.ncm-window'))">[ DEL ]</button>
                     </div>
                 </div>
             </div>
@@ -1446,11 +1764,12 @@ async function addNCMService(deviceName, win) {
     else if (preset === "DHCP_RELAY") { 
         proto = "UDP"; 
         port = 67; 
-        const targetIpInput = win.querySelector(`#svc-target-ip-${deviceName}`);
+        const targetIpInput = document.getElementById(`svc-target-ip-${deviceName}`);
         if (targetIpInput && targetIpInput.value) {
             config.target_ip = targetIpInput.value;
         }
     }
+    else if (preset === "DNS_CLIENT") { proto = "UDP"; port = 53; }
     else if (preset === "SSH" || preset === "SSH_SERVER") { proto = "TCP"; port = 22; }
     else if (preset === "SSH_CLIENT") { proto = "TCP"; port = 0; }
     else if (preset === "ECHO") { proto = "TCP"; port = 7; }
@@ -1755,4 +2074,54 @@ async function submitForgedPayload() {
         console.error("Payload forge failed", e);
         alert("Failed to inject payload: " + (e.message || "Unknown Error"));
     }
+}
+
+// Global helper to safely add a DHCP scope
+window.addDhcpScope = function(btn) {
+    const container = btn.closest('div').parentElement;
+    const tbody = container.querySelector('.dhcp-tbody');
+    
+    const subInput = container.querySelector('.dhcp-new-subnet');
+    const startInput = container.querySelector('.dhcp-new-start');
+    const endInput = container.querySelector('.dhcp-new-end');
+    const gwInput = container.querySelector('.dhcp-new-gw');
+    const dnsInput = container.querySelector('.dhcp-new-dns');
+    const domInput = container.querySelector('.dhcp-new-domain');
+    const leaseInput = container.querySelector('.dhcp-new-lease');
+
+    if (!tbody || !subInput || !startInput || !endInput) return;
+
+    const sub = subInput.value.trim();
+    const st = startInput.value.trim();
+    const en = endInput.value.trim();
+    const gw = gwInput.value.trim();
+    const dns = dnsInput.value.trim();
+    const dom = domInput.value.trim();
+    const lease = leaseInput.value.trim() || 86400;
+
+    if (!sub || !st || !en) return;
+
+    const emptyRow = tbody.querySelector('.dhcp-no-records');
+    if (emptyRow) emptyRow.remove();
+
+    const tr = document.createElement("tr");
+    tr.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
+    tr.style.background = "rgba(0,0,0,0.2)";
+    tr.innerHTML = `
+        <td style="padding: 6px; color: #ffaa00; font-weight: bold;">[ PENDING ]</td>
+        <td style="padding: 6px; color: #00e5ff;" class="dhcp-subnet">${sub}</td>
+        <td style="padding: 6px; color: #ffaa00;" class="dhcp-start">${st}</td>
+        <td style="padding: 6px; color: #ffaa00;" class="dhcp-end">${en}</td>
+        <td style="padding: 6px; color: #d5ebf2;" class="dhcp-gw">${gw}</td>
+        <td style="padding: 6px; color: #d5ebf2;" class="dhcp-dns">${dns}</td>
+        <td style="padding: 6px; color: #d5ebf2; display: none;" class="dhcp-domain">${dom}</td>
+        <td style="padding: 6px; color: #d5ebf2; display: none;" class="dhcp-lease">${lease}</td>
+        <td style="padding: 6px; text-align: right;">
+            <button type="button" style="background: rgba(255,51,51,0.1); border: 1px solid #ff3333; color: #ff3333; padding: 2px 6px; font-family: monospace; font-size: 9px; cursor: pointer;" onclick="this.closest('tr').remove()">[ DEL ]</button>
+        </td>
+    `;
+    tbody.appendChild(tr);
+
+    subInput.value = ""; startInput.value = ""; endInput.value = "";
+    gwInput.value = ""; dnsInput.value = ""; domInput.value = "";
 }

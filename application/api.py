@@ -173,9 +173,17 @@ class API:
             for device_name, intfs in sim_data.get("interfaces", {}).items():
                 for intf in intfs:
                     try:
-                        self.ncm.update_interface(device_name, intf["name"], ip=intf.get("ip"), subnet=intf.get("subnet"), mac=intf.get("mac"))
+                        self.ncm.update_interface(
+                            device_name,
+                            intf["name"],
+                            ip=intf.get("ip"),
+                            subnet=intf.get("subnet"),
+                            mac=intf.get("mac"),
+                            gateway=intf.get("gateway")  # restores default_gateway + default route
+                        )
                     except Exception:
                         pass
+
                         
             # Subnets
             for subnet, data in sim_data.get("subnets", {}).items():
@@ -563,12 +571,15 @@ class API:
         # POST /api/ncm/devices/<device>/services
         if method == "POST" and len(resource) == 3 and resource[0] == "devices" and resource[2] == "services":
             config = body.get("config", {})
-            service = self.ncm.add_service(
-                resource[1],
-                body["name"],
-                body["protocol"],
-                int(body["port"])
-            )
+            try:
+                service = self.ncm.add_service(
+                    resource[1],
+                    body["name"],
+                    body["protocol"],
+                    int(body["port"])
+                )
+            except ValueError as e:
+                return {"error": str(e)}, 400
             if config:
                 service.config = config
             self.state_manager.save()
@@ -576,21 +587,30 @@ class API:
 
         # DELETE /api/ncm/devices/<device>/services/<service>
         if method == "DELETE" and len(resource) == 4 and resource[0] == "devices" and resource[2] == "services":
-            self.ncm.remove_service(resource[1], resource[3])
+            try:
+                self.ncm.remove_service(resource[1], resource[3])
+            except ValueError as e:
+                return {"error": str(e)}, 400
             self.state_manager.save()
             return {"status": "success"}
 
         # POST /api/ncm/devices/<device>/services/<service>/start
         if method == "POST" and len(resource) == 5 and resource[0] == "devices" and resource[2] == "services" and resource[4] == "start":
-            self.ncm.start_service(resource[1], resource[3])
+            try:
+                self.ncm.start_service(resource[1], resource[3])
+            except ValueError as e:
+                return {"error": str(e)}, 400
             self.state_manager.save()
             return {"status": "started"}
 
         # POST /api/ncm/devices/<device>/services/<service>/stop
         if method == "POST" and len(resource) == 5 and resource[0] == "devices" and resource[2] == "services" and resource[4] == "stop":
-            self.ncm.stop_service(resource[1], resource[3])
-            self.state_manager.save()
-            return {"status": "stopped"}
+            try:
+                self.ncm.stop_service(resource[1], resource[3])
+                self.state_manager.save()
+                return {"status": "stopped"}
+            except ValueError as e:
+                return {"error": str(e)}, 404
 
         # POST /api/ncm/devices/<device>/services/<service>/config
         if method == "POST" and len(resource) == 5 and resource[0] == "devices" and resource[2] == "services" and resource[4] == "config":
@@ -603,9 +623,7 @@ class API:
             if not svc:
                 return {"error": f"Service {service_name} not found on {device.name}"}, 404
 
-            if not hasattr(svc, "config") or svc.config is None:
-                svc.config = {}
-            svc.config.update(body)
+            svc.config = body
 
             daemon = device.get_service_daemon(svc.name)
             if daemon and hasattr(daemon, "reload_config"):
@@ -637,10 +655,14 @@ class API:
                 resource[1],
                 resource[3],
                 ip=body.get("ip"),
-                subnet=body.get("subnet")
+                subnet=body.get("subnet"),
+                netmask=body.get("netmask"),
+                gateway=body.get("gateway"),
+                mac=body.get("mac")
             )
             self.state_manager.save()
             return self._serialize_interface(interface)
+
 
         # DELETE /api/ncm/interfaces
         if (
@@ -873,37 +895,50 @@ class API:
         return result
 
     def _serialize_interface(self, interface):
+        import ipaddress as _ip
         name = getattr(interface, "name", None)
         if name is None and hasattr(interface, "port_number"):
             name = f"Port-{interface.port_number}"
 
+        raw_ip     = getattr(interface, "ip", None)
+        raw_subnet = getattr(interface, "subnet", None)
+
+        # Compute bare IP (no prefix) and dotted-decimal netmask
+        ip_only = None
+        netmask = None
+        if raw_ip and raw_ip != "0.0.0.0":
+            ip_only = str(raw_ip)
+        if raw_subnet and raw_subnet not in ("0.0.0.0/0", "0.0.0.0"):
+            try:
+                net = _ip.ip_network(raw_subnet, strict=False)
+                netmask = str(net.netmask)
+            except Exception:
+                pass
+
+        # Gateway: pulled from the owning node's default_gateway
+        owner = getattr(interface, "owner", None)
+        gateway = getattr(owner, "default_gateway", None) if owner else None
+
         result = {
             "name": name,
-            "mac": (
-                str(interface.mac)
-                if getattr( interface, "mac", None ) is not None else None
-            ),
-            "ip": (
-                str(interface.ip)
-                if getattr( interface, "ip", None ) is not None else None
-            ),
-            "subnet": (
-                str(interface.subnet)
-                if getattr( interface, "subnet", None ) is not None else None
-            ),
-            "connected": (
-                getattr( interface, "link", None ) is not None ),
-            "status": getattr(interface, "status", "up")
+            "mac": str(interface.mac) if getattr(interface, "mac", None) is not None else None,
+            "ip": str(raw_ip) if raw_ip is not None else None,
+            "ip_only": ip_only,
+            "subnet": str(raw_subnet) if raw_subnet is not None else None,
+            "netmask": netmask,
+            "gateway": gateway,
+            "connected": getattr(interface, "link", None) is not None,
+            "status": getattr(interface, "status", "up"),
         }
-        
+
         if hasattr(interface, "port_number"):
             result["port_number"] = interface.port_number
             result["mode"] = getattr(interface, "mode", "access").upper()
-            
+
         if getattr(interface, "link", None) is not None:
             other = interface.link.endpointB if interface.link.endpointA == interface else interface.link.endpointA
             result["connected_to"] = self._endpoint_name(other)
-            
+
         return result
 
     def _serialize_link(self, link):
@@ -934,7 +969,8 @@ class API:
             "name": service.name,
             "protocol": service.protocol,
             "port": service.port,
-            "status": getattr(service, "status", "stopped")
+            "status": getattr(service, "status", "stopped"),
+            "config": getattr(service, "config", {})
         }
 
     def _serialize(self, value):

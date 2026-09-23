@@ -26,6 +26,7 @@ class Node:
         self.boot_time: float | None = None
         self.forwarding_enabled: bool = False
         self.default_gateway: str | None = None
+        self.dns_server: str | None = None
         
         self.arp = ARP(self)
         self.tcp_connections: dict = {}
@@ -410,6 +411,10 @@ class Node:
 
         # 2. Check for existing client connection awaiting reply if no service
         if service is None:
+            # Quick check for DNS responses from port 53
+            if udp.source_port == 53:
+                self.last_dns_result = str(udp.payload)
+                
             key = (packet.source_ip, udp.source_port, packet.destination_ip, udp.destination_port)
             connection = self.udp_connections.get(key)
             if connection:
@@ -597,6 +602,9 @@ class Node:
             elif name == "ECHO":
                 from backend.services.echo import EchoServerDaemon
                 self.daemons[service_name] = EchoServerDaemon(self)
+            elif name == "DNS_CLIENT":
+                from backend.services.dns_client import DNSClientDaemon
+                self.daemons[service_name] = DNSClientDaemon(self)
             else:
                 from backend.services.base import ServiceDaemon
                 self.daemons[service_name] = ServiceDaemon(self)

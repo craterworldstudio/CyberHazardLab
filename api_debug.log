@@ -89,3 +89,21 @@ SUCCESS: Added event Unknown device: DHCP%20Server. Total events now: 11
 SUCCESS: Added event Unknown device: HOST-04. Total events now: 12
 SUCCESS: Added event Unknown device: HOST-04. Total events now: 11
 SUCCESS: Added event Unknown device: SERV-01. Total events now: 12
+SUCCESS: Added event Unknown device: Wolf Router. Total events now: 1
+SUCCESS: Added event Unknown device: Wolf Router. Total events now: 2
+SUCCESS: Added event Unknown device: Wolf Router. Total events now: 3
+SUCCESS: Added event Unknown device: Wolf Router. Total events now: 4
+SUCCESS: Added event Unknown device: Wolf Router. Total events now: 5
+SUCCESS: Added event Unknown device: Wolf Router. Total events now: 6
+SUCCESS: Added event Wolf's DHCP Server does not have service DHCP_CLIENT. Total events now: 17
+SUCCESS: Added event Unknown device: Google. Total events now: 7
+SUCCESS: Added event Unknown NTM endpoint. Total events now: 8
+SUCCESS: Added event Unknown NTM endpoint. Total events now: 11
+SUCCESS: Added event Wolf's Router does not have service DHCP_CLIENT. Total events now: 16
+SUCCESS: Added event ISP Router does not have service DHCP_CLIENT. Total events now: 17
+SUCCESS: Added event ISP Router does not have service DHCP_CLIENT. Total events now: 11
+SUCCESS: Added event ISP Router does not have service DHCP_CLIENT. Total events now: 12
+SUCCESS: Added event Wolf's Router does not have service DHCP_CLIENT. Total events now: 13
+SUCCESS: Added event Google's Router does not have service DHCP_CLIENT. Total events now: 14
+SUCCESS: Added event Google's Router does not have service DHCP_CLIENT. Total events now: 18
+SUCCESS: Added event Google DHCP Server does not have service DHCP_CLIENT. Total events now: 11

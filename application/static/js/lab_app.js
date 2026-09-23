@@ -1070,6 +1070,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 const number = Number(numStr);
                 if (!Number.isNaN(number)) max = Math.max(max, number);
             });
+            const renames = (window.SimulationState && window.SimulationState.renames) || {};
+            for (const oldName of Object.keys(renames)) {
+                if (oldName.startsWith(config.prefix)) {
+                    const numStr = oldName.split('-').pop();
+                    const number = Number(numStr);
+                    if (!Number.isNaN(number)) max = Math.max(max, number);
+                }
+            }
             window._deviceCounters[config.prefix] = max >= 0 ? max + 1 : 1;
             // Also factor in the legacy counters if they were used
             if (config.prefix === "HOST" && hostCounter > window._deviceCounters[config.prefix]) {
@@ -1298,7 +1306,8 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             const termInput = win.querySelector(".ncm-terminal-input");
             if (termInput) {
-                termInput.setAttribute("onkeydown", `handleTerminalInput(event, '${newId}')`);
+                const safeNewId = newId.replace(/'/g, "\\'");
+                termInput.setAttribute("onkeydown", `handleTerminalInput(event, '${safeNewId}')`);
             }
             const closeBtn = win.querySelector(".ncm-close");
             if (closeBtn) {
