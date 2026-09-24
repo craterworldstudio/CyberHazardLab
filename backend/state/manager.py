@@ -166,7 +166,10 @@ class StateManager:
             }
             if getattr(host, "default_gateway", None):
                 d["default_gateway"] = host.default_gateway
+            if getattr(host, "dns_server", None):
+                d["dns_server"] = host.dns_server
             devices.append(d)
+
 
         for switch in self.simulation.switches.values():
             devices.append({

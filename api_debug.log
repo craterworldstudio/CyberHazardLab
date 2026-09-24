@@ -107,3 +107,4 @@ SUCCESS: Added event Wolf's Router does not have service DHCP_CLIENT. Total even
 SUCCESS: Added event Google's Router does not have service DHCP_CLIENT. Total events now: 14
 SUCCESS: Added event Google's Router does not have service DHCP_CLIENT. Total events now: 18
 SUCCESS: Added event Google DHCP Server does not have service DHCP_CLIENT. Total events now: 11
+SUCCESS: Added event Unknown NTM endpoint. Total events now: 30

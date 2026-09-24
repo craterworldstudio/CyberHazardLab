@@ -9,12 +9,31 @@ def resolve_hostname(device, hostname, timeout=0.3):
     except ValueError:
         pass
         
-    dns_ip = getattr(device, "dns_server", None)
+    dns_ip = None
+    if hasattr(device, "services"):
+        for s in device.services:
+            if s.name.upper() == "DNS_CLIENT" and getattr(s, "config", None):
+                ns = s.config.get("nameserver")
+                if ns and str(ns).strip():
+                    dns_ip = str(ns).strip()
+                    device.dns_server = dns_ip
+                    break
+    if not dns_ip:
+        dns_ip = getattr(device, "dns_server", None)
+    if not dns_ip and hasattr(device, "network") and getattr(device.network, "dhcp", None):
+        dhcp = device.network.dhcp
+        if getattr(dhcp, "scopes", None):
+            for sc in dhcp.scopes:
+                if getattr(sc, "dns", None):
+                    dns_ip = sc.dns
+                    break
+
     if not dns_ip:
         return None
         
     if not device.interfaces:
         return None
+
         
     intf = device.interfaces[0]
     

@@ -124,7 +124,7 @@ function createNCMWindow(deviceName, deviceType) {
             <div class="ncm-tab-content" data-content="terminal">
                 <div style="display: flex; flex-direction: column; height: 100%;">
                     <div class="ncm-terminal-output" style="flex: 1; background: #06090e; color: #d5ebf2; font-family: monospace; font-size: 12px; padding: 10px; overflow-y: auto; border: 1px solid rgba(0, 229, 255, 0.15); margin-bottom: 10px;">
-                        <div style="color: #00e5ff; font-weight: bold; letter-spacing: 1px;">> Nox OS (Network Operations Execution)</div>
+                        <div style="color: #00e5ff; font-weight: bold; letter-spacing: 1px;">> AxiomOS (Network Operations Execution)</div>
                         <div style="color: #5c6b73; margin-bottom: 15px;">System version 1.0.0. Type 'help' for available commands.</div>
                     </div>
                     <div style="display: flex; align-items: center; border: 1px solid rgba(0, 229, 255, 0.3); background: #06090e; padding: 8px;">
@@ -140,7 +140,7 @@ function createNCMWindow(deviceName, deviceType) {
             <div class="ncm-tab-content" data-content="terminal">
                 <div style="display: flex; flex-direction: column; height: 100%;">
                     <div class="ncm-terminal-output" style="flex: 1; background: #06090e; color: #d5ebf2; font-family: monospace; font-size: 12px; padding: 10px; overflow-y: auto; border: 1px solid rgba(0, 229, 255, 0.15); margin-bottom: 10px;">
-                        <div style="color: #00e5ff; font-weight: bold; letter-spacing: 1px;">> Nox OS (Network Operations Execution)</div>
+                        <div style="color: #00e5ff; font-weight: bold; letter-spacing: 1px;">> AxiomOS (Network Operations Execution)</div>
                         <div style="color: #5c6b73; margin-bottom: 15px;">System version 1.0.0. Type 'help' for available commands.</div>
                     </div>
                     <div style="display: flex; align-items: center; border: 1px solid rgba(0, 229, 255, 0.3); background: #06090e; padding: 8px;">
@@ -499,18 +499,18 @@ function renderNCMSelectedServiceConfig(deviceName, win, serviceName) {
                 </div>
                 <div>
                     <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// LOGIN MOTD / WELCOME BANNER</div>
-                    <textarea id="ncm-cfg-svc-motd-${deviceName}" rows="3" placeholder="Welcome banner message shown upon terminal/SSH login..." style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px; resize: vertical;">${cfg.motd || cfg.banner || ''}</textarea>
+                    <textarea class="ncm-cfg-svc-motd" id="ncm-cfg-svc-motd-${deviceName}" rows="3" placeholder="Welcome banner message shown upon terminal/SSH login..." style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px; resize: vertical;">${cfg.motd || cfg.banner || ''}</textarea>
                 </div>
                 <div>
                     <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// PERMIT ROOT LOGIN</div>
-                    <select id="ncm-cfg-svc-permit-root-${deviceName}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
+                    <select class="ncm-cfg-svc-permit-root" id="ncm-cfg-svc-permit-root-${deviceName}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
                         <option value="true" ${cfg.permit_root !== false ? 'selected' : ''}>YES (Allow Root Access)</option>
                         <option value="false" ${cfg.permit_root === false ? 'selected' : ''}>NO (Users Only)</option>
                     </select>
                 </div>
                 <div>
                     <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// ALLOWED USERS & PASSWORDS</div>
-                    <input type="text" id="ncm-cfg-svc-users-${deviceName}" value="${cfg.users || 'admin:password, root:toor'}" placeholder="e.g. admin:password, root:toor" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
+                    <input type="text" class="ncm-cfg-svc-users" id="ncm-cfg-svc-users-${deviceName}" value="${cfg.users || 'admin:password, root:toor'}" placeholder="e.g. admin:password, root:toor" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
                 </div>
             </div>
         `;
@@ -519,15 +519,15 @@ function renderNCMSelectedServiceConfig(deviceName, win, serviceName) {
             <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
                 <div>
                     <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// DEFAULT SSH PORT</div>
-                    <input type="number" id="ncm-cfg-svc-port-${deviceName}" value="${cfg.default_port || 22}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
+                    <input type="number" class="ncm-cfg-svc-port" id="ncm-cfg-svc-port-${deviceName}" value="${cfg.default_port || 22}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
                 </div>
                 <div>
                     <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// DEFAULT USERNAME</div>
-                    <input type="text" id="ncm-cfg-svc-username-${deviceName}" value="${cfg.username || 'admin'}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
+                    <input type="text" class="ncm-cfg-svc-username" id="ncm-cfg-svc-username-${deviceName}" value="${cfg.username || 'admin'}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
                 </div>
                 <div>
                     <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// CONNECTION TIMEOUT (SECONDS)</div>
-                    <input type="number" id="ncm-cfg-svc-timeout-${deviceName}" value="${cfg.timeout || 10}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
+                    <input type="number" class="ncm-cfg-svc-timeout" id="ncm-cfg-svc-timeout-${deviceName}" value="${cfg.timeout || 10}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
                 </div>
             </div>
         `;
@@ -541,8 +541,11 @@ function renderNCMSelectedServiceConfig(deviceName, win, serviceName) {
         }
 
         let trs = scopes.map((sc, idx) => {
+            const isRunning = (svc.status || '').toLowerCase() === 'running';
+            const scopeStatus = isRunning ? 'ACTIVE' : 'IDLE';
+            const scopeColor = isRunning ? '#00ff00' : '#5c6b73';
             return "<tr style='border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2);'>" +
-                "<td style='padding: 6px; color: #00ff00; font-weight: bold;'>[ ACTIVE ]</td>" +
+                `<td style='padding: 6px; color: ${scopeColor}; font-weight: bold;'>[ ${scopeStatus} ]</td>` +
                 "<td style='padding: 6px; color: #00e5ff;' class='dhcp-subnet'>" + (sc.subnet || '') + "</td>" +
                 "<td style='padding: 6px; color: #ffaa00;' class='dhcp-start'>" + (sc.pool_start || '') + "</td>" +
                 "<td style='padding: 6px; color: #ffaa00;' class='dhcp-end'>" + (sc.pool_end || '') + "</td>" +
@@ -596,18 +599,18 @@ function renderNCMSelectedServiceConfig(deviceName, win, serviceName) {
             <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
                 <div>
                     <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// TARGET INTERFACE</div>
-                    <input type="text" id="ncm-cfg-svc-intf-${deviceName}" value="${cfg.interface || 'eth0'}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
+                    <input type="text" class="ncm-cfg-svc-intf" id="ncm-cfg-svc-intf-${deviceName}" value="${cfg.interface || 'eth0'}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
                 </div>
                 <div>
                     <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// REQUEST HOSTNAME (OPT 12)</div>
-                    <select id="ncm-cfg-svc-req-hostname-${deviceName}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
+                    <select class="ncm-cfg-svc-req-hostname" id="ncm-cfg-svc-req-hostname-${deviceName}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
                         <option value="true" ${cfg.req_hostname !== false ? 'selected' : ''}>YES (Announce Device Name)</option>
                         <option value="false" ${cfg.req_hostname === false ? 'selected' : ''}>NO</option>
                     </select>
                 </div>
                 <div>
                     <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// ACCEPT DNS (OPT 6)</div>
-                    <select id="ncm-cfg-svc-accept-dns-${deviceName}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
+                    <select class="ncm-cfg-svc-accept-dns" id="ncm-cfg-svc-accept-dns-${deviceName}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
                         <option value="true" ${cfg.accept_dns !== false ? 'selected' : ''}>YES (Auto-Configure Resolver)</option>
                         <option value="false" ${cfg.accept_dns === false ? 'selected' : ''}>NO</option>
                     </select>
@@ -619,11 +622,11 @@ function renderNCMSelectedServiceConfig(deviceName, win, serviceName) {
             <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
                 <div>
                     <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// TARGET DHCP SERVER IP</div>
-                    <input type="text" id="ncm-cfg-svc-target-ip-${deviceName}" value="${cfg.target_ip || ''}" placeholder="e.g. 10.0.1.10" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
+                    <input type="text" class="ncm-cfg-svc-target-ip" id="ncm-cfg-svc-target-ip-${deviceName}" value="${cfg.target_ip || ''}" placeholder="e.g. 10.0.1.10" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
                 </div>
                 <div>
                     <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// MAX HOP COUNT</div>
-                    <input type="number" id="ncm-cfg-svc-hops-${deviceName}" value="${cfg.max_hops || 4}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
+                    <input type="number" class="ncm-cfg-svc-hops" id="ncm-cfg-svc-hops-${deviceName}" value="${cfg.max_hops || 4}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
                 </div>
             </div>
         `;
@@ -661,9 +664,12 @@ function renderNCMSelectedServiceConfig(deviceName, win, serviceName) {
             }
         
             // 2. Build Rows
-            let trs = records.map((r) => `
+            let trs = records.map((r) => {
+                const st = (r.status || 'PENDING').toUpperCase();
+                const stColor = st === 'ONLINE' ? '#00ff00' : st === 'PENDING' ? '#ffaa00' : '#ff3333';
+                return `
                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2);">
-                    <td style="padding: 6px; color: #00ff00; font-weight: bold;">[ ONLINE ]</td>
+                    <td style="padding: 6px; color: ${stColor}; font-weight: bold;" class="dns-status" data-status="${st}">[ ${st} ]</td>
                     <td style="padding: 6px; color: #ffaa00;" class="dns-type">${r.type || 'A'}</td>
                     <td style="padding: 6px; color: #00e5ff;" class="dns-name">${r.name}</td>
                     <td style="padding: 6px; color: #d5ebf2;" class="dns-target">${r.target}</td>
@@ -671,7 +677,8 @@ function renderNCMSelectedServiceConfig(deviceName, win, serviceName) {
                         <button type="button" style="background: rgba(255,51,51,0.1); border: 1px solid #ff3333; color: #ff3333; padding: 2px 6px; font-family: monospace; font-size: 9px; cursor: pointer;" onclick="this.closest('tr').remove()">[ DEL ]</button>
                     </td>
                 </tr>
-            `).join('');
+            `}).join('');
+
         
             if (records.length === 0) {
                 trs = `<tr class="dns-no-records"><td colspan="5" style="padding: 10px; text-align: center; color: #5c6b73; font-style: italic;">No DNS Records Found.</td></tr>`;
@@ -725,7 +732,7 @@ function renderNCMSelectedServiceConfig(deviceName, win, serviceName) {
                 <div>
                     <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// NAMESERVER IP</div>
                     <div style="font-size: 9px; color: #5c6b73; margin-bottom: 4px;">The IP address of the DNS server to query. (Auto-configured by DHCP if empty)</div>
-                    <input type="text" id="ncm-cfg-svc-nameserver-${deviceName}" value="${cfg.nameserver || ''}" placeholder="e.g., 8.8.8.8" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
+                    <input type="text" class="ncm-cfg-svc-nameserver" id="ncm-cfg-svc-nameserver-${deviceName}" value="${cfg.nameserver || ''}" placeholder="e.g., 8.8.8.8" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
                 </div>
             </div>
         `;
@@ -840,27 +847,35 @@ async function saveNCMNodeConfig(deviceName, win) {
 }
 
 async function saveNCMServiceConfig(deviceName, serviceName, win) {
-    const safeDev = deviceName.replace(/'/g, "\\'");
-    const btn = document.getElementById(`btn-save-svc-cfg-${safeDev}`);
     const sName = serviceName.toUpperCase();
     const config = {};
 
+    const getField = (cls, idPrefix) => {
+        if (win) {
+            const el = win.querySelector(`.${cls}`);
+            if (el) return el;
+        }
+        return document.getElementById(`${idPrefix}-${deviceName}`);
+    };
+
+    const btn = (win ? win.querySelector('button[id^="btn-save-svc-cfg-"]') : null) || document.getElementById(`btn-save-svc-cfg-${deviceName}`);
+
     if (sName === "SSH" || sName === "SSH_SERVER") {
-        const motd = document.getElementById(`ncm-cfg-svc-motd-${safeDev}`);
-        const permitRoot = document.getElementById(`ncm-cfg-svc-permit-root-${safeDev}`);
-        const users = document.getElementById(`ncm-cfg-svc-users-${safeDev}`);
+        const motd = getField("ncm-cfg-svc-motd", "ncm-cfg-svc-motd");
+        const permitRoot = getField("ncm-cfg-svc-permit-root", "ncm-cfg-svc-permit-root");
+        const users = getField("ncm-cfg-svc-users", "ncm-cfg-svc-users");
         if (motd) config.motd = motd.value;
         if (permitRoot) config.permit_root = permitRoot.value === "true";
         if (users) config.users = users.value;
     } else if (sName === "SSH_CLIENT") {
-        const port = document.getElementById(`ncm-cfg-svc-port-${safeDev}`);
-        const user = document.getElementById(`ncm-cfg-svc-username-${safeDev}`);
-        const timeout = document.getElementById(`ncm-cfg-svc-timeout-${safeDev}`);
+        const port = getField("ncm-cfg-svc-port", "ncm-cfg-svc-port");
+        const user = getField("ncm-cfg-svc-username", "ncm-cfg-svc-username");
+        const timeout = getField("ncm-cfg-svc-timeout", "ncm-cfg-svc-timeout");
         if (port) config.default_port = parseInt(port.value, 10);
         if (user) config.username = user.value;
         if (timeout) config.timeout = parseInt(timeout.value, 10);
-        } else if (sName === "DHCP") {
-        const tbody = win.querySelector('.dhcp-tbody');
+    } else if (sName === "DHCP") {
+        const tbody = win ? win.querySelector('.dhcp-tbody') : document.querySelector('.dhcp-tbody');
         let scopes = [];
         if (tbody && !tbody.innerHTML.includes('No DHCP Scopes Defined')) {
             const rows = tbody.querySelectorAll('tr');
@@ -887,25 +902,26 @@ async function saveNCMServiceConfig(deviceName, serviceName, win) {
             });
         }
         config.scopes = scopes;
-} else if (sName === "DHCP_CLIENT") {
-        const intf = document.getElementById(`ncm-cfg-svc-intf-${safeDev}`);
-        const reqHost = document.getElementById(`ncm-cfg-svc-req-hostname-${safeDev}`);
-        const acceptDns = document.getElementById(`ncm-cfg-svc-accept-dns-${safeDev}`);
+    } else if (sName === "DHCP_CLIENT") {
+        const intf = getField("ncm-cfg-svc-intf", "ncm-cfg-svc-intf");
+        const reqHost = getField("ncm-cfg-svc-req-hostname", "ncm-cfg-svc-req-hostname");
+        const acceptDns = getField("ncm-cfg-svc-accept-dns", "ncm-cfg-svc-accept-dns");
         if (intf) config.interface = intf.value.trim();
         if (reqHost) config.req_hostname = reqHost.value === "true";
         if (acceptDns) config.accept_dns = acceptDns.value === "true";
     } else if (sName === "DHCP_RELAY") {
-        const targetIp = document.getElementById(`ncm-cfg-svc-target-ip-${safeDev}`);
-        const hops = document.getElementById(`ncm-cfg-svc-hops-${safeDev}`);
+        const targetIp = getField("ncm-cfg-svc-target-ip", "ncm-cfg-svc-target-ip");
+        const hops = getField("ncm-cfg-svc-hops", "ncm-cfg-svc-hops");
         if (targetIp) config.target_ip = targetIp.value.trim();
         if (hops) config.max_hops = parseInt(hops.value, 10);
     } else if (sName === "DNS" || sName === "DNS_SERVER") {
-        const tbody = win.querySelector('.dns-tbody');
-        const health = win.querySelector('.dns-health');
+        const tbody = win ? win.querySelector('.dns-tbody') : document.querySelector('.dns-tbody');
+        const health = win ? win.querySelector('.dns-health') : document.querySelector('.dns-health');
         let records = [];
         if (tbody && !tbody.innerHTML.includes('No DNS Records Found')) {
             const rows = tbody.querySelectorAll('tr');
             rows.forEach(tr => {
+                const statusEl = tr.querySelector('.dns-status');
                 const typeEl = tr.querySelector('.dns-type');
                 const nameEl = tr.querySelector('.dns-name');
                 const targetEl = tr.querySelector('.dns-target');
@@ -913,7 +929,8 @@ async function saveNCMServiceConfig(deviceName, serviceName, win) {
                     records.push({
                         type: typeEl ? typeEl.innerText.trim() : 'A',
                         name: nameEl.innerText.trim(),
-                        target: targetEl.innerText.trim()
+                        target: targetEl.innerText.trim(),
+                        status: statusEl ? (statusEl.dataset.status || 'PENDING') : 'PENDING'
                     });
                 }
             });
@@ -921,7 +938,7 @@ async function saveNCMServiceConfig(deviceName, serviceName, win) {
         config.records = records;
         if (health) config.health_interval = parseInt(health.value, 10);
     } else if (sName === "DNS_CLIENT") {
-        const nameserver = document.getElementById(`ncm-cfg-svc-nameserver-${safeDev}`);
+        const nameserver = getField("ncm-cfg-svc-nameserver", "ncm-cfg-svc-nameserver");
         if (nameserver) config.nameserver = nameserver.value.trim();
     }
 
@@ -977,7 +994,7 @@ window.addDnsRecord = function(btn) {
     tr.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
     tr.style.background = "rgba(0,0,0,0.2)";
     tr.innerHTML = `
-        <td style="padding: 6px; color: #ffaa00; font-weight: bold;">[ PENDING ]</td>
+        <td style="padding: 6px; color: #ffaa00; font-weight: bold;" class="dns-status" data-status="PENDING">[ PENDING ]</td>
         <td style="padding: 6px; color: #ffaa00;" class="dns-type">${type}</td>
         <td style="padding: 6px; color: #00e5ff;" class="dns-name">${name}</td>
         <td style="padding: 6px; color: #d5ebf2;" class="dns-target">${target}</td>

@@ -414,6 +414,7 @@ class Node:
             # Quick check for DNS responses from port 53
             if udp.source_port == 53:
                 self.last_dns_result = str(udp.payload)
+                return udp.payload
                 
             key = (packet.source_ip, udp.source_port, packet.destination_ip, udp.destination_port)
             connection = self.udp_connections.get(key)

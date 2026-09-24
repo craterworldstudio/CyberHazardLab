@@ -151,6 +151,9 @@ class API:
                 if dev:
                     if "default_gateway" in d:
                         dev.default_gateway = d["default_gateway"]
+                    if "dns_server" in d:
+                        dev.dns_server = d["dns_server"]
+
                     if "ip_forwarding" in d:
                         dev.ip_forwarding = bool(d["ip_forwarding"])
                     if "auto_routes" in d:
@@ -199,8 +202,16 @@ class API:
                         svc_obj = self.ncm.add_service(device_name, s["name"], s["protocol"], s["port"], s.get("status", "stopped"))
                         if "config" in s:
                             svc_obj.config = s["config"]
+                        dev = self.ntm.simulation.hosts.get(device_name) or self.ntm.simulation.routers.get(device_name)
+                        if dev and hasattr(dev, "get_service_daemon"):
+                            d = dev.get_service_daemon(s["name"])
+                            if d and hasattr(d, "reload_config") and "config" in s:
+                                d.reload_config(s["config"])
+                        if str(s.get("status", "")).lower() == "running":
+                            self.ncm.start_service(device_name, s["name"])
                     except Exception:
                         pass
+
                         
             # Routes
             import ipaddress
@@ -565,8 +576,17 @@ class API:
         # SERVICES API
         # GET /api/ncm/devices/<device>/services
         if method == "GET" and len(resource) == 3 and resource[0] == "devices" and resource[2] == "services":
+            sim = self.ntm.simulation
+            device = sim.hosts.get(resource[1]) or sim.routers.get(resource[1])
             services = self.ncm.get_services(resource[1])
-            return [self._serialize(s) for s in services]
+            res = []
+            for s in services:
+                data = self._serialize(s)
+                if s.name.upper() == "DNS_CLIENT" and device and getattr(device, "dns_server", None):
+                    if not (data.get("config") and data["config"].get("nameserver")):
+                        data.setdefault("config", {})["nameserver"] = device.dns_server
+                res.append(data)
+            return res
 
         # POST /api/ncm/devices/<device>/services
         if method == "POST" and len(resource) == 3 and resource[0] == "devices" and resource[2] == "services":
@@ -624,6 +644,9 @@ class API:
                 return {"error": f"Service {service_name} not found on {device.name}"}, 404
 
             svc.config = body
+
+            if svc.name.upper() == "DNS_CLIENT" and isinstance(body, dict) and "nameserver" in body:
+                device.dns_server = str(body["nameserver"]).strip()
 
             daemon = device.get_service_daemon(svc.name)
             if daemon and hasattr(daemon, "reload_config"):
@@ -845,7 +868,9 @@ class API:
 
         # Node configuration settings
         result["default_gateway"] = getattr(device, "default_gateway", "") or ""
+        result["dns_server"] = getattr(device, "dns_server", "") or ""
         result["ip_forwarding"] = getattr(device, "ip_forwarding", True)
+
         result["auto_routes"] = getattr(device, "auto_routes", "inherit")
         result["auto_mac_learning"] = getattr(device, "auto_mac_learning", "inherit")
         result["mac_aging_time"] = getattr(device, "mac_aging_time", 300)
@@ -915,9 +940,16 @@ class API:
             except Exception:
                 pass
 
-        # Gateway: pulled from the owning node's default_gateway
+        # Gateway: pulled from interface, owning node's default_gateway, or default route
         owner = getattr(interface, "owner", None)
-        gateway = getattr(owner, "default_gateway", None) if owner else None
+        gateway = getattr(interface, "gateway", None)
+        if not gateway and owner:
+            gateway = getattr(owner, "default_gateway", None)
+            if not gateway and hasattr(owner, "routes"):
+                for r in owner.routes:
+                    if str(r.get("destination", "")) == "0.0.0.0/0" and r.get("interface") == interface:
+                        gateway = r.get("next_hop")
+                        break
 
         result = {
             "name": name,

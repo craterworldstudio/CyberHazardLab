@@ -153,6 +153,8 @@ class DHCPClientDaemon(ServiceDaemon):
 
                 # Install default gateway if provided
                 if gateway:
+                    self.host.default_gateway = gateway
+                    intf.gateway = gateway
                     self.host.add_route("0.0.0.0/0", intf, next_hop=gateway)
 
                 if self.host.network:

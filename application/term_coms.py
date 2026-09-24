@@ -58,7 +58,7 @@ class TerminalCommandHandler:
                     if custom_motd:
                         return f"{custom_motd}\nLast login: {time.strftime('%a %b %d %H:%M:%S %Y')} from {local_ip}"
                     return (
-                        f"Welcome to Nox OS on {remote_name}!\n"
+                        f"Welcome to AxiomOS on {remote_name}!\n"
                         f" * Documentation:  https://noxos.org\n"
                         f" * Management:     NCM v2.4\n"
                         f"Last login: {time.strftime('%a %b %d %H:%M:%S %Y')} from {local_ip}"
@@ -115,7 +115,7 @@ class TerminalCommandHandler:
             
         cmd = parts[0]
         if cmd in ("exit", "logout"):
-            return "logout\n[Process completed - Nox OS local shell cannot be exited]"
+            return "logout\n[Process completed - AxiomOS local shell cannot be exited]"
         
         if cmd == "help":
             return self._handle_help(parts)
@@ -157,11 +157,11 @@ class TerminalCommandHandler:
         elif cmd == "nslookup":
             return self._handle_nslookup(device, parts)
         else:
-            return f"Nox OS > Command '{cmd}' not recognized."
+            return f"AxiomOS > Command '{cmd}' not recognized."
             
     def _handle_help(self, parts):
         if len(parts) == 1:
-            output = "NOX OS TERMINAL COMMANDS:\n"
+            output = "AxiomOS TERMINAL COMMANDS:\n"
             output += "  help       - Show this help message (use 'help [command]' for more info)\n"
             output += "  ping       - Send ICMP ECHO_REQUEST packets\n"
             output += "  tracert    - Trace route to a remote host\n"
@@ -899,7 +899,7 @@ class TerminalCommandHandler:
                     if custom_motd:
                         return f"{custom_motd}\nLast login: {time.strftime('%a %b %d %H:%M:%S %Y')} from {local_ip}"
                     return (
-                        f"Welcome to Nox OS on {target_device.name}!\n"
+                        f"Welcome to AxiomOS on {target_device.name}!\n"
                         f" * Documentation:  https://noxos.org\n"
                         f" * Management:     NCM v2.4\n"
                         f"Last login: {time.strftime('%a %b %d %H:%M:%S %Y')} from {local_ip}"
@@ -1033,10 +1033,27 @@ class TerminalCommandHandler:
         if len(parts) >= 3:
             dns_ip = parts[2]
         else:
-            dns_ip = getattr(device, "dns_server", None)
+            if hasattr(device, "services"):
+                for s in device.services:
+                    if s.name.upper() == "DNS_CLIENT" and getattr(s, "config", None):
+                        ns = s.config.get("nameserver")
+                        if ns and str(ns).strip():
+                            dns_ip = str(ns).strip()
+                            device.dns_server = dns_ip
+                            break
+            if not dns_ip:
+                dns_ip = getattr(device, "dns_server", None)
+            if not dns_ip and hasattr(device, "network") and getattr(device.network, "dhcp", None):
+                dhcp = device.network.dhcp
+                if getattr(dhcp, "scopes", None):
+                    for sc in dhcp.scopes:
+                        if getattr(sc, "dns", None):
+                            dns_ip = sc.dns
+                            break
             
         if not dns_ip:
             return "Server:  UnKnown\nAddress:  UnKnown\n\n*** No DNS server configured for local system."
+
             
         output = f"Server:  UnKnown\nAddress:  {dns_ip}\n\n"
         

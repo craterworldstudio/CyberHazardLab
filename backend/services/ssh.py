@@ -432,7 +432,7 @@ class SSHClientDaemon(ServiceDaemon):
                 "output": (
                     f"Connected to {remote_ip} ({server_banner.strip()}).\n"
                     f"{username}@{remote_ip}'s password: (authenticated)\n"
-                    f"Welcome to Nox OS on {dest_host.name}!\n"
+                    f"Welcome to AxiomOS on {dest_host.name}!\n"
                     f"Use 'ssh {username}@{remote_ip} <command>' to execute remote commands."
                 ),
                 "user": username,

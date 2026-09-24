@@ -1166,3 +1166,12 @@ body {
     }
 }
 
+
+/* ============================================
+   NCM TERMINAL — allow text to be selected/copied
+   ============================================ */
+.ncm-terminal-output {
+    -webkit-user-select: text;
+    user-select: text;
+    cursor: text;
+}

@@ -2,7 +2,8 @@ from .base import ServiceDaemon
 from backend.network.packet import UDPPacket, Packet
 from backend.network.dhcp_packet import (
     DHCPMessage, DHCPDISCOVER, DHCPOFFER, DHCPREQUEST, DHCPACK, DHCPNAK,
-    OPT_MESSAGE_TYPE, OPT_SUBNET_MASK, OPT_ROUTER, OPT_LEASE_TIME, OPT_SERVER_ID, OPT_RELAY_AGENT, OPT_REQUESTED_IP
+    OPT_MESSAGE_TYPE, OPT_SUBNET_MASK, OPT_ROUTER, OPT_LEASE_TIME, OPT_SERVER_ID, OPT_RELAY_AGENT, OPT_REQUESTED_IP,
+    OPT_DNS_SERVER
 )
 from backend.core.event import Event
 
@@ -27,18 +28,27 @@ class DHCPServerDaemon(ServiceDaemon):
         if isinstance(payload, DHCPMessage):
             msg = payload
 
-            # Determine subnet from giaddr or Option 82 or incoming interface
+            # Determine subnet from giaddr, Option 82, requested/client IP, or incoming interface
             relay_ip = msg.giaddr if (msg.giaddr and msg.giaddr != "0.0.0.0") else msg.get_option(OPT_RELAY_AGENT)
+            req_ip_hint = msg.get_option(OPT_REQUESTED_IP) or (msg.ciaddr if (msg.ciaddr and msg.ciaddr != "0.0.0.0") else None)
             if relay_ip:
                 lookup_target = relay_ip
+            elif req_ip_hint:
+                lookup_target = req_ip_hint
             else:
                 lookup_target = self.host.interfaces[0].subnet if self.host.interfaces else "10.0.0.0/24"
 
             scope = dhcp_mgr.get_scope(lookup_target)
+            if not scope and req_ip_hint and self.host.interfaces:
+                # Fallback to server interface subnet if scope by IP wasn't found
+                lookup_target = self.host.interfaces[0].subnet
+                scope = dhcp_mgr.get_scope(lookup_target)
+
             if not scope:
                 scope = dhcp_mgr.auto_provision_scope(lookup_target, default_gateway=relay_ip or server_ip)
             if not scope:
                 return None
+
 
             # Apply any custom scope config defined on DHCP service
             dhcp_svc = next((s for s in getattr(self.host, "services", []) if s.name.upper() == "DHCP"), None)
@@ -109,8 +119,11 @@ class DHCPServerDaemon(ServiceDaemon):
                 reply.set_option(OPT_ROUTER, scope.gateway)
                 reply.set_option(OPT_LEASE_TIME, scope.lease_time)
                 reply.set_option(OPT_SERVER_ID, server_ip)
+                if getattr(scope, 'dns_server', None):
+                    reply.set_option(OPT_DNS_SERVER, scope.dns_server)
                 if msg.get_option(OPT_RELAY_AGENT):
                     reply.set_option(OPT_RELAY_AGENT, msg.get_option(OPT_RELAY_AGENT))
+
 
                 dest_ip = relay_ip if relay_ip else "255.255.255.255"
                 dest_port = 67 if relay_ip else 68
@@ -168,8 +181,11 @@ class DHCPServerDaemon(ServiceDaemon):
                 reply.set_option(OPT_ROUTER, scope.gateway)
                 reply.set_option(OPT_LEASE_TIME, scope.lease_time)
                 reply.set_option(OPT_SERVER_ID, server_ip)
+                if getattr(scope, 'dns_server', None):
+                    reply.set_option(OPT_DNS_SERVER, scope.dns_server)
                 if msg.get_option(OPT_RELAY_AGENT):
                     reply.set_option(OPT_RELAY_AGENT, msg.get_option(OPT_RELAY_AGENT))
+
 
                 udp = UDPPacket(source_port=67, destination_port=dest_port, payload=reply)
                 resp_pkt = Packet(

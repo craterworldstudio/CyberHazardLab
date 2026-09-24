@@ -113,6 +113,34 @@ class NetworkConfigurationManager:
 
         return interface
 
+    def get_subnet(self, ip: str) -> str:
+        """Return the network address (CIDR) for a given IP based on known interface
+        subnets. Defaults to /24 if no interface match found. Used by term_coms
+        to auto-detect the egress interface for 'ip route add via' commands."""
+        import ipaddress
+        try:
+            ip_obj = ipaddress.IPv4Address(str(ip).split('/')[0])
+        except Exception:
+            return None
+        # Walk all devices to find a matching interface subnet
+        for dev_dict in [self.simulation.hosts, self.simulation.routers, self.simulation.switches]:
+            for dev in dev_dict.values():
+                for intf in getattr(dev, 'interfaces', []):
+                    subnet_str = getattr(intf, 'subnet', None)
+                    if not subnet_str:
+                        continue
+                    try:
+                        net = ipaddress.IPv4Network(subnet_str, strict=False)
+                        if ip_obj in net:
+                            return str(net)
+                    except Exception:
+                        continue
+        # Fallback: synthesise a /24 network
+        try:
+            return str(ipaddress.IPv4Network(f"{ip}/24", strict=False))
+        except Exception:
+            return None
+
 
     # ========================================================
     # INTERFACE MANAGEMENT
