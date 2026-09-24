@@ -35,8 +35,8 @@ Designed specifically for students and aspiring network/security professionals, 
 | **Phase 1** | Foundation               | `████████████████████` 4/4   | ✅ Done |
 | **Phase 2** | Local Networking         | `████████████████████` 9/9   | ✅ Done |
 | **Phase 3** | Transport Layer          | `████████████████████` 8/8   | ✅ Done |
-| **Phase 4** | Network Infrastructure   | `████████████░░░░░░░░` 7/12  | 🟡 In Progress |
-| **Phase 5** | Application Layer        | `███████████░░░░░░░░░` 3/6   | 🟡 In Progress |
+| **Phase 4** | Network Infrastructure   | `█████████████░░░░░░░` 8/12  | 🟡 In Progress |
+| **Phase 5** | Application Layer        | `█████████████████░░░` 4/5   | 🟡 In Progress |
 | **Phase 6** | Interactive Lab Frontend | `███████████████████░` 14/15 | 🟡 In Progress |
 | **Phase 7** | SOC Integration          | `███░░░░░░░░░░░░░░░░░` 1/6   | 🟡 In Progress |
 | **Phase 8** | Penetrator Dashboard     | `░░░░░░░░░░░░░░░░░░░░` 0/5   | ❌ Not Started |
@@ -81,7 +81,7 @@ Designed specifically for students and aspiring network/security professionals, 
 - [x] Ping Devices
 - [x] Traceroute
 - [x] Dynamic network topology management
-- [ ] DNS resolution architecture
+- [x] DNS resolution architecture
 - [ ] State-based Firewall & ACLs
 - [ ] IDS/IPS Node Simulation
 - [ ] NAT (Network Address Translation)
@@ -89,10 +89,9 @@ Designed specifically for students and aspiring network/security professionals, 
 
 #### PHASE 5 — Application Layer 🟡
 - [ ] HTTP/HTTPS protocol support
-- [ ] Core DNS services
+- [x] Core DNS services
 - [x] Secure Shell (SSH) emulation
 - [x] Echo Service Integration
-- [ ] Custom Service Script Execution Engine
 - [x] Fully integrated DHCP services
 
 #### PHASE 6 — Interactive Lab Frontend 🟡
