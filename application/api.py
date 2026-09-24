@@ -560,6 +560,44 @@ class API:
                 for interface in interfaces
             ]
 
+        # GET /api/ncm/devices/<device>/interfaces/<interface>/pcap
+        if (
+            method == "GET"
+            and len(resource) == 5
+            and resource[0] == "devices"
+            and resource[2] == "interfaces"
+            and resource[4] == "pcap"
+        ):
+            dev_name = resource[1]
+            intf_name = resource[3]
+            sim = self.ntm.simulation
+            device = sim.hosts.get(dev_name) or sim.routers.get(dev_name) or getattr(sim, "switches", {}).get(dev_name)
+            if not device:
+                raise ValueError(f"Device not found: {dev_name}")
+            intf = next((i for i in getattr(device, "interfaces", []) if i.name == intf_name), None)
+            if not intf:
+                raise ValueError(f"Interface '{intf_name}' not found on device '{dev_name}'")
+            pcap_data = intf.get_pcap_bytes()
+            safe_fname = f"{dev_name}_{intf_name}.pcap".replace(" ", "_").replace("/", "_")
+            return (pcap_data, "application/vnd.tcpdump.pcap", safe_fname)
+
+        # POST /api/ncm/devices/<device>/interfaces/<interface>/pcap/clear or DELETE .../pcap
+        if (
+            (method == "POST" and len(resource) == 6 and resource[0] == "devices" and resource[2] == "interfaces" and resource[4] == "pcap" and resource[5] == "clear")
+            or (method == "DELETE" and len(resource) == 5 and resource[0] == "devices" and resource[2] == "interfaces" and resource[4] == "pcap")
+        ):
+            dev_name = resource[1]
+            intf_name = resource[3]
+            sim = self.ntm.simulation
+            device = sim.hosts.get(dev_name) or sim.routers.get(dev_name) or getattr(sim, "switches", {}).get(dev_name)
+            if not device:
+                raise ValueError(f"Device not found: {dev_name}")
+            intf = next((i for i in getattr(device, "interfaces", []) if i.name == intf_name), None)
+            if not intf:
+                raise ValueError(f"Interface '{intf_name}' not found on device '{dev_name}'")
+            intf.clear_pcap()
+            return {"status": "success", "message": f"Cleared PCAP buffer on {dev_name} {intf_name}"}
+
         # GET /api/ncm/devices/HOST-01/health
         if (
             method == "GET"

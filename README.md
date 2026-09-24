@@ -37,7 +37,7 @@ Designed specifically for students and aspiring network/security professionals, 
 | **Phase 3** | Transport Layer          | `████████████████████` 8/8   | ✅ Done |
 | **Phase 4** | Network Infrastructure   | `█████████████░░░░░░░` 8/12  | 🟡 In Progress |
 | **Phase 5** | Application Layer        | `█████████████████░░░` 4/5   | 🟡 In Progress |
-| **Phase 6** | Interactive Lab Frontend | `███████████████████░` 14/15 | 🟡 In Progress |
+| **Phase 6** | Interactive Lab Frontend | `████████████████████` 15/15 | ✅ Done |
 | **Phase 7** | SOC Integration          | `███░░░░░░░░░░░░░░░░░` 1/6   | 🟡 In Progress |
 | **Phase 8** | Penetrator Dashboard     | `░░░░░░░░░░░░░░░░░░░░` 0/5   | ❌ Not Started |
 
@@ -109,7 +109,7 @@ Designed specifically for students and aspiring network/security professionals, 
 - [x] Payload Manager (Manual ICMP/TCP/UDP packet forging)
 - [x] Dynamic MAC Learning & Routing Table UI visualization
 - [x] PingSweep and TraceRoute Integration via Validate
-- [ ] PCAP Export (Download traffic captures for Wireshark)
+- [x] PCAP Export (Download traffic captures for Wireshark)
 
 
 #### PHASE 7 — Application Integration 🟡

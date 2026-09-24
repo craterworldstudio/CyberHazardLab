@@ -1086,7 +1086,10 @@ function renderNCMInterfaces(win, deviceName, interfaces) {
                                     <div style="color: #5c6b73;">LINK</div><div style="color: #d5ebf2;">${intf.connected_to || "—"}</div>
                                 </div>
                             </div>
-                            <button style="background: rgba(255,51,51,0.05); border: 1px solid rgba(255,51,51,0.2); color: #ff3333; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(255,51,51,0.2)'; this.style.borderColor='#ff3333';" onmouseout="this.style.background='rgba(255,51,51,0.05)'; this.style.borderColor='rgba(255,51,51,0.2)';" onclick="deleteNCMInterface('${safeDev}', '${intf.name}', this.closest('.ncm-window'))">[ DEL ]</button>
+                            <div style="display: flex; gap: 6px;">
+                                <button style="background: rgba(0,229,255,0.05); border: 1px solid rgba(0,229,255,0.2); color: #00e5ff; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(0,229,255,0.2)'; this.style.borderColor='#00e5ff';" onmouseout="this.style.background='rgba(0,229,255,0.05)'; this.style.borderColor='rgba(0,229,255,0.2)';" title="Download PCAP Capture for Wireshark" onclick="downloadPCAP('${safeDev}', '${intf.name}')">[ PCAP ]</button>
+                                <button style="background: rgba(255,51,51,0.05); border: 1px solid rgba(255,51,51,0.2); color: #ff3333; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(255,51,51,0.2)'; this.style.borderColor='#ff3333';" onmouseout="this.style.background='rgba(255,51,51,0.05)'; this.style.borderColor='rgba(255,51,51,0.2)';" onclick="deleteNCMInterface('${safeDev}', '${intf.name}', this.closest('.ncm-window'))">[ DEL ]</button>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -1115,6 +1118,7 @@ function renderNCMInterfaces(win, deviceName, interfaces) {
                                 </div>
                             </div>
                             <div style="display: flex; gap: 6px; margin-left: 8px;">
+                                <button style="background: rgba(0,229,255,0.05); border: 1px solid rgba(0,229,255,0.2); color: #00e5ff; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='rgba(0,229,255,0.2)'; this.style.borderColor='#00e5ff';" onmouseout="this.style.background='rgba(0,229,255,0.05)'; this.style.borderColor='rgba(0,229,255,0.2)';" title="Download PCAP Capture for Wireshark" onclick="downloadPCAP('${safeDev}', '${intf.name}')">[ PCAP ]</button>
                                 <button style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #8a9ba8; font-family: monospace; padding: 4px 8px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#fff'; this.style.borderColor='rgba(255,255,255,0.3)';" onmouseout="this.style.color='#8a9ba8'; this.style.borderColor='rgba(255,255,255,0.1)';" title="Edit" onclick="
                                     const f=document.getElementById('add-intf-form-${safeDev}');
                                     f.style.display='block';
@@ -1468,6 +1472,17 @@ async function deleteNCMInterface(deviceName, interfaceName, win) {
         console.error("[CHL:NCM] Failed to delete interface", error);
     }
 }
+
+function downloadPCAP(deviceName, interfaceName) {
+    const url = `/api/ncm/devices/${encodeURIComponent(deviceName)}/interfaces/${encodeURIComponent(interfaceName)}/pcap`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${deviceName}_${interfaceName}.pcap`.replace(/\s+/g, '_');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+window.downloadPCAP = downloadPCAP;
 
 async function refreshNCMHealth(deviceName, window) {
     try {

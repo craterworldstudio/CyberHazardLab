@@ -14,12 +14,29 @@ class NetworkInterface:
     owner: Any | None = None
     status: str = "up"
     rx_buffer: list = field(default_factory=list)
+    pcap_buffer: list = field(default_factory=list)
 
     @property
     def arp(self):
         if self.owner and hasattr(self.owner, "arp"):
             return self.owner.arp
         return None
+
+    def _record_pcap(self, frame):
+        import time
+        if not hasattr(self, "pcap_buffer") or self.pcap_buffer is None:
+            self.pcap_buffer = []
+        if len(self.pcap_buffer) >= 2000:
+            self.pcap_buffer.pop(0)
+        self.pcap_buffer.append((time.time(), frame))
+
+    def get_pcap_bytes(self) -> bytes:
+        from ..network.pcap import PCAPWriter
+        buffer = getattr(self, "pcap_buffer", []) or []
+        return PCAPWriter.build_pcap(buffer)
+
+    def clear_pcap(self):
+        self.pcap_buffer = []
 
     def connect_link(self, link):
         if self.link is not None and self.link != link:
@@ -32,6 +49,7 @@ class NetworkInterface:
     def send(self, frame: EthernetFrame):
         if getattr(self, "status", "up") != "up":
             return None
+        self._record_pcap(frame)
         if self.link is None:
             raise ValueError(f"{self.name} is not connected to a link")
         return self.link.transmit(frame, self)
@@ -39,6 +57,7 @@ class NetworkInterface:
     def receive(self, frame: EthernetFrame):
         if getattr(self, "status", "up") != "up":
             return None
+        self._record_pcap(frame)
         self.rx_buffer.append(frame)
         return None
 

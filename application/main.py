@@ -54,6 +54,15 @@ class CustomHandler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/"):
             try:
                 result = api.handle( "GET", self.path )
+                if isinstance(result, tuple) and len(result) == 3 and isinstance(result[0], bytes):
+                    content, ctype, fname = result
+                    self.send_response(200)
+                    self.send_header("Content-Type", ctype)
+                    self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                    self.send_header("Content-Length", str(len(content)))
+                    self.end_headers()
+                    self.wfile.write(content)
+                    return
                 self.send_json(result)
 
             except ValueError as error:
