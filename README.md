@@ -32,15 +32,15 @@ Designed specifically for students and aspiring network/security professionals, 
 
 | Phase | Description | Progress | Status |
 | :--- | :---   | :--- | :---: |
-| **Phase 1**   | Foundation                        | `████████████████████` 4/4   | ✅ Done |
-| **Phase 2**   | Local Networking                  | `████████████████████` 9/9   | ✅ Done |
-| **Phase 3**   | Transport Layer                   | `████████████████████` 8/8   | ✅ Done |
-| **Phase 4**   | Network Infrastructure            | `████████████████████` 8/8   | ✅ Done |
-| **Phase 4.5** | Network Advanced Infrastructure   | `█████░░░░░░░░░░░░░░░` 1/4   | 🟡 In Progress |
-| **Phase 5**   | Application Layer                 | `████████████████████` 5/5   | ✅ Done |
-| **Phase 6**   | Interactive Lab Frontend          | `████████████████████` 16/16 | ✅ Done |
-| **Phase 7**   | SOC Integration                   | `███░░░░░░░░░░░░░░░░░` 1/6   | 🟡 In Progress |
-| **Phase 8**   | Penetrator Dashboard              | `░░░░░░░░░░░░░░░░░░░░` 0/5   | ❌ Not Started |
+| **Phase 1**   | Foundation                        | `███████████████████` 4/4   | ✅ Done |
+| **Phase 2**   | Local Networking                  | `███████████████████` 9/9   | ✅ Done |
+| **Phase 3**   | Transport Layer                   | `███████████████████` 8/8   | ✅ Done |
+| **Phase 4**   | Network Infrastructure            | `███████████████████` 8/8   | ✅ Done |
+| **Phase 4.5** | Network Advanced Infrastructure   | `█████░░░░░░░░░░░░░░` 1/4   | 🟡 In Progress |
+| **Phase 5**   | Application Layer                 | `███████████████████` 5/5   | ✅ Done |
+| **Phase 6**   | Interactive Lab Frontend          | `███████████████████` 16/16 | ✅ Done |
+| **Phase 7**   | SOC Integration                   | `███░░░░░░░░░░░░░░░░` 1/6   | 🟡 In Progress |
+| **Phase 8**   | Penetrator Dashboard              | `░░░░░░░░░░░░░░░░░░░` 0/5   | ❌ Not Started |
 
 *I probably won't implement all of 4.5 soon*
 *Also a good chance that I won't be implementing the Penetrator Dashboard because this project too way too long.*
@@ -84,7 +84,7 @@ Designed specifically for students and aspiring network/security professionals, 
 - [x] Traceroute
 - [x] Dynamic network topology management
 - [x] DNS resolution architecture
-- Advanced Infrastructure:
+Advanced Infrastructure:
 - - [x] NAT (Network Address Translation)
 - - [ ] L1 Hub Emulation
 - - [ ] State-based Firewall & ACLs
