@@ -140,7 +140,10 @@ class TerminalCommandHandler:
             return self._handle_legacy_route(device, parts)
         elif cmd == "ping":
             return self._handle_ping(device, parts)
+        elif cmd == "curl":
+            return self._handle_curl(device, parts)
         elif cmd in ("tracert", "traceroute"):
+
             return self._handle_tracert(device, parts)
         elif cmd in ("netstat", "ss"):
             return self._handle_netstat(device, parts)
@@ -248,6 +251,96 @@ class TerminalCommandHandler:
                 return f"Unknown ip object '{sub_topic}'"
         else:
             return f"No manual entry for {topic}"
+
+    def _handle_curl(self, device, parts):
+        if len(parts) < 2:
+            return "Usage: curl [http://]hostname[:port][/path]"
+
+        url = parts[1]
+        
+        # Remove http:// or https:// if present
+        if url.startswith("http://"):
+            url = url[7:]
+        elif url.startswith("https://"):
+            url = url[8:]
+            
+        path = "/"
+        if "/" in url:
+            host_port, path = url.split("/", 1)
+            path = "/" + path
+        else:
+            host_port = url
+
+        port = 80
+        if ":" in host_port:
+            host_str, port_str = host_port.split(":", 1)
+            try:
+                port = int(port_str)
+            except:
+                return "curl: Invalid port"
+        else:
+            host_str = host_port
+
+        network = getattr(device, "network", None)
+        if not network:
+            return "curl: Network unreachable"
+
+        import time
+        from application.dns_resolver import resolve_hostname
+        
+        target_ip = host_str
+        try:
+            import ipaddress
+            ipaddress.ip_address(target_ip)
+        except:
+            target_ip = resolve_hostname(device, host_str, timeout=0.5)
+
+        if not target_ip:
+            return f"curl: (6) Could not resolve host: {host_str}"
+
+        # Resolve route
+        route, out_intf = network.get_route(device, target_ip)
+        if not route or not out_intf:
+            return f"curl: (7) Failed to connect to {target_ip} port {port}: No route to host"
+
+        dest_node = network.get_host_by_ip(target_ip)
+        if not dest_node:
+            return f"curl: (7) Failed to connect to {target_ip} port {port}: Connection timed out"
+
+        # Check for service
+        http_svc = None
+        for svc in dest_node.services:
+            if svc.protocol.upper() == "TCP" and svc.port == port and svc.status.lower() == "running":
+                http_svc = svc
+                break
+
+        if not http_svc:
+            return f"curl: (7) Failed to connect to {target_ip} port {port}: Connection refused"
+
+        daemon = dest_node.get_service_daemon(http_svc.name)
+        if not daemon:
+            return f"curl: (7) Failed to connect to {target_ip} port {port}: Service unavailable"
+
+        request = f"GET {path} HTTP/1.1\r\nHost: {host_str}\r\nUser-Agent: curl/7.68.0\r\nAccept: */*\r\n\r\n"
+        
+        mock_packet = type("MockPacket", (), {
+            "source_ip": out_intf.ip,
+            "destination_ip": target_ip,
+            "payload": type("MockTransport", (), {"destination_port": port, "source_port": 54322})()
+        })()
+
+        from backend.network.tcp import TCPConnection, TCPState
+        conn = TCPConnection(local_ip=target_ip, local_port=port, remote_ip=out_intf.ip, remote_port=54322, network=network)
+        conn.state = TCPState.ESTABLISHED
+        
+        start_time = time.time()
+        reply = daemon.handle_tcp(request, conn, mock_packet)
+        elapsed = time.time() - start_time
+        
+        if not reply:
+            return "curl: (52) Empty reply from server"
+            
+        return str(reply)
 
     def _handle_ip(self, device, parts):
         if len(parts) < 2:
@@ -1084,7 +1177,7 @@ class TerminalCommandHandler:
         device.send_ip_packet(pkt, out_interface=intf)
         
         start_wait = time.time()
-        while time.time() - start_wait < 0.3:
+        while time.time() - start_wait < 1.0:
             if hasattr(device, "last_dns_result") and device.last_dns_result is not None:
                 break
             time.sleep(0.01)

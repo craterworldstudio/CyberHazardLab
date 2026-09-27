@@ -87,9 +87,11 @@ function createNCMWindow(deviceName, deviceType) {
                 : (deviceType === 'ROUTER'
                     ? `<button class="ncm-tab" data-tab="routes">ROUTING TABLE</button>
                        <button class="ncm-tab" data-tab="services">SERVICES</button>
-                       <button class="ncm-tab" data-tab="terminal">TERMINAL</button>`
+                       <button class="ncm-tab" data-tab="terminal">TERMINAL</button>
+                       <button class="ncm-tab" data-tab="browser">BROWSER</button>`
                     : `<button class="ncm-tab" data-tab="services">SERVICES</button>
-                       <button class="ncm-tab" data-tab="terminal">TERMINAL</button>`)
+                       <button class="ncm-tab" data-tab="terminal">TERMINAL</button>
+                       <button class="ncm-tab" data-tab="browser">BROWSER</button>`)
             }
             <button class="ncm-tab" data-tab="interfaces">${deviceType === 'SWITCH' ? 'SWITCH PORTS' : 'INTERFACES'}</button>
         </div>
@@ -133,6 +135,17 @@ function createNCMWindow(deviceName, deviceType) {
                     </div>
                 </div>
             </div>
+            <div class="ncm-tab-content" data-content="browser">
+                <div style="display: flex; flex-direction: column; height: 100%;">
+                    <div style="display: flex; margin-bottom: 10px;">
+                        <input type="text" class="browser-url-input ncm-input" placeholder="http://hostname/path" style="flex: 1; padding: 5px; background: #06090e; color: #fff; border: 1px solid #00e5ff;">
+                        <button class="browser-go-btn ncm-btn" style="margin-left: 5px; padding: 5px 15px;">GO</button>
+                    </div>
+                    <div class="browser-frame-container" style="flex: 1; background: #fff; color: #000; padding: 10px; overflow-y: auto; border: 1px solid rgba(0, 229, 255, 0.15);">
+                        <div style="color: #666; text-align: center; margin-top: 50px; font-family: sans-serif;">Browser Engine Idle</div>
+                    </div>
+                </div>
+            </div>
             ` : `
             <div class="ncm-tab-content" data-content="services">
                 <div class="ncm-services-list"></div>
@@ -146,6 +159,17 @@ function createNCMWindow(deviceName, deviceType) {
                     <div style="display: flex; align-items: center; border: 1px solid rgba(0, 229, 255, 0.3); background: #06090e; padding: 8px;">
                         <span class="ncm-terminal-prompt" id="term-prompt-${deviceName}" style="color: #00e5ff; font-family: monospace; font-weight: bold; margin-right: 8px;">root@${deviceName.toLowerCase()}:~$</span>
                         <input type="text" class="ncm-terminal-input" placeholder="_" style="flex: 1; background: transparent; border: none; color: #d5ebf2; font-family: monospace; font-size: 12px; outline: none;" onkeydown="handleTerminalInput(event, '${safeDev}')">
+                    </div>
+                </div>
+            </div>
+            <div class="ncm-tab-content" data-content="browser">
+                <div style="display: flex; flex-direction: column; height: 100%;">
+                    <div style="display: flex; margin-bottom: 10px;">
+                        <input type="text" class="browser-url-input ncm-input" placeholder="http://hostname/path" style="flex: 1; padding: 5px; background: #06090e; color: #fff; border: 1px solid #00e5ff;">
+                        <button class="browser-go-btn ncm-btn" style="margin-left: 5px; padding: 5px 15px;">GO</button>
+                    </div>
+                    <div class="browser-frame-container" style="flex: 1; background: #fff; color: #000; padding: 10px; overflow-y: auto; border: 1px solid rgba(0, 229, 255, 0.15);">
+                        <div style="color: #666; text-align: center; margin-top: 50px; font-family: sans-serif;">Browser Engine Idle</div>
                     </div>
                 </div>
             </div>
@@ -170,6 +194,38 @@ function createNCMWindow(deviceName, deviceType) {
 
     setupNCMDragging(window, header);
     setupNCMTabs(window);
+
+    // Browser logic
+    const browserGo = window.querySelector(".browser-go-btn");
+    if (browserGo) {
+        browserGo.addEventListener("click", async () => {
+            const urlInput = window.querySelector(".browser-url-input");
+            const frame = window.querySelector(".browser-frame-container");
+            if (!urlInput || !frame) return;
+            
+            frame.innerHTML = '<div style="color: #666; text-align: center; margin-top: 50px; font-family: sans-serif;">Loading...</div>';
+            
+            try {
+                const result = await apiRequest("POST", `/api/ncm/devices/${encodeURIComponent(deviceName)}/terminal`, {
+                    command: `curl ${urlInput.value}`
+                });
+                
+                let output = result.output;
+                
+                if (output.includes("\r\n\r\n")) {
+                    output = output.split("\r\n\r\n").slice(1).join("\r\n\r\n");
+                }
+                
+                if (output.startsWith("curl: ")) {
+                    frame.innerHTML = `<div style="color: red; padding: 20px; font-family: monospace;">${output}</div>`;
+                } else {
+                    frame.innerHTML = output;
+                }
+            } catch(e) {
+                frame.innerHTML = `<div style="color: red; padding: 20px; font-family: monospace;">Error: ${e}</div>`;
+            }
+        });
+    }
 
     return window;
 }
@@ -490,7 +546,36 @@ function renderNCMSelectedServiceConfig(deviceName, win, serviceName) {
     let formHtml = "";
     const sName = svc.name.toUpperCase();
 
-    if (sName === "SSH" || sName === "SSH_SERVER") {
+    if (sName === "HTTP" || sName === "HTTP_SERVER") {
+        let eps = cfg.endpoints || {
+            "/health": '{"status": "ok", "version": "1.0"}',
+            "/ready": '{"status": "ready"}',
+            "/live": '{"status": "alive"}',
+            "/metrics": '{"requests": 100, "errors": 0}'
+        };
+        let epsString = "";
+        for (let path in eps) {
+            epsString += `[ENDPOINT=${path}]
+${eps[path]}
+
+`;
+        }
+        
+        formHtml = `
+            <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
+                <div>
+                    <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// LISTENING PORT</div>
+                    <input type="number" id="ncm-cfg-svc-port-${deviceName}" value="${svc.port || 80}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
+                </div>
+                <div>
+                    <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// VIRTUAL ENDPOINTS</div>
+                    <textarea id="ncm-cfg-svc-endpoints-${deviceName}" class="ncm-cfg-svc-endpoints" style="width: 100%; height: 250px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">${epsString.trim()}</textarea>
+                    <div style="font-size: 10px; color: #5c6b73; margin-top: 5px;">Syntax: Use [ENDPOINT=/path] followed by raw HTML. No JSON escaping required!</div>
+                    <div style="font-size: 10px; color: #5c6b73; margin-top: 5px;">Remember to restart the simulation to update your endpoints!</div>
+                </div>
+            </div>
+        `;
+    } else if (sName === "SSH" || sName === "SSH_SERVER") {
         formHtml = `
             <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
                 <div>
@@ -860,7 +945,27 @@ async function saveNCMServiceConfig(deviceName, serviceName, win) {
 
     const btn = (win ? win.querySelector('button[id^="btn-save-svc-cfg-"]') : null) || document.getElementById(`btn-save-svc-cfg-${deviceName}`);
 
-    if (sName === "SSH" || sName === "SSH_SERVER") {
+    if (sName === "HTTP" || sName === "HTTP_SERVER") {
+        const epsInput = getField("ncm-cfg-svc-endpoints", "ncm-cfg-svc-endpoints");
+        if (epsInput) {
+            try {
+                const text = epsInput.value || "";
+                const endpoints = {};
+                const parts = text.split(/\[ENDPOINT=(.*?)\]/);
+                // parts[0] is garbage before first tag
+                for (let i = 1; i < parts.length; i += 2) {
+                    const path = parts[i];
+                    const body = parts[i+1].trim();
+                    endpoints[path] = body;
+                }
+                config.endpoints = endpoints;
+            } catch (e) {
+                if (btn) btn.innerText = "PARSING ERROR";
+                setTimeout(() => { if (btn) btn.innerText = "SAVE CONFIGURATION"; }, 2000);
+                return;
+            }
+        }
+    } else if (sName === "SSH" || sName === "SSH_SERVER") {
         const motd = getField("ncm-cfg-svc-motd", "ncm-cfg-svc-motd");
         const permitRoot = getField("ncm-cfg-svc-permit-root", "ncm-cfg-svc-permit-root");
         const users = getField("ncm-cfg-svc-users", "ncm-cfg-svc-users");

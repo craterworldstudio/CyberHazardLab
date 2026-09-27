@@ -2,7 +2,7 @@ import ipaddress
 import time
 from backend.network.packet import UDPPacket, Packet
 
-def resolve_hostname(device, hostname, timeout=0.3):
+def resolve_hostname(device, hostname, timeout=0.5):
     try:
         ipaddress.ip_address(hostname)
         return hostname # already an IP

@@ -185,7 +185,8 @@ class StateManager:
                 "name": router.name,
                 "type": "router",
                 "ip_forwarding": getattr(router, "ip_forwarding", True),
-                "auto_routes": getattr(router, "auto_routes", "inherit")
+                "auto_routes": getattr(router, "auto_routes", "inherit"),
+                "nat_enabled": getattr(router, "nat_enabled", False)
             }
             if getattr(router, "default_gateway", None):
                 d["default_gateway"] = router.default_gateway

@@ -51,8 +51,8 @@ class ARP:
             destination_mac="FF:FF:FF:FF:FF:FF",
             payload=req
         )
-        if self.network:
-            self.network.add_event(Event(
+        if self.node and self.node.network:
+            self.node.network.add_event(Event(
                 type="ARP_REQUEST",
                 severity="INFO",
                 source=interface.ip or "0.0.0.0",
@@ -94,8 +94,8 @@ class ARP:
 
         elif packet.operation == "REPLY":
             self.cache[packet.sender_ip] = packet.sender_mac
-            if self.network:
-                self.network.add_event(Event(
+            if self.node and self.node.network:
+                self.node.network.add_event(Event(
                     type="ARP_REPLY",
                     severity="INFO",
                     source=packet.sender_ip,

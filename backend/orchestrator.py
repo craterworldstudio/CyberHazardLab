@@ -447,10 +447,11 @@ class Simulation:
             payload=icmp,
             ttl=ttl
         )
-        source.send_ip_packet(packet, out_interface=intf)
+        res = source.send_ip_packet(packet, out_interface=intf)
+        print("SEND_IP_PACKET RETURNED:", res)
         # Wait up to 200ms for tick-based delivery and ICMP reply
         start_wait = time.time()
-        while time.time() - start_wait < 0.2:
+        while time.time() - start_wait < 0.5:
             if source.last_icmp_result is not None:
                 break
             time.sleep(0.01)

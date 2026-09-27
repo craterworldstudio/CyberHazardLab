@@ -197,6 +197,41 @@ class Node:
             next_hop = route["next_hop"] or packet.destination_ip
 
         # 4. ARP Resolution
+
+        # EGRESS NAT (single, de-duplicated)
+        if getattr(self, "nat_enabled", False):
+            try:
+                import ipaddress
+                src_obj = ipaddress.IPv4Address(packet.source_ip)
+                dst_obj = ipaddress.IPv4Address(packet.destination_ip)
+                if src_obj.is_private and not dst_obj.is_private:
+                    proto = packet.protocol.upper()
+                    src_port = None
+                    if proto in ("TCP", "UDP") and hasattr(packet.payload, "source_port"):
+                        src_port = packet.payload.source_port
+                    elif proto == "ICMP":
+                        src_port = "ICMP"
+                    if src_port is not None:
+                        if not hasattr(self, "nat_table"):
+                            self.nat_table = {}
+                        # Include dst IP in key so multiple internal hosts don't collide
+                        flow_key = (packet.source_ip, src_port, packet.destination_ip)
+                        if flow_key in self.nat_table:
+                            ext_port = self.nat_table[flow_key]
+                        else:
+                            if proto == "ICMP":
+                                ext_port = f"ICMP_{packet.source_ip}_{packet.destination_ip}"
+                            else:
+                                ext_port = getattr(self, "_next_nat_port", 10000)
+                                self._next_nat_port = ext_port + 1
+                            self.nat_table[flow_key] = ext_port
+                            self.nat_table[ext_port] = flow_key
+                        packet.source_ip = target_intf.ip
+                        if proto in ("TCP", "UDP"):
+                            packet.payload.source_port = ext_port
+            except Exception:
+                pass
+
         dest_mac = self.arp.resolve(next_hop)
         if not dest_mac:
             self.arp.enqueue(next_hop, packet, target_intf)
@@ -228,6 +263,7 @@ class Node:
         return None
 
     def receive_packet(self, interface: NetworkInterface, packet: Packet):
+        print(f'{self.name} RECEIVED packet {packet.source_ip}->{packet.destination_ip} Proto:{packet.protocol} TTL:{packet.ttl}')
         packet.in_interface = interface
         # Check if local destination
         my_ips = [i.ip for i in self.interfaces if i.ip]
@@ -242,6 +278,31 @@ class Node:
                     is_local = True
             except Exception:
                 pass
+
+
+        # INGRESS NAT (single, de-duplicated, correct ICMP lookup by src+dst)
+        if getattr(self, "nat_enabled", False) and packet.destination_ip in my_ips:
+            proto = packet.protocol.upper()
+            ext_port = None
+            if proto in ("TCP", "UDP") and hasattr(packet.payload, "destination_port"):
+                ext_port = packet.payload.destination_port
+            elif proto == "ICMP":
+                # Look up by ICMP_{internal_ip}_{src_ip_of_reply} where src_ip_of_reply is
+                # the original destination of the outgoing packet
+                icmp_key = f"ICMP_{{packet.source_ip}}_{{packet.destination_ip}}"
+                # Reverse: outgoing was internal->external, so key is ICMP_{internal}_{external}
+                # Reply comes back as external->router_wan, so we need ICMP_{any}_{packet.source_ip}
+                for k in list(getattr(self, "nat_table", {}).keys()):
+                    if isinstance(k, str) and k.startswith("ICMP_") and k.endswith("_" + packet.source_ip):
+                        ext_port = k
+                        break
+            if ext_port is not None and ext_port in getattr(self, "nat_table", {}):
+                flow_key = self.nat_table[ext_port]
+                internal_ip = flow_key[0]
+                packet.destination_ip = internal_ip
+                if proto in ("TCP", "UDP"):
+                    packet.payload.destination_port = flow_key[1]
+                is_local = (packet.destination_ip in my_ips or packet.destination_ip in ("255.255.255.255", "127.0.0.1"))
 
         if is_local:
             # Deliver locally

@@ -98,9 +98,52 @@ class DNSServerDaemon(ServiceDaemon):
             # Re-schedule for the next interval
             self._schedule_health_check()
 
+    def _resolve(self, query: str, network, depth=0) -> str:
+        if depth > 10:
+            return None # Prevent infinite loop
+        
+        cfg = self._get_config()
+        if 'records' in cfg:
+            records = cfg['records']
+            if isinstance(records, list):
+                for rec in records:
+                    if isinstance(rec, dict) and rec.get('name', '').strip().upper() == query:
+                        rtype = rec.get('type', 'A').upper()
+                        target = rec.get('target', '').strip()
+                        if rtype == 'CNAME':
+                            return self._resolve(target.upper(), network, depth + 1)
+                        return target
+            elif isinstance(records, str):
+                for line in records.split('\n'):
+                    line = line.strip()
+                    if line and '=' in line:
+                        host, ip = line.split('=', 1)
+                        if host.strip().upper() == query:
+                            return ip.strip()
+            elif isinstance(records, dict):
+                for host, ip in records.items():
+                    if host.upper() == query:
+                        return ip
+
+        # Fallback to device names
+        all_devices = list(network.orchestrator.hosts.values()) + list(network.orchestrator.routers.values())
+        for dev in all_devices:
+            if dev.name.upper() == query:
+                ip = getattr(dev, "get_ip", lambda: None)()
+                if not ip and dev.interfaces:
+                    ip = dev.interfaces[0].ip
+                if ip:
+                    return ip
+
+        if query == "DNS.GOOGLE":
+            for intf in getattr(self.host, "interfaces", []):
+                if getattr(intf, "ip", "") == "8.8.8.8":
+                    return "8.8.8.8"
+
+        return None
+
     def handle_udp(self, payload, connection, packet):
         payload_str = str(payload).strip()
-
         if not payload_str:
             return None
 
@@ -110,45 +153,12 @@ class DNSServerDaemon(ServiceDaemon):
             if target_name.startswith("GET ") or target_name.startswith("POST "):
                 return "DNS_ERROR: Invalid query."
 
-            cfg = self._get_config()
-            if 'records' in cfg:
-                records = cfg['records']
-
-                # New format: List of dicts [{"name": "...", "type": "A", "target": "..."}]
-                if isinstance(records, list):
-                    for rec in records:
-                        if isinstance(rec, dict) and rec.get('name', '').strip().upper() == target_name:
-                            return f"DNS_RESPONSE: {payload_str} -> {rec.get('target', '').strip()}"
-
-                # Legacy formats
-                elif isinstance(records, str):
-                    for line in records.split('\n'):
-                        line = line.strip()
-                        if not line or '=' not in line: continue
-                        host, ip = line.split('=', 1)
-                        if host.strip().upper() == target_name:
-                            return f"DNS_RESPONSE: {payload_str} -> {ip.strip()}"
-                elif isinstance(records, dict):
-                    for host, ip in records.items():
-                        if host.upper() == target_name:
-                            return f"DNS_RESPONSE: {payload_str} -> {ip}"
-
             network = connection.network
-            all_devices = list(network.orchestrator.hosts.values()) + list(network.orchestrator.routers.values())
-
-            for dev in all_devices:
-                if dev.name.upper() == target_name:
-                    ip = getattr(dev, "get_ip", lambda: None)()
-                    if not ip and dev.interfaces:
-                        ip = dev.interfaces[0].ip
-                    if ip:
-                        return f"DNS_RESPONSE: {payload_str} -> {ip}"
-
-            if target_name == "DNS.GOOGLE":
-                for intf in getattr(self.host, "interfaces", []):
-                    if getattr(intf, "ip", "") == "8.8.8.8":
-                        return f"DNS_RESPONSE: {payload_str} -> 8.8.8.8"
-
+            resolved_ip = self._resolve(target_name, network)
+            
+            if resolved_ip:
+                return f"DNS_RESPONSE: {payload_str} -> {resolved_ip}"
+            
             return f"DNS_NXDOMAIN: '{payload_str}' not found."
 
         except Exception as e:

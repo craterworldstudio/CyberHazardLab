@@ -7,6 +7,9 @@ class Router(Node):
         self.forwarding_enabled = True
         self.auto_routes = "inherit"
         self.default_gateway = None
+        self.nat_enabled = False
+        self.nat_table = {}  # (src_ip, src_port) -> ext_port  AND  ext_port -> (src_ip, src_port)
+        self._next_nat_port = 10000
 
     @property
     def ip_forwarding(self):

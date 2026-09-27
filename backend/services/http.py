@@ -5,10 +5,20 @@ class HTTPServerDaemon(ServiceDaemon):
         super().__init__(host)
         # Virtual filesystem for the web server
         self.vfs = {
-            "/": "<html><body><h1>Welcome to CS50 SOC Lab!</h1><p>Running CS50 HttpDaemon v1.0</p></body></html>",
-            "/login": "<html><body><form><input type='text' name='user'/><input type='password' name='pass'/><input type='submit'/></form></body></html>",
-            "/api/health": '{"status": "ok", "version": "1.0"}'
+            "/health": '{"status": "ok", "version": "1.0"}',
+            "/ready": '{"status": "ready"}',
+            "/live": '{"status": "alive"}',
+            "/metrics": '{"requests": 100, "errors": 0}'
         }
+
+    def reload_config(self, config):
+        if config and "endpoints" in config:
+            self.vfs = config["endpoints"]
+
+    def on_start(self, service_model):
+        if hasattr(service_model, "config") and service_model.config:
+            if "endpoints" in service_model.config:
+                self.vfs = service_model.config["endpoints"]
 
     def handle_tcp(self, payload, connection, packet):
         payload_str = str(payload).strip()

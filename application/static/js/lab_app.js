@@ -199,8 +199,20 @@ document.addEventListener("DOMContentLoaded", () => {
             } else {
                 btn.classList.remove("active");
             }
+            if(CHL.links) CHL.links.forEach(l => l.updatePath());
         }
         
+        if (view === "interfaces") {
+            const floor = document.getElementById("topologyFloor");
+            floor.classList.toggle("show-interfaces");
+            if (floor.classList.contains("show-interfaces")) {
+                btn.classList.add("active");
+            } else {
+                btn.classList.remove("active");
+            }
+            if(CHL.links) CHL.links.forEach(l => l.updatePath());
+        }
+
         if (view === "labels") {
             const floor = document.getElementById("topologyFloor");
             floor.classList.toggle("hide-labels");
@@ -209,6 +221,7 @@ document.addEventListener("DOMContentLoaded", () => {
             } else {
                 btn.classList.remove("active");
             }
+            if(CHL.links) CHL.links.forEach(l => l.updatePath());
         }
     }
 
@@ -568,6 +581,114 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
 
+        
+        // Added for interface text
+        getInterfaceLabel(sourceName, targetName) {
+            const state = window.SimulationState;
+            if (!state || !state.devices) return null;
+            const dev = state.devices.find(d => d.name === sourceName);
+            if (!dev || !dev.interfaces) return null;
+            const intf = dev.interfaces.find(i => i.connected_to === targetName);
+            if (!intf) return null;
+            if (dev.type.toUpperCase() === "SWITCH") {
+                return "PORT " + (intf.port_number || intf.name.replace("Port-", "")); 
+            } else {
+                return intf.ip_only || intf.ip || "No IP";
+            }
+        }
+
+        getPointAlongPath(points, distance) {
+            let traveled = 0;
+            for (let i = 0; i < points.length - 1; i++) {
+                const p1 = points[i];
+                const p2 = points[i+1];
+                const dx = p2.x - p1.x;
+                const dy = p2.y - p1.y;
+                const len = Math.hypot(dx, dy);
+                if (traveled + len >= distance) {
+                    const remaining = distance - traveled;
+                    return {
+                        x: p1.x + (dx / len) * remaining,
+                        y: p1.y + (dy / len) * remaining
+                    };
+                }
+                traveled += len;
+            }
+            if (points.length > 0) return { ...points[points.length - 1] };
+            return {x: 0, y: 0};
+        }
+
+        drawLabelOnPath(originalPoints, text, thisNodeName, isSource) {
+            const points = isSource ? originalPoints : [...originalPoints].reverse();
+            
+            let dist = 45; // base distance from center
+            let finalPoint = {x: 0, y: 0};
+            
+            while (dist < 300) {
+                finalPoint = this.getPointAlongPath(points, dist);
+                let collided = false;
+                
+                if (CHL.svgLayer) {
+                    const existing = Array.from(CHL.svgLayer.querySelectorAll(`.interface-label[data-node="${thisNodeName}"]`));
+                    for (const el of existing) {
+                        const ex = parseFloat(el.getAttribute("x"));
+                        const ey = parseFloat(el.getAttribute("y"));
+                        // 15px radius for collision
+                        if (Math.hypot(ex - finalPoint.x, ey - finalPoint.y) < 18) {
+                            collided = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (!collided) break;
+                dist += 20; // slide it further down the wire
+            }
+
+            const textEl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            textEl.setAttribute("x", finalPoint.x);
+            textEl.setAttribute("y", finalPoint.y);
+            textEl.setAttribute("class", "interface-label");
+            textEl.setAttribute("data-node", thisNodeName);
+            
+            textEl.setAttribute("fill", "#d5ebf2");
+            textEl.setAttribute("font-size", "9px");
+            textEl.setAttribute("font-weight", "800");
+            textEl.setAttribute("font-family", "Courier New");
+            textEl.setAttribute("text-anchor", "middle");
+            textEl.setAttribute("dominant-baseline", "middle");
+            textEl.setAttribute("paint-order", "stroke");
+            textEl.setAttribute("stroke", "rgba(5, 7, 10, 0.85)");
+            textEl.setAttribute("stroke-width", "4px");
+            textEl.setAttribute("stroke-linecap", "round");
+            textEl.setAttribute("stroke-linejoin", "round");
+            textEl.style.cursor = "default";
+            textEl.style.userSelect = "none";
+            
+            textEl.textContent = text;
+            this.group.appendChild(textEl);
+        }
+
+        updateLabels(points) {
+            if (!this.group) return;
+            const oldLabels = this.group.querySelectorAll(".interface-label");
+            oldLabels.forEach(el => el.remove());
+            
+            const floor = document.getElementById("topologyFloor");
+            if (!floor || !floor.classList.contains("show-interfaces")) return;
+            if (points.length < 2) return;
+
+            const srcLabelText = this.getInterfaceLabel(this.source.id, this.target.id);
+            if (srcLabelText) {
+                this.drawLabelOnPath(points, srcLabelText, this.source.id, true);
+            }
+
+            const tgtLabelText = this.getInterfaceLabel(this.target.id, this.source.id);
+            if (tgtLabelText) {
+                this.drawLabelOnPath(points, tgtLabelText, this.target.id, false);
+            }
+        }
+
         updatePath() {
             const points = this.getRenderPoints();
             if (points.length < 2) return;
@@ -582,6 +703,7 @@ document.addEventListener("DOMContentLoaded", () => {
             console.log(`[CHL:DEBUG] Wire ${this.id} path updated to: ${d}`);
 
             this.renderSegmentHitboxes(points);
+            this.updateLabels(points);
         }
 
 

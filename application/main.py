@@ -87,7 +87,10 @@ class CustomHandler(SimpleHTTPRequestHandler):
         elif self.path == "/lab":
             self.path = "/application/static/lab.html"
 
-        elif self.path.startswith("/static/"):
+        elif self.path == "/soc":
+            self.path = "/application/soc/soc.html"
+
+        elif self.path.startswith("/static/") or self.path.startswith("/soc/"):
             self.path = "/application" + self.path
 
         else:
@@ -183,6 +186,7 @@ class CustomHandler(SimpleHTTPRequestHandler):
     
 def main():
 
+    HTTPServer.allow_reuse_address = True
     server = HTTPServer( (HOST, PORT), CustomHandler )
 
     print(f"Cyber Hazard Lab running at http://{HOST}:{PORT}")

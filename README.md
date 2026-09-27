@@ -31,17 +31,19 @@ Designed specifically for students and aspiring network/security professionals, 
 ### 📊 Overview
 
 | Phase | Description | Progress | Status |
-| :--- | :--- | :--- | :---: |
-| **Phase 1** | Foundation               | `████████████████████` 4/4   | ✅ Done |
-| **Phase 2** | Local Networking         | `████████████████████` 9/9   | ✅ Done |
-| **Phase 3** | Transport Layer          | `████████████████████` 8/8   | ✅ Done |
-| **Phase 4** | Network Infrastructure   | `█████████████░░░░░░░` 8/12  | 🟡 In Progress |
-| **Phase 5** | Application Layer        | `█████████████████░░░` 4/5   | 🟡 In Progress |
-| **Phase 6** | Interactive Lab Frontend | `████████████████████` 15/15 | ✅ Done |
-| **Phase 7** | SOC Integration          | `███░░░░░░░░░░░░░░░░░` 1/6   | 🟡 In Progress |
-| **Phase 8** | Penetrator Dashboard     | `░░░░░░░░░░░░░░░░░░░░` 0/5   | ❌ Not Started |
+| :--- | :---   | :--- | :---: |
+| **Phase 1**   | Foundation                        | `████████████████████` 4/4   | ✅ Done |
+| **Phase 2**   | Local Networking                  | `████████████████████` 9/9   | ✅ Done |
+| **Phase 3**   | Transport Layer                   | `████████████████████` 8/8   | ✅ Done |
+| **Phase 4**   | Network Infrastructure            | `████████████████████` 8/8   | ✅ Done |
+| **Phase 4.5** | Network Advanced Infrastructure   | `█████░░░░░░░░░░░░░░░` 1/4   | 🟡 In Progress |
+| **Phase 5**   | Application Layer                 | `████████████████████` 5/5   | ✅ Done |
+| **Phase 6**   | Interactive Lab Frontend          | `████████████████████` 16/16 | ✅ Done |
+| **Phase 7**   | SOC Integration                   | `███░░░░░░░░░░░░░░░░░` 1/6   | 🟡 In Progress |
+| **Phase 8**   | Penetrator Dashboard              | `░░░░░░░░░░░░░░░░░░░░` 0/5   | ❌ Not Started |
 
-
+*I probably won't implement all of 4.5 soon*
+*Also a good chance that I won't be implementing the Penetrator Dashboard because this project too way too long.*
 ---
 
 ### 🔍 Detailed Phase Breakdown
@@ -82,17 +84,19 @@ Designed specifically for students and aspiring network/security professionals, 
 - [x] Traceroute
 - [x] Dynamic network topology management
 - [x] DNS resolution architecture
-- [ ] State-based Firewall & ACLs
-- [ ] IDS/IPS Node Simulation
-- [ ] NAT (Network Address Translation)
-- [ ] L1 Hub Emulation
+- Advanced Infrastructure:
+- - [x] NAT (Network Address Translation)
+- - [ ] L1 Hub Emulation
+- - [ ] State-based Firewall & ACLs
+- - [ ] IDS/IPS Node Simulation
+
 
 #### PHASE 5 — Application Layer 🟡
-- [ ] HTTP/HTTPS protocol support
 - [x] Core DNS services
 - [x] Secure Shell (SSH) emulation
 - [x] Echo Service Integration
 - [x] Fully integrated DHCP services
+- [x] HTTP/HTTPS protocol support
 
 #### PHASE 6 — Interactive Lab Frontend 🟡
 - [x] RESTful API architecture and serialization (`api.py`)
@@ -105,10 +109,11 @@ Designed specifically for students and aspiring network/security professionals, 
 - [x] Interface & SwitchPort physical assignment API
 - [x] Service spawning and management via UI
 - [x] Device node hardware resets and error state rendering
-- [x] NCM Terminal (Interactive console for devices, e.g. ping, tracert, ipconfig/ifconfig, hostname, netsh, netstat, ss, arp, nslookup)
+- [x] NCM Terminal (Interactive console for devices, e.g. ping, tracert, ipconfig/ifconfig, hostname, netsh, netstat, ss, arp, nslookup, ssh)
 - [x] Payload Manager (Manual ICMP/TCP/UDP packet forging)
 - [x] Dynamic MAC Learning & Routing Table UI visualization
-- [x] PingSweep and TraceRoute Integration via Validate
+- [x] PingSweep and TraceRoute and Curl Integration via Validate
+- [x] A Complete DNS compatible browser for viewing custom or default endpoints.
 - [x] PCAP Export (Download traffic captures for Wireshark)
 
 
@@ -128,7 +133,6 @@ Designed specifically for students and aspiring network/security professionals, 
 - [ ] Cyber attack simulations
 
 
----
 
 ---
 

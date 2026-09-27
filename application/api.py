@@ -164,6 +164,8 @@ class API:
                         dev.mac_aging_time = int(d["mac_aging_time"])
                     if "stp_enabled" in d:
                         dev.stp_enabled = bool(d["stp_enabled"])
+                    if "nat_enabled" in d:
+                        dev.nat_enabled = bool(d["nat_enabled"])
                 
             # Links
             for l in sim_data.get("links", []):
@@ -764,8 +766,27 @@ class API:
                 gw_val = str(body["default_gateway"]).strip()
                 device.default_gateway = gw_val if gw_val else None
                 if device.default_gateway and getattr(device, "interfaces", None):
+                    import ipaddress
+                    gw_ip = None
+                    try:
+                        gw_ip = ipaddress.ip_address(device.default_gateway)
+                    except ValueError:
+                        pass
+                        
+                    best_intf = device.interfaces[0]
+                    if gw_ip:
+                        for i in device.interfaces:
+                            if i.subnet:
+                                try:
+                                    net = ipaddress.ip_network(i.subnet, strict=False)
+                                    if gw_ip in net:
+                                        best_intf = i
+                                        break
+                                except ValueError:
+                                    pass
+                                    
                     device.routes = [r for r in getattr(device, "routes", []) if str(r.get("destination")) != "0.0.0.0/0"]
-                    device.add_route("0.0.0.0/0", device.interfaces[0], next_hop=device.default_gateway)
+                    device.add_route("0.0.0.0/0", best_intf, next_hop=device.default_gateway)
 
             if "ip_forwarding" in body:
                 device.ip_forwarding = bool(body["ip_forwarding"])
@@ -792,6 +813,9 @@ class API:
 
             if "stp_enabled" in body:
                 device.stp_enabled = bool(body["stp_enabled"])
+                
+            if "nat_enabled" in body:
+                device.nat_enabled = bool(body["nat_enabled"])
                 
             self.state_manager.save()
             return {
@@ -913,6 +937,7 @@ class API:
         result["auto_mac_learning"] = getattr(device, "auto_mac_learning", "inherit")
         result["mac_aging_time"] = getattr(device, "mac_aging_time", 300)
         result["stp_enabled"] = getattr(device, "stp_enabled", False)
+        result["nat_enabled"] = getattr(device, "nat_enabled", False)
 
         if hasattr(device, "services"):
             svcs = [

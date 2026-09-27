@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>CHL // Security Operations Center</title>
+
+    <link rel="stylesheet" href="soc/css/soc.css">
+</head>
+
+<body>
+
+    <div id="soc-app">
+
+        <!-- =====================================================
+             TOP BAR
+             ===================================================== -->
+
+        <header class="soc-topbar">
+
+            <div class="soc-brand">
+                <span class="brand-main">CHL</span>
+                <span class="brand-divider">//</span>
+                <span class="brand-section">NET.OBSERVER</span>
+            </div>
+
+            <div class="soc-session">
+
+                <span class="simulation-name">
+                    SIMULATION: <strong>LAB-01</strong>
+                </span>
+
+                <span class="system-status">
+                    <span class="status-dot"></span>
+                    OPERATIONAL
+                </span>
+
+            </div>
+
+        </header>
+
+
+        <!-- =====================================================
+             MAIN SOC BODY
+             ===================================================== -->
+
+        <div class="soc-body">
+
+
+            <!-- =================================================
+                 NAVIGATION
+                 ================================================= -->
+
+            <aside class="soc-sidebar">
+
+                <div class="sidebar-section">
+
+                    <div class="sidebar-label">
+                        WORKSPACE
+                    </div>
+
+                    <button class="nav-item active"
+                            data-view="overview">
+
+                        <span class="nav-icon">◈</span>
+                        <span class="nav-text">OVERVIEW</span>
+
+                    </button>
+
+                    <button class="nav-item"
+                            data-view="alerts">
+
+                        <span class="nav-icon">!</span>
+                        <span class="nav-text">ALERTS</span>
+
+                        <span class="nav-count">12</span>
+
+                    </button>
+
+                    <button class="nav-item"
+                            data-view="network">
+
+                        <span class="nav-icon">◎</span>
+                        <span class="nav-text">NETWORK</span>
+
+                    </button>
+
+                    <button class="nav-item"
+                            data-view="hosts">
+
+                        <span class="nav-icon">▣</span>
+                        <span class="nav-text">HOSTS</span>
+
+                    </button>
+
+                    <button class="nav-item"
+                            data-view="traffic">
+
+                        <span class="nav-icon">≋</span>
+                        <span class="nav-text">TRAFFIC</span>
+
+                    </button>
+
+                    <button class="nav-item"
+                            data-view="incidents">
+
+                        <span class="nav-icon">◆</span>
+                        <span class="nav-text">INCIDENTS</span>
+
+                    </button>
+
+                </div>
+
+
+                <div class="sidebar-section sidebar-bottom">
+
+                    <div class="sidebar-label">
+                        TOOLS
+                    </div>
+
+                    <button class="nav-item"
+                            data-view="pcap">
+
+                        <span class="nav-icon">⬡</span>
+                        <span class="nav-text">PCAP</span>
+
+                    </button>
+
+                    <button class="nav-item"
+                            data-view="settings">
+
+                        <span class="nav-icon">⚙</span>
+                        <span class="nav-text">SETTINGS</span>
+
+                    </button>
+
+                </div>
+
+            </aside>
+
+
+            <!-- =================================================
+                 WORKSPACE
+                 ================================================= -->
+
+            <main class="soc-workspace">
+
+
+                <!-- =================================================
+                     OVERVIEW
+                     ================================================= -->
+
+                <section class="soc-view active"
+                         id="view-overview">
+
+                    <div class="view-header">
+
+                        <div>
+                            <div class="view-title">
+                                SECURITY OVERVIEW
+                            </div>
+
+                            <div class="view-description">
+                                Network security posture and recent activity
+                            </div>
+                        </div>
+
+                        <div class="view-time">
+                            LIVE
+                        </div>
+
+                    </div>
+
+
+                    <!-- METRICS -->
+
+                    <div class="metric-grid">
+
+                        <div class="metric-card">
+
+                            <div class="metric-label">
+                                ACTIVE ALERTS
+                            </div>
+
+                            <div class="metric-value">
+                                12
+                            </div>
+
+                            <div class="metric-meta">
+                                +3 TODAY
+                            </div>
+
+                        </div>
+
+
+                        <div class="metric-card severity-critical">
+
+                            <div class="metric-label">
+                                CRITICAL
+                            </div>
+
+                            <div class="metric-value">
+                                2
+                            </div>
+
+                            <div class="metric-meta">
+                                ACTIVE
+                            </div>
+
+                        </div>
+
+
+                        <div class="metric-card">
+
+                            <div class="metric-label">
+                                HOSTS
+                            </div>
+
+                            <div class="metric-value">
+                                18
+                            </div>
+
+                            <div class="metric-meta">
+                                16 ONLINE
+                            </div>
+
+                        </div>
+
+
+                        <div class="metric-card">
+
+                            <div class="metric-label">
+                                EVENTS
+                            </div>
+
+                            <div class="metric-value">
+                                4,821
+                            </div>
+
+                            <div class="metric-meta">
+                                +184 / MIN
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- OVERVIEW GRID -->
+
+                    <div class="overview-grid">
+
+
+                        <!-- ACTIVITY -->
+
+                        <div class="panel activity-panel">
+
+                            <div class="panel-header">
+
+                                <span>
+                                    ACTIVITY
+                                </span>
+
+                                <span class="panel-indicator">
+                                    LIVE
+                                </span>
+
+                            </div>
+
+
+                            <div class="activity-list">
+
+                                <div class="activity-row">
+
+                                    <span class="activity-time">
+                                        14:32:08
+                                    </span>
+
+                                    <span class="activity-type">
+                                        NETWORK
+                                    </span>
+
+                                    <span class="activity-message">
+                                        DHCP lease issued
+                                    </span>
+
+                                </div>
+
+
+                                <div class="activity-row">
+
+                                    <span class="activity-time">
+                                        14:32:11
+                                    </span>
+
+                                    <span class="activity-type">
+                                        DNS
+                                    </span>
+
+                                    <span class="activity-message">
+                                        HOST-04 queried dns.homelab.local
+                                    </span>
+
+                                </div>
+
+
+                                <div class="activity-row alert-row">
+
+                                    <span class="activity-time">
+                                        14:32:17
+                                    </span>
+
+                                    <span class="activity-type">
+                                        ALERT
+                                    </span>
+
+                                    <span class="activity-message">
+                                        ICMP sweep detected from HOST-02
+                                    </span>
+
+                                </div>
+
+
+                                <div class="activity-row">
+
+                                    <span class="activity-time">
+                                        14:32:21
+                                    </span>
+
+                                    <span class="activity-type">
+                                        TCP
+                                    </span>
+
+                                    <span class="activity-message">
+                                        HOST-02 → SERV-01:22
+                                    </span>
+
+                                </div>
+
+
+                                <div class="activity-row alert-row">
+
+                                    <span class="activity-time">
+                                        14:32:24
+                                    </span>
+
+                                    <span class="activity-type">
+                                        ALERT
+                                    </span>
+
+                                    <span class="activity-message">
+                                        Port scan detected
+                                    </span>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+
+                        <!-- ALERTS -->
+
+                        <div class="panel alerts-panel">
+
+                            <div class="panel-header">
+
+                                <span>
+                                    ACTIVE ALERTS
+                                </span>
+
+                                <button class="panel-action"
+                                        data-view-target="alerts">
+
+                                    VIEW →
+
+                                </button>
+
+                            </div>
+
+
+                            <div class="alert-list">
+
+
+                                <div class="alert-item critical">
+
+                                    <div class="alert-severity">
+                                        CRITICAL
+                                    </div>
+
+                                    <div class="alert-title">
+                                        SSH BRUTE FORCE
+                                    </div>
+
+                                    <div class="alert-source">
+                                        HOST-02 → SERV-01:22
+                                    </div>
+
+                                    <div class="alert-time">
+                                        14:31:52
+                                    </div>
+
+                                </div>
+
+
+                                <div class="alert-item high">
+
+                                    <div class="alert-severity">
+                                        HIGH
+                                    </div>
+
+                                    <div class="alert-title">
+                                        PORT SCAN
+                                    </div>
+
+                                    <div class="alert-source">
+                                        HOST-02 → SERV-01
+                                    </div>
+
+                                    <div class="alert-time">
+                                        14:30:12
+                                    </div>
+
+                                </div>
+
+
+                                <div class="alert-item medium">
+
+                                    <div class="alert-severity">
+                                        MEDIUM
+                                    </div>
+
+                                    <div class="alert-title">
+                                        ICMP SWEEP
+                                    </div>
+
+                                    <div class="alert-source">
+                                        HOST-02
+                                    </div>
+
+                                    <div class="alert-time">
+                                        14:29:47
+                                    </div>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- NETWORK SNAPSHOT -->
+
+                    <div class="panel network-panel">
+
+                        <div class="panel-header">
+
+                            <span>
+                                NETWORK ACTIVITY
+                            </span>
+
+                            <button class="panel-action"
+                                    data-view-target="network">
+
+                                OPEN NETWORK →
+
+                            </button>
+
+                        </div>
+
+
+                        <div class="network-placeholder">
+
+                            <div class="network-node">
+                                HOST-01
+                            </div>
+
+                            <div class="network-link"></div>
+
+                            <div class="network-node suspicious">
+                                HOST-02
+                            </div>
+
+                            <div class="network-link"></div>
+
+                            <div class="network-node">
+                                SWT-01
+                            </div>
+
+                            <div class="network-link"></div>
+
+                            <div class="network-node">
+                                RUT-01
+                            </div>
+
+                            <div class="network-link"></div>
+
+                            <div class="network-node">
+                                SERV-01
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </section>
+
+
+                <!-- =================================================
+                     ALERTS
+                     ================================================= -->
+
+                <section class="soc-view"
+                         id="view-alerts">
+
+                    <div class="view-header">
+
+                        <div>
+
+                            <div class="view-title">
+                                ALERTS
+                            </div>
+
+                            <div class="view-description">
+                                Detected security events requiring investigation
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="panel">
+
+                        <div class="panel-header">
+                            ALERT QUEUE
+                        </div>
+
+                        <div class="empty-state">
+                            Alert investigation interface
+                        </div>
+
+                    </div>
+
+                </section>
+
+
+                <!-- =================================================
+                     NETWORK
+                     ================================================= -->
+
+                <section class="soc-view"
+                         id="view-network">
+
+                    <div class="view-header">
+
+                        <div>
+
+                            <div class="view-title">
+                                NETWORK
+                            </div>
+
+                            <div class="view-description">
+                                Network topology and communication relationships
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="panel large-panel">
+
+                        <div class="network-canvas">
+                            NETWORK TOPOLOGY
+                        </div>
+
+                    </div>
+
+                </section>
+
+
+                <!-- =================================================
+                     HOSTS
+                     ================================================= -->
+
+                <section class="soc-view"
+                         id="view-hosts">
+
+                    <div class="view-header">
+
+                        <div>
+
+                            <div class="view-title">
+                                HOSTS
+                            </div>
+
+                            <div class="view-description">
+                                Devices observed by the security monitoring system
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="panel">
+
+                        <div class="panel-header">
+                            HOST INVENTORY
+                        </div>
+
+                        <div class="table-placeholder">
+                            HOST TABLE
+                        </div>
+
+                    </div>
+
+                </section>
+
+
+                <!-- =================================================
+                     TRAFFIC
+                     ================================================= -->
+
+                <section class="soc-view"
+                         id="view-traffic">
+
+                    <div class="view-header">
+
+                        <div>
+
+                            <div class="view-title">
+                                TRAFFIC
+                            </div>
+
+                            <div class="view-description">
+                                Network traffic and protocol activity
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="panel large-panel">
+
+                        <div class="empty-state">
+                            Traffic analysis workspace
+                        </div>
+
+                    </div>
+
+                </section>
+
+
+                <!-- =================================================
+                     INCIDENTS
+                     ================================================= -->
+
+                <section class="soc-view"
+                         id="view-incidents">
+
+                    <div class="view-header">
+
+                        <div>
+
+                            <div class="view-title">
+                                INCIDENTS
+                            </div>
+
+                            <div class="view-description">
+                                Security investigations and incident cases
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="panel">
+
+                        <div class="empty-state">
+                            Incident management workspace
+                        </div>
+
+                    </div>
+
+                </section>
+
+
+                <!-- =================================================
+                     PCAP
+                     ================================================= -->
+
+                <section class="soc-view"
+                         id="view-pcap">
+
+                    <div class="view-header">
+
+                        <div>
+
+                            <div class="view-title">
+                                PCAP
+                            </div>
+
+                            <div class="view-description">
+                                Traffic capture and forensic evidence
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="panel large-panel">
+
+                        <div class="empty-state">
+                            PCAP analysis workspace
+                        </div>
+
+                    </div>
+
+                </section>
+
+
+                <!-- =================================================
+                     SETTINGS
+                     ================================================= -->
+
+                <section class="soc-view"
+                         id="view-settings">
+
+                    <div class="view-header">
+
+                        <div>
+
+                            <div class="view-title">
+                                SETTINGS
+                            </div>
+
+                            <div class="view-description">
+                                Security operations configuration
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="panel">
+
+                        <div class="empty-state">
+                            SOC settings
+                        </div>
+
+                    </div>
+
+                </section>
+
+
+            </main>
+
+        </div>
+
+    </div>
+
+
+    <script src="soc/js/soc.js"></script>
+
+</body>
+</html>
