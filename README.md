@@ -75,7 +75,7 @@ Designed specifically for students and aspiring network/security professionals, 
 - [x] Active connection management
 - [x] Raw data streams
 
-#### PHASE 4 — Network Infrastructure 🟡
+#### PHASE 4 — Network Infrastructure ✅
 - [x] Router integration
 - [x] Routing table engines
 - [x] Multiple subnet routing
@@ -91,14 +91,14 @@ Advanced Infrastructure:
 - - [ ] IDS/IPS Node Simulation
 
 
-#### PHASE 5 — Application Layer 🟡
+#### PHASE 5 — Application Layer ✅
 - [x] Core DNS services
 - [x] Secure Shell (SSH) emulation
 - [x] Echo Service Integration
 - [x] Fully integrated DHCP services
 - [x] HTTP/HTTPS protocol support
 
-#### PHASE 6 — Interactive Lab Frontend 🟡
+#### PHASE 6 — Interactive Lab Frontend ✅
 - [x] RESTful API architecture and serialization (`api.py`)
 - [x] Interactive Topology Floor (Drag & drop nodes, tools palette)
 - [x] Dynamic SVG wire connections
