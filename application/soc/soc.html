@@ -7,6 +7,7 @@
     <title>CHL // Security Operations Center</title>
 
     <link rel="stylesheet" href="soc/css/soc.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
@@ -19,10 +20,10 @@
 
         <header class="soc-topbar">
 
-            <div class="soc-brand">
-                <span class="brand-main">CHL</span>
-                <span class="brand-divider">//</span>
-                <span class="brand-section">NET.OBSERVER</span>
+            <div class="brand">
+                <span class="brand-title">CYBER HAZARD LAB</span>
+                <span class="brand-separator">//</span>
+                <span class="brand-module">NET.OBSERVER</span>
             </div>
 
             <div class="soc-session">
@@ -74,7 +75,7 @@
                         <span class="nav-icon">!</span>
                         <span class="nav-text">ALERTS</span>
 
-                        <span class="nav-count">12</span>
+                        <span class="nav-count">0</span>
 
                     </button>
 
@@ -184,11 +185,11 @@
                             </div>
 
                             <div class="metric-value">
-                                12
+                                0
                             </div>
 
                             <div class="metric-meta">
-                                +3 TODAY
+                                +0 TODAY
                             </div>
 
                         </div>
@@ -201,7 +202,7 @@
                             </div>
 
                             <div class="metric-value">
-                                2
+                                0
                             </div>
 
                             <div class="metric-meta">
@@ -213,34 +214,18 @@
 
                         <div class="metric-card">
 
-                            <div class="metric-label">
-                                HOSTS
-                            </div>
-
-                            <div class="metric-value">
-                                18
-                            </div>
-
-                            <div class="metric-meta">
-                                16 ONLINE
-                            </div>
+                            <div class="metric-label">DEVICES</div>
+                            <div class="metric-value" id="metric-hosts-total">0</div>
+                            <div class="metric-meta" id="metric-hosts-online">0 ONLINE</div>
 
                         </div>
 
 
                         <div class="metric-card">
 
-                            <div class="metric-label">
-                                EVENTS
-                            </div>
-
-                            <div class="metric-value">
-                                4,821
-                            </div>
-
-                            <div class="metric-meta">
-                                +184 / MIN
-                            </div>
+                            <div class="metric-label">EVENTS</div>
+                            <div class="metric-value" id="metric-events-total">0</div>
+                            <div class="metric-meta" id="metric-events-rate">0 / MIN</div>
 
                         </div>
 
@@ -269,7 +254,7 @@
                             </div>
 
 
-                            <div class="activity-list">
+                            <div class="activity-list" id="activity-list">
 
                                 <div class="activity-row">
 
@@ -533,17 +518,16 @@
                     </div>
 
 
-                    <div class="panel">
 
+                    <div class="panel">
                         <div class="panel-header">
                             ALERT QUEUE
                         </div>
-
-                        <div class="empty-state">
-                            Alert investigation interface
+                        <div style="padding: 1rem;">
+                            <div id="alerts-list"></div>
                         </div>
-
                     </div>
+
 
                 </section>
 
@@ -607,17 +591,28 @@
                     </div>
 
 
-                    <div class="panel">
 
+                    <div class="panel">
                         <div class="panel-header">
                             HOST INVENTORY
                         </div>
-
-                        <div class="table-placeholder">
-                            HOST TABLE
+                        <div style="padding: 1rem;">
+                            <table style="width: 100%; text-align: left; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="border-bottom: 1px solid #1e293b; color: #8b9bb4;">
+                                        <th style="padding: 0.5rem;">Device</th>
+                                        <th style="padding: 0.5rem;">Type</th>
+                                        <th style="padding: 0.5rem;">Status</th>
+                                        <th style="padding: 0.5rem;">Threat Level</th>
+                                        <th style="padding: 0.5rem;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="hosts-table-body">
+                                </tbody>
+                            </table>
                         </div>
-
                     </div>
+
 
                 </section>
 
@@ -646,13 +641,26 @@
                     </div>
 
 
+
                     <div class="panel large-panel">
-
-                        <div class="empty-state">
-                            Traffic analysis workspace
+                        <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>NETWORK TRAFFIC (TOTAL AVERAGE)</div>
+                            <div style="position: relative; display: inline-block;">
+                                <button id="traffic-dropdown-btn" onclick="document.getElementById('traffic-dropdown-list').style.display = document.getElementById('traffic-dropdown-list').style.display === 'none' ? 'block' : 'none'" style="background: #0f172a; border: 1px solid #1e293b; color: white; padding: 0.2rem 0.5rem; cursor: pointer;">
+                                    + Add Device Graphs
+                                </button>
+                                <div id="traffic-dropdown-list" style="display: none; position: absolute; right: 0; top: 100%; background: #0f172a; border: 1px solid #1e293b; z-index: 100; min-width: 200px; max-height: 200px; overflow-y: auto; padding: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.5);">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
                         </div>
-
+                        <div style="padding: 1rem; height: 350px; flex-shrink: 0; display: flex; flex-direction: column;">
+                            <canvas id="trafficChartMain" style="width: 100%; height: 100%;"></canvas>
+                        </div>
+                        <div id="sub-charts-container" style="display: flex; flex-wrap: wrap; padding: 1rem; gap: 1rem; border-top: 1px solid #1e293b;">
+                        </div>
                     </div>
+
 
                 </section>
 
@@ -681,13 +689,39 @@
                     </div>
 
 
+
                     <div class="panel">
-
-                        <div class="empty-state">
-                            Incident management workspace
+                        <div class="panel-header">
+                            INCIDENT MANAGEMENT
                         </div>
+                        <div style="padding: 1rem;">
+                            <div style="background: rgba(0,0,0,0.2); padding: 1rem; border: 1px solid #2a3a5a; border-radius: 4px; margin-bottom: 1rem;">
+                                
+                            <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                                <div style="flex: 1; background: rgba(0,0,0,0.2); border: 1px solid #2a3a5a; border-radius: 4px; padding: 1rem;">
+                                    <h4 style="margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+                                        Alerts Distribution
+                                        <select id="alerts-pie-time" onchange="updateAlertsPie()" style="background: #0f172a; border: 1px solid #1e293b; color: white; padding: 0.2rem;">
+                                            <option value="60">Last 1 Hour</option>
+                                            <option value="1440">Last 24 Hours</option>
+                                            <option value="all">All Time</option>
+                                        </select>
+                                    </h4>
+                                    <div style="height: 200px;">
+                                        <canvas id="alertsPieChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                            <h4 style="margin-bottom: 0.5rem;">Create New Incident</h4>
 
+                                <input type="text" id="incident-title" placeholder="Incident Title" style="width: 100%; margin-bottom: 0.5rem; padding: 0.5rem; background: #0f172a; border: 1px solid #1e293b; color: white;">
+                                <textarea id="incident-notes" placeholder="Investigation Notes..." style="width: 100%; height: 80px; margin-bottom: 0.5rem; padding: 0.5rem; background: #0f172a; border: 1px solid #1e293b; color: white;"></textarea>
+                                <button onclick="createIncident()" class="panel-action">CREATE INCIDENT</button>
+                            </div>
+                            <div id="incidents-list"></div>
+                        </div>
                     </div>
+
 
                 </section>
 
@@ -716,13 +750,26 @@
                     </div>
 
 
+
                     <div class="panel large-panel">
-
-                        <div class="empty-state">
-                            PCAP analysis workspace
+                        <div class="panel-header">
+                            FORENSIC PCAP EXPORTS
                         </div>
-
+                        <div style="padding: 1rem;">
+                            <table style="width: 100%; text-align: left; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="border-bottom: 1px solid #1e293b; color: #8b9bb4;">
+                                        <th style="padding: 0.5rem;">Device</th>
+                                        <th style="padding: 0.5rem;">Interface</th>
+                                        <th style="padding: 0.5rem;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pcap-table-body">
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
+
 
                 </section>
 
@@ -751,13 +798,28 @@
                     </div>
 
 
+
                     <div class="panel">
-
-                        <div class="empty-state">
-                            SOC settings
+                        <div class="panel-header">DETECTION RULES</div>
+                        <div style="padding: 1rem;">
+                            <p style="color: #8b9bb4; margin-bottom: 1rem;">Define Javascript conditions to match against incoming events. If the condition evaluates to true, an Alert is generated.</p>
+                            <div id="rules-list" style="margin-bottom: 1rem;"></div>
+                            
+                            <div style="background: rgba(0,0,0,0.2); padding: 1rem; border: 1px solid #2a3a5a; border-radius: 4px;">
+                                <h4 style="margin-bottom: 0.5rem;">Create New Rule</h4>
+                                <input type="text" id="rule-name" placeholder="Rule Name (e.g., Ping Sweep)" style="width: 100%; margin-bottom: 0.5rem; padding: 0.5rem; background: #0f172a; border: 1px solid #1e293b; color: white;">
+                                <select id="rule-severity" style="width: 100%; margin-bottom: 0.5rem; padding: 0.5rem; background: #0f172a; border: 1px solid #1e293b; color: white;">
+                                    <option value="INFO">INFO</option>
+                                    <option value="WARNING">WARNING</option>
+                                    <option value="HIGH">HIGH</option>
+                                    <option value="CRITICAL">CRITICAL</option>
+                                </select>
+                                <textarea id="rule-condition" placeholder="Condition (e.g., event.type === 'ICMP_ECHO_REQUEST_RECEIVED' && event.source !== '8.8.8.8')" style="width: 100%; height: 80px; margin-bottom: 0.5rem; padding: 0.5rem; background: #0f172a; border: 1px solid #1e293b; color: white; font-family: monospace;"></textarea>
+                                <button id="btn-add-rule" class="panel-action">ADD RULE</button>
+                            </div>
                         </div>
-
                     </div>
+
 
                 </section>
 

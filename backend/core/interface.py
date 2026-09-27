@@ -15,6 +15,12 @@ class NetworkInterface:
     status: str = "up"
     rx_buffer: list = field(default_factory=list)
     pcap_buffer: list = field(default_factory=list)
+    
+    # Telemetry
+    tx_bytes: int = 0
+    tx_packets: int = 0
+    rx_bytes: int = 0
+    rx_packets: int = 0
 
     @property
     def arp(self):
@@ -50,6 +56,11 @@ class NetworkInterface:
         if getattr(self, "status", "up") != "up":
             return None
         self._record_pcap(frame)
+        
+        self.tx_packets += 1
+        payload_size = len(str(getattr(frame, 'payload', ''))) if getattr(frame, 'payload', None) else 0
+        self.tx_bytes += 14 + payload_size
+
         if self.link is None:
             raise ValueError(f"{self.name} is not connected to a link")
         return self.link.transmit(frame, self)
@@ -58,6 +69,11 @@ class NetworkInterface:
         if getattr(self, "status", "up") != "up":
             return None
         self._record_pcap(frame)
+        
+        self.rx_packets += 1
+        payload_size = len(str(getattr(frame, 'payload', ''))) if getattr(frame, 'payload', None) else 0
+        self.rx_bytes += 14 + payload_size
+
         self.rx_buffer.append(frame)
         return None
 

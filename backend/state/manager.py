@@ -81,7 +81,8 @@ class StateManager:
             "version": 1,
             "simulation": self.serialize_simulation(),
             "layout": layout,
-            "renames": saved_renames
+            "renames": saved_renames,
+            "soc_state": getattr(self.simulation, "soc_state", {})
         }
 
         self.path.write_text(
@@ -162,7 +163,9 @@ class StateManager:
         for host in self.simulation.hosts.values():
             d = {
                 "name": host.name,
-                "type": host.device_type.value
+                "type": host.device_type.value,
+                "status": getattr(host, "status", "OFFLINE"),
+                "soc_threat_level": getattr(host, "soc_threat_level", "Normal")
             }
             if getattr(host, "default_gateway", None):
                 d["default_gateway"] = host.default_gateway
@@ -175,6 +178,8 @@ class StateManager:
             devices.append({
                 "name": switch.name,
                 "type": "switch",
+                "status": getattr(switch, "status", "OFFLINE"),
+                "soc_threat_level": getattr(switch, "soc_threat_level", "Normal"),
                 "auto_mac_learning": getattr(switch, "auto_mac_learning", "inherit"),
                 "mac_aging_time": getattr(switch, "mac_aging_time", 300),
                 "stp_enabled": getattr(switch, "stp_enabled", False)
@@ -184,6 +189,8 @@ class StateManager:
             d = {
                 "name": router.name,
                 "type": "router",
+                "status": getattr(router, "status", "OFFLINE"),
+                "soc_threat_level": getattr(router, "soc_threat_level", "Normal"),
                 "ip_forwarding": getattr(router, "ip_forwarding", True),
                 "auto_routes": getattr(router, "auto_routes", "inherit"),
                 "nat_enabled": getattr(router, "nat_enabled", False)

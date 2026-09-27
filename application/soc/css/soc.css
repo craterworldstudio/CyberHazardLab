@@ -4,20 +4,20 @@
    ============================================================ */
 
 :root {
-    --bg-main: #070b0f;
-    --bg-panel: #0b1117;
-    --bg-panel-alt: #0e151c;
-    --bg-hover: #111b23;
+    --bg-main: #05070a;
+    --bg-panel: #080c10;
+    --bg-panel-alt: #0b1117;
+    --bg-hover: rgba(25, 146, 148, 0.2);
 
-    --border: #1b2a34;
-    --border-bright: #29414d;
+    --border: rgba(0, 229, 255, 0.15);
+    --border-bright: rgba(0, 229, 255, 0.35);
 
-    --text-main: #d7e3e8;
-    --text-muted: #71838c;
-    --text-dim: #4d6069;
+    --text-main: #d5ebf2;
+    --text-muted: #526870;
+    --text-dim: #32444a;
 
-    --cyan: #00d9ff;
-    --cyan-dim: #087d91;
+    --cyan: #00e5ff;
+    --cyan-dim: #007f8f;
 
     --green: #39d98a;
     --yellow: #e5b84b;
@@ -27,8 +27,8 @@
     --sidebar-width: 190px;
     --topbar-height: 58px;
 
-    --font-ui: "Segoe UI", Arial, sans-serif;
-    --font-mono: "JetBrains Mono", "Fira Code", monospace;
+    --font-ui: "Courier New", monospace;
+    --font-mono: "Courier New", monospace;
 }
 
 
@@ -109,7 +109,7 @@ button {
 
 /* BRAND */
 
-.soc-brand {
+.brand {
     display: flex;
     align-items: center;
 
@@ -118,28 +118,37 @@ button {
     letter-spacing: 0.08em;
 }
 
-.brand-main {
+.brand-title {
     color: var(--cyan);
+    text-shadow: 0 0 5px rgba(0, 229, 255, 0.4);
 
     font-family: var(--font-mono);
-    font-weight: 700;
-
-    font-size: 15px;
-}
-
-.brand-divider {
-    color: var(--text-dim);
-
-    font-family: var(--font-mono);
-}
-
-.brand-section {
-    color: var(--text-muted);
-
-    font-family: var(--font-mono);
+    font-weight: bold;
+    letter-spacing: 2px;
 
     font-size: 11px;
 }
+
+.brand-separator {
+    color: var(--text-dim);
+
+    font-family: var(--font-mono);
+    letter-spacing: 2px;
+    font-weight: bold;
+    font-size: 11px;
+}
+
+.brand-module {
+    color: var(--text-muted);
+
+    font-family: var(--font-mono);
+    letter-spacing: 2px;
+    font-weight: bold;
+    font-size: 11px;
+}
+
+
+    
 
 
 /* SESSION */
@@ -290,6 +299,7 @@ button {
     border-color: rgba(0, 217, 255, 0.18);
 
     color: var(--cyan);
+    text-shadow: 0 0 5px rgba(0, 229, 255, 0.4);
 }
 
 
@@ -307,6 +317,7 @@ button {
 
 .nav-item.active .nav-icon {
     color: var(--cyan);
+    text-shadow: 0 0 5px rgba(0, 229, 255, 0.4);
 }
 
 
@@ -556,6 +567,7 @@ button {
     background: transparent;
 
     color: var(--cyan);
+    text-shadow: 0 0 5px rgba(0, 229, 255, 0.4);
 
     font-family: var(--font-mono);
 
@@ -627,6 +639,7 @@ button {
 
 .activity-type {
     color: var(--cyan);
+    text-shadow: 0 0 5px rgba(0, 229, 255, 0.4);
 
     font-size: 8px;
 

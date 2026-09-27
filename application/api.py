@@ -92,6 +92,9 @@ class API:
         if manager == "simulation":
             return self._handle_simulation(method, resource, body)
 
+        if manager == "soc":
+            return self._handle_soc(method, resource, body)
+
         raise ValueError(
             f"Unknown API manager: {manager}"
         )
@@ -138,8 +141,11 @@ class API:
             sim_data = body.get("simulation", {})
             layout_data = body.get("layout", {})
             renames_data = body.get("renames", {})
+            soc_state = body.get("soc_state", {})
             if isinstance(renames_data, dict):
                 self.ntm.simulation.rename_map = dict(renames_data)
+            if isinstance(soc_state, dict):
+                self.ntm.simulation.soc_state = dict(soc_state)
             
             self.ntm.simulation.name = sim_data.get("name", "Cyber Hazard Network")
             self.ntm.simulation.settings = sim_data.get("settings", {})
@@ -166,6 +172,10 @@ class API:
                         dev.stp_enabled = bool(d["stp_enabled"])
                     if "nat_enabled" in d:
                         dev.nat_enabled = bool(d["nat_enabled"])
+                    if "status" in d:
+                        dev.status = d["status"]
+                    if "soc_threat_level" in d:
+                        dev.soc_threat_level = d["soc_threat_level"]
                 
             # Links
             for l in sim_data.get("links", []):
@@ -385,6 +395,13 @@ class API:
                 ]
             }
 
+        if method == "GET" and resource == ["telemetry"]:
+            telemetry = {}
+            for dev in list(self.ntm.simulation.hosts.values()) + list(self.ntm.simulation.routers.values()):
+                if hasattr(dev, "get_telemetry"):
+                    telemetry[dev.name] = dev.get_telemetry()
+            return telemetry
+
         if method == "GET" and resource == ["events"]:
             events = self.ntm.simulation.network.events
             return [
@@ -533,6 +550,79 @@ class API:
     # ========================================================
     # NCM
     # ========================================================
+
+
+    def _handle_soc(self, method, resource, body):
+        if method == "GET" and resource == ["state"]:
+            return getattr(self.ntm.simulation, "soc_state", {})
+            
+        if method == "POST" and resource == ["state"]:
+            self.ntm.simulation.soc_state = body
+            self.state_manager.save()
+            return {"status": "success"}
+
+        # Containment & Status
+        if len(resource) >= 3 and resource[0] == "devices":
+            device_name = resource[1]
+            action_type = resource[2]
+            
+            sim = self.ntm.simulation
+            device = sim.hosts.get(device_name) or sim.routers.get(device_name) or sim.switches.get(device_name)
+            
+            if not device:
+                return {"error": "Device not found"}, 404
+                
+            if method == "POST" and action_type == "threat_level":
+                threat_level = body.get("level", "Normal")
+                device.soc_threat_level = threat_level
+                self.state_manager.save()
+                
+                # Also generate an event for the network
+                if getattr(device, "network", None):
+                    from backend.core.event import Event
+                    device.network.add_event(Event(
+                        type="THREAT_LEVEL_CHANGED",
+                        severity="WARNING" if threat_level != "Normal" else "INFO",
+                        source="SOC",
+                        destination=device.name,
+                        protocol="SYS",
+                        metadata={"new_level": threat_level}
+                    ))
+                return {"status": "success", "level": threat_level}
+                
+            if method == "POST" and action_type == "action":
+                action = body.get("action")
+                if action == "pause":
+                    device.status = "PAUSED"
+                elif action == "isolate":
+                    device.status = "ISOLATED" # Visual status
+                    if hasattr(device, "interfaces"):
+                        for intf in device.interfaces:
+                            intf.status = "down"
+                elif action == "reconnect":
+                    device.status = "ONLINE"
+                    if hasattr(device, "interfaces"):
+                        for intf in device.interfaces:
+                            intf.status = "up"
+                elif action == "shutdown":
+                    device.status = "OFFLINE"
+                    
+                self.state_manager.save()
+                
+                if getattr(device, "network", None):
+                    from backend.core.event import Event
+                    device.network.add_event(Event(
+                        type="CONTAINMENT_ACTION",
+                        severity="CRITICAL",
+                        source="SOC",
+                        destination=device.name,
+                        protocol="SYS",
+                        metadata={"action": action}
+                    ))
+                    
+                return {"status": "success", "action": action}
+                
+        return {"error": "SOC endpoint not found"}, 404
 
     def _handle_ncm(self, method, resource, body):
 
@@ -897,7 +987,8 @@ class API:
         result = {
             "name": device.name,
             "type": device_type,
-            "status": getattr(device, "status", "OFFLINE")
+            "status": getattr(device, "status", "OFFLINE"),
+            "soc_threat_level": getattr(device, "soc_threat_level", "Normal")
         }
 
         # Interfaces

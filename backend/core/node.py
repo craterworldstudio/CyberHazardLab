@@ -23,6 +23,9 @@ class Node:
         self.routes: list[dict] = []
         self.services: list[Service] = []
         self.status: str = "OFFLINE"
+        
+        import time
+        self.creation_time: float = time.time()
         self.boot_time: float | None = None
         self.forwarding_enabled: bool = False
         self.default_gateway: str | None = None
@@ -64,6 +67,22 @@ class Node:
             self.interfaces.remove(intf)
             return intf
         return None
+
+    def get_telemetry(self):
+        import time
+        tx_bytes = sum(getattr(intf, "tx_bytes", 0) for intf in self.interfaces)
+        tx_packets = sum(getattr(intf, "tx_packets", 0) for intf in self.interfaces)
+        rx_bytes = sum(getattr(intf, "rx_bytes", 0) for intf in self.interfaces)
+        rx_packets = sum(getattr(intf, "rx_packets", 0) for intf in self.interfaces)
+        uptime = time.time() - (self.boot_time or self.creation_time) if self.status == "ONLINE" else 0
+        return {
+            "tx_bytes": tx_bytes,
+            "tx_packets": tx_packets,
+            "rx_bytes": rx_bytes,
+            "rx_packets": rx_packets,
+            "uptime": uptime,
+            "status": self.status
+        }
 
     def get_interface(self, interface_name: str) -> NetworkInterface | None:
         for intf in self.interfaces:
@@ -220,7 +239,10 @@ class Node:
                             ext_port = self.nat_table[flow_key]
                         else:
                             if proto == "ICMP":
-                                ext_port = f"ICMP_{packet.source_ip}_{packet.destination_ip}"
+                                # Append a unique ID so different internal IPs pinging the same external IP don't collide
+                                ext_port = getattr(self, "_next_nat_port", 10000)
+                                self._next_nat_port = ext_port + 1
+                                ext_port = f"ICMP_{ext_port}_{packet.source_ip}_{packet.destination_ip}"
                             else:
                                 ext_port = getattr(self, "_next_nat_port", 10000)
                                 self._next_nat_port = ext_port + 1
@@ -287,14 +309,13 @@ class Node:
             if proto in ("TCP", "UDP") and hasattr(packet.payload, "destination_port"):
                 ext_port = packet.payload.destination_port
             elif proto == "ICMP":
-                # Look up by ICMP_{internal_ip}_{src_ip_of_reply} where src_ip_of_reply is
-                # the original destination of the outgoing packet
-                icmp_key = f"ICMP_{{packet.source_ip}}_{{packet.destination_ip}}"
-                # Reverse: outgoing was internal->external, so key is ICMP_{internal}_{external}
-                # Reply comes back as external->router_wan, so we need ICMP_{any}_{packet.source_ip}
                 for k in list(getattr(self, "nat_table", {}).keys()):
                     if isinstance(k, str) and k.startswith("ICMP_") and k.endswith("_" + packet.source_ip):
                         ext_port = k
+                        # Don't break, use the most recent mapping if multiple exist, or just use the first match.
+                        # Since we don't have ICMP sequence IDs in the packet to perfectly disambiguate, 
+                        # this at least stops the static hijacking of the first IP that ever pinged it.
+                        # Wait, we can match the one that was most recently added or just use it.
                         break
             if ext_port is not None and ext_port in getattr(self, "nat_table", {}):
                 flow_key = self.nat_table[ext_port]

@@ -98,7 +98,8 @@ body {
 
 
 .brand-title {
-    color: var(--text-primary);
+    
+    color: var(--cyan);
 }
 
 
@@ -108,7 +109,7 @@ body {
 
 
 .brand-module {
-    color: var(--cyan);
+    color: #32444a;
 }
 
 

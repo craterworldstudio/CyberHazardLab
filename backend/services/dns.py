@@ -70,7 +70,10 @@ class DNSServerDaemon(ServiceDaemon):
                 reachable = False
                 if orchestrator and hasattr(orchestrator, 'ping'):
                     try:
-                        result = orchestrator.ping(self.host, target, payload='dns_health', ttl=64)
+                        resolved_target = self._resolve(target.upper(), network) if rec.get('type', 'A').upper() == 'CNAME' else target
+                        if not resolved_target:
+                            resolved_target = target
+                        result = orchestrator.ping(self.host, resolved_target, payload='dns_health', ttl=64)
                         # result is dict with {"type": "ECHO_REPLY", ...} or None
                         if isinstance(result, dict) and result.get("type") == "ECHO_REPLY":
                             reachable = True
