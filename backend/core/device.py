@@ -6,6 +6,7 @@ class DeviceType(Enum):
     # Standard Workstations
     PC = "pc"
     LAPTOP = "laptop"
+    ACCESSPOINT = "access_point"
     
     # Servers & Storage
     SERVER = "server"

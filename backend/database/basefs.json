@@ -1,0 +1,36 @@
+{
+  "root": {
+    "bin": {
+      "ls": [],
+      "cat": [],
+      "mkdir": [],
+      "touch": [],
+      "rm": [],
+      "scp": [],
+      "pwd": [],
+      "tree": []
+    },
+    "home": {
+      "guest": {
+        "Desktop": {},
+        "Documents": {
+          "welcome.txt": []
+        }
+      },
+      "admin": {
+        "keys": {
+          "id_rsa": []
+        }
+      }
+    },
+    "etc": {
+      "config": {},
+      "hosts": []
+    },
+    "var": {
+      "log": {
+        "syslog": []
+      }
+    }
+  }
+}

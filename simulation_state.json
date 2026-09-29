@@ -1,0 +1,759 @@
+{
+    "version": 1,
+    "simulation": {
+        "devices": [
+            {
+                "name": "Google DHCP Server",
+                "type": "server",
+                "status": "ONLINE",
+                "soc_threat_level": "Normal",
+                "default_gateway": "8.8.8.5"
+            },
+            {
+                "name": "Worker PC 1",
+                "type": "pc",
+                "status": "ONLINE",
+                "soc_threat_level": "Normal",
+                "default_gateway": "8.8.8.5"
+            },
+            {
+                "name": "Worker PC 2",
+                "type": "pc",
+                "status": "ONLINE",
+                "soc_threat_level": "Normal",
+                "default_gateway": "8.8.8.5",
+                "dns_server": "8.8.8.8"
+            },
+            {
+                "name": "Wolf's PC",
+                "type": "pc",
+                "status": "ONLINE",
+                "soc_threat_level": "Normal",
+                "default_gateway": "10.0.0.5",
+                "dns_server": "10.0.0.2"
+            },
+            {
+                "name": "Friend's PC",
+                "type": "pc",
+                "status": "ONLINE",
+                "soc_threat_level": "Normal",
+                "default_gateway": "10.0.0.5",
+                "dns_server": "10.0.0.2"
+            },
+            {
+                "name": "Wolf's DHCP Server",
+                "type": "server",
+                "status": "ONLINE",
+                "soc_threat_level": "Normal",
+                "default_gateway": "10.0.0.5"
+            },
+            {
+                "name": "NAS-01",
+                "type": "nas",
+                "status": "ONLINE",
+                "soc_threat_level": "Normal",
+                "default_gateway": "10.0.0.5"
+            },
+            {
+                "name": "Google's Switch",
+                "type": "switch",
+                "status": "ONLINE",
+                "soc_threat_level": "Normal",
+                "auto_mac_learning": "inherit",
+                "mac_aging_time": 300,
+                "stp_enabled": false
+            },
+            {
+                "name": "Wolf's Switch",
+                "type": "switch",
+                "status": "ONLINE",
+                "soc_threat_level": "Normal",
+                "auto_mac_learning": "inherit",
+                "mac_aging_time": 300,
+                "stp_enabled": false
+            },
+            {
+                "name": "Google's Router",
+                "type": "router",
+                "status": "ONLINE",
+                "soc_threat_level": "Normal",
+                "ip_forwarding": true,
+                "auto_routes": "inherit",
+                "nat_enabled": false,
+                "default_gateway": "8.8.7.4"
+            },
+            {
+                "name": "Wolf's Router",
+                "type": "router",
+                "status": "ONLINE",
+                "soc_threat_level": "Normal",
+                "ip_forwarding": true,
+                "auto_routes": "inherit",
+                "nat_enabled": false,
+                "default_gateway": "10.0.1.4"
+            },
+            {
+                "name": "ISP Router",
+                "type": "router",
+                "status": "ONLINE",
+                "soc_threat_level": "Normal",
+                "ip_forwarding": true,
+                "auto_routes": false,
+                "nat_enabled": false,
+                "default_gateway": "8.8.8.5"
+            }
+        ],
+        "links": [
+            {
+                "endpoint_a": "Google DHCP Server",
+                "endpoint_b": "Google's Switch"
+            },
+            {
+                "endpoint_a": "Worker PC 2",
+                "endpoint_b": "Google's Switch"
+            },
+            {
+                "endpoint_a": "Worker PC 1",
+                "endpoint_b": "Google's Switch"
+            },
+            {
+                "endpoint_a": "Google's Router",
+                "endpoint_b": "Google's Switch"
+            },
+            {
+                "endpoint_a": "Friend's PC",
+                "endpoint_b": "Wolf's Switch"
+            },
+            {
+                "endpoint_a": "Wolf's PC",
+                "endpoint_b": "Wolf's Switch"
+            },
+            {
+                "endpoint_a": "Wolf's DHCP Server",
+                "endpoint_b": "Wolf's Switch"
+            },
+            {
+                "endpoint_a": "Wolf's Router",
+                "endpoint_b": "Wolf's Switch"
+            },
+            {
+                "endpoint_a": "Wolf's Router",
+                "endpoint_b": "ISP Router"
+            },
+            {
+                "endpoint_a": "Google's Router",
+                "endpoint_b": "ISP Router"
+            },
+            {
+                "endpoint_a": "NAS-01",
+                "endpoint_b": "Wolf's Switch"
+            }
+        ],
+        "interfaces": {
+            "Google DHCP Server": [
+                {
+                    "name": "eth0",
+                    "mac": "02:75:71:ce:a8:e9",
+                    "ip": "8.8.8.8",
+                    "subnet": "8.8.8.0/24",
+                    "gateway": "8.8.8.5"
+                }
+            ],
+            "Worker PC 1": [
+                {
+                    "name": "eth0",
+                    "mac": "02:c5:73:87:89:11",
+                    "ip": "8.8.8.11",
+                    "subnet": "8.8.8.0/24",
+                    "gateway": "8.8.8.5"
+                }
+            ],
+            "Worker PC 2": [
+                {
+                    "name": "eth0",
+                    "mac": "02:3e:ba:c5:ed:39",
+                    "ip": "8.8.8.10",
+                    "subnet": "8.8.8.0/24",
+                    "gateway": "8.8.8.5"
+                }
+            ],
+            "Wolf's PC": [
+                {
+                    "name": "eth0",
+                    "mac": "02:b4:8b:c2:69:c0",
+                    "ip": "0.0.0.0",
+                    "subnet": "10.0.0.0/24",
+                    "gateway": "10.0.0.5"
+                }
+            ],
+            "Friend's PC": [
+                {
+                    "name": "eth0",
+                    "mac": "02:56:84:20:11:19",
+                    "ip": "10.0.0.11",
+                    "subnet": "10.0.0.0/24",
+                    "gateway": "10.0.0.5"
+                }
+            ],
+            "Wolf's DHCP Server": [
+                {
+                    "name": "eth0",
+                    "mac": "02:9d:b1:d7:79:28",
+                    "ip": "10.0.0.2",
+                    "subnet": "10.0.0.0/24",
+                    "gateway": "10.0.0.5"
+                }
+            ],
+            "NAS-01": [
+                {
+                    "name": "eth0",
+                    "mac": "02:1b:37:4c:37:ed",
+                    "ip": "10.0.0.13",
+                    "subnet": "10.0.0.0/24",
+                    "gateway": "10.0.0.5"
+                }
+            ],
+            "Google's Router": [
+                {
+                    "name": "eth0",
+                    "mac": "02:de:48:c0:75:1e",
+                    "ip": "8.8.8.5",
+                    "subnet": "8.8.8.0/24",
+                    "gateway": "8.8.7.4"
+                },
+                {
+                    "name": "eth1",
+                    "mac": "02:a5:87:9b:1c:bb",
+                    "ip": "8.8.7.5",
+                    "subnet": "8.8.7.0/24",
+                    "gateway": "8.8.7.4"
+                }
+            ],
+            "Wolf's Router": [
+                {
+                    "name": "eth0",
+                    "mac": "02:d5:37:bb:85:2c",
+                    "ip": "10.0.0.5",
+                    "subnet": "10.0.0.0/24",
+                    "gateway": "10.0.1.4"
+                },
+                {
+                    "name": "eth1",
+                    "mac": "02:ff:e7:db:05:f3",
+                    "ip": "10.0.1.5",
+                    "subnet": "10.0.1.0/24",
+                    "gateway": "10.0.1.4"
+                }
+            ],
+            "ISP Router": [
+                {
+                    "name": "eth0",
+                    "mac": "02:a0:bd:01:c3:ad",
+                    "ip": "10.0.1.4",
+                    "subnet": "10.0.1.0/24",
+                    "gateway": "8.8.8.5"
+                },
+                {
+                    "name": "eth1",
+                    "mac": "02:d0:c5:5f:46:96",
+                    "ip": "8.8.7.4",
+                    "subnet": "8.8.7.0/24",
+                    "gateway": "8.8.8.5"
+                }
+            ]
+        },
+        "subnets": {},
+        "routes": {
+            "Google's Router": [
+                {
+                    "destination": "8.8.8.0/24",
+                    "interface": "eth0",
+                    "next_hop": null
+                },
+                {
+                    "destination": "8.8.7.0/24",
+                    "interface": "eth1",
+                    "next_hop": null
+                },
+                {
+                    "destination": "0.0.0.0/0",
+                    "interface": "eth1",
+                    "next_hop": "8.8.7.4"
+                }
+            ],
+            "Wolf's Router": [
+                {
+                    "destination": "10.0.0.0/24",
+                    "interface": "eth0",
+                    "next_hop": null
+                },
+                {
+                    "destination": "10.0.1.0/24",
+                    "interface": "eth1",
+                    "next_hop": null
+                },
+                {
+                    "destination": "0.0.0.0/0",
+                    "interface": "eth1",
+                    "next_hop": "10.0.1.4"
+                }
+            ],
+            "ISP Router": [
+                {
+                    "destination": "10.0.1.0/24",
+                    "interface": "eth0",
+                    "next_hop": null
+                },
+                {
+                    "destination": "8.8.7.0/24",
+                    "interface": "eth1",
+                    "next_hop": null
+                },
+                {
+                    "destination": "0.0.0.0/0",
+                    "interface": "eth1",
+                    "next_hop": "8.8.8.5"
+                },
+                {
+                    "destination": "8.8.8.0/24",
+                    "interface": "eth1",
+                    "next_hop": "8.8.7.5"
+                },
+                {
+                    "destination": "10.0.0.0/24",
+                    "interface": "eth0",
+                    "next_hop": "10.0.1.5"
+                }
+            ]
+        },
+        "mac_tables": {
+            "Google's Switch": {
+                "02:3e:ba:c5:ed:39": 2,
+                "02:c5:73:87:89:11": 3,
+                "02:75:71:ce:a8:e9": 1,
+                "02:de:48:c0:75:1e": 4
+            },
+            "Wolf's Switch": {
+                "02:56:84:20:11:19": 1,
+                "02:b4:8b:c2:69:c0": 2,
+                "02:9d:b1:d7:79:28": 3,
+                "02:d5:37:bb:85:2c": 4,
+                "02:1b:37:4c:37:ed": 5
+            }
+        },
+        "arp_caches": {
+            "Google DHCP Server": {
+                "eth0": {
+                    "8.8.8.5": "02:de:48:c0:75:1e",
+                    "8.8.8.10": "02:3e:ba:c5:ed:39"
+                }
+            },
+            "Worker PC 2": {
+                "eth0": {
+                    "8.8.8.8": "02:75:71:ce:a8:e9",
+                    "8.8.8.5": "02:de:48:c0:75:1e"
+                }
+            },
+            "Wolf's PC": {
+                "eth0": {
+                    "10.0.0.5": "02:d5:37:bb:85:2c",
+                    "10.0.0.2": "02:9d:b1:d7:79:28"
+                }
+            },
+            "Friend's PC": {
+                "eth0": {
+                    "10.0.0.5": "02:d5:37:bb:85:2c",
+                    "10.0.0.2": "02:9d:b1:d7:79:28"
+                }
+            },
+            "Wolf's DHCP Server": {
+                "eth0": {
+                    "10.0.0.5": "02:d5:37:bb:85:2c",
+                    "10.0.0.12": "02:b4:8b:c2:69:c0",
+                    "10.0.0.11": "02:56:84:20:11:19"
+                }
+            },
+            "Google's Router": {
+                "eth0": {
+                    "8.8.8.8": "02:75:71:ce:a8:e9",
+                    "8.8.7.4": "02:d0:c5:5f:46:96",
+                    "8.8.8.10": "02:3e:ba:c5:ed:39"
+                },
+                "eth1": {
+                    "8.8.8.8": "02:75:71:ce:a8:e9",
+                    "8.8.7.4": "02:d0:c5:5f:46:96",
+                    "8.8.8.10": "02:3e:ba:c5:ed:39"
+                }
+            },
+            "Wolf's Router": {
+                "eth0": {
+                    "10.0.0.12": "02:b4:8b:c2:69:c0",
+                    "10.0.0.2": "02:9d:b1:d7:79:28",
+                    "10.0.1.4": "02:a0:bd:01:c3:ad",
+                    "10.0.0.11": "02:56:84:20:11:19"
+                },
+                "eth1": {
+                    "10.0.0.12": "02:b4:8b:c2:69:c0",
+                    "10.0.0.2": "02:9d:b1:d7:79:28",
+                    "10.0.1.4": "02:a0:bd:01:c3:ad",
+                    "10.0.0.11": "02:56:84:20:11:19"
+                }
+            },
+            "ISP Router": {
+                "eth0": {
+                    "8.8.7.5": "02:a5:87:9b:1c:bb",
+                    "10.0.1.5": "02:ff:e7:db:05:f3"
+                },
+                "eth1": {
+                    "8.8.7.5": "02:a5:87:9b:1c:bb",
+                    "10.0.1.5": "02:ff:e7:db:05:f3"
+                }
+            }
+        },
+        "services": {
+            "Google DHCP Server": [
+                {
+                    "name": "DHCP",
+                    "protocol": "UDP",
+                    "port": 67,
+                    "status": "running",
+                    "config": {
+                        "scopes": [
+                            {
+                                "subnet": "8.8.8.0",
+                                "pool_start": "8.8.8.10",
+                                "pool_end": "8.8.8.255",
+                                "gateway": "8.8.8.5",
+                                "dns": "8.8.8.8",
+                                "domain_name": "dns.google",
+                                "lease_time": 86400
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "DNS",
+                    "protocol": "UDP",
+                    "port": 53,
+                    "status": "running",
+                    "config": {
+                        "records": [
+                            {
+                                "type": "A",
+                                "name": "dns.google",
+                                "target": "8.8.8.8",
+                                "status": "ONLINE"
+                            },
+                            {
+                                "type": "A",
+                                "name": "dns.lab.wolf",
+                                "target": "10.0.0.2",
+                                "status": "ONLINE"
+                            },
+                            {
+                                "type": "CNAME",
+                                "name": "d.l.w",
+                                "target": "dns.lab.wolf",
+                                "status": "ONLINE"
+                            }
+                        ],
+                        "health_interval": 30
+                    }
+                },
+                {
+                    "name": "HTTP",
+                    "protocol": "TCP",
+                    "port": 80,
+                    "status": "running",
+                    "config": {
+                        "endpoints": {
+                            "/health": "{\"status\": \"ok\", \"version\": \"1.0\"}",
+                            "/ready": "{\"status\": \"ready\"}",
+                            "/live": "{\"status\": \"alive\"}",
+                            "/metrics": "{\"requests\": 100, \"errors\": 0}",
+                            "/": "{\"yes\"}"
+                        }
+                    }
+                }
+            ],
+            "Worker PC 1": [
+                {
+                    "name": "DHCP_CLIENT",
+                    "protocol": "UDP",
+                    "port": 68,
+                    "status": "running",
+                    "config": {
+                        "interface": "eth0",
+                        "req_hostname": true,
+                        "accept_dns": true
+                    }
+                }
+            ],
+            "Worker PC 2": [
+                {
+                    "name": "DHCP_CLIENT",
+                    "protocol": "UDP",
+                    "port": 68,
+                    "status": "running",
+                    "config": {
+                        "interface": "eth0",
+                        "req_hostname": true,
+                        "accept_dns": true
+                    }
+                },
+                {
+                    "name": "SSH",
+                    "protocol": "TCP",
+                    "port": 22,
+                    "status": "running",
+                    "config": {}
+                },
+                {
+                    "name": "DNS_CLIENT",
+                    "protocol": "UDP",
+                    "port": 53,
+                    "status": "running",
+                    "config": {
+                        "nameserver": "8.8.8.8"
+                    }
+                }
+            ],
+            "Wolf's PC": [
+                {
+                    "name": "DHCP_CLIENT",
+                    "protocol": "UDP",
+                    "port": 68,
+                    "status": "running",
+                    "config": {
+                        "interface": "eth0",
+                        "req_hostname": true,
+                        "accept_dns": true
+                    }
+                },
+                {
+                    "name": "DNS_CLIENT",
+                    "protocol": "UDP",
+                    "port": 53,
+                    "status": "running",
+                    "config": {
+                        "nameserver": "10.0.0.2"
+                    }
+                },
+                {
+                    "name": "SSH_CLIENT",
+                    "protocol": "TCP",
+                    "port": 0,
+                    "status": "running",
+                    "config": {
+                        "default_port": 22,
+                        "username": "root",
+                        "timeout": 10
+                    }
+                }
+            ],
+            "Friend's PC": [
+                {
+                    "name": "DHCP_CLIENT",
+                    "protocol": "UDP",
+                    "port": 68,
+                    "status": "running",
+                    "config": {
+                        "interface": "eth0",
+                        "req_hostname": true,
+                        "accept_dns": true
+                    }
+                },
+                {
+                    "name": "DNS_CLIENT",
+                    "protocol": "UDP",
+                    "port": 53,
+                    "status": "running",
+                    "config": {
+                        "nameserver": "10.0.0.2"
+                    }
+                }
+            ],
+            "Wolf's DHCP Server": [
+                {
+                    "name": "DHCP",
+                    "protocol": "UDP",
+                    "port": 67,
+                    "status": "running",
+                    "config": {
+                        "subnet": "10.0.0.0",
+                        "pool_start": "10.0.0.10",
+                        "pool_end": "10.0.0.255",
+                        "gateway": "10.0.0.5",
+                        "dns": "10.0.0.2",
+                        "domain_name": "local",
+                        "lease_time": 86400,
+                        "scopes": []
+                    }
+                },
+                {
+                    "name": "DNS",
+                    "protocol": "UDP",
+                    "port": 53,
+                    "status": "running",
+                    "config": {
+                        "records": [
+                            {
+                                "type": "A",
+                                "name": "dns.google",
+                                "target": "8.8.8.8",
+                                "status": "ONLINE"
+                            },
+                            {
+                                "type": "CNAME",
+                                "name": "d.g",
+                                "target": "dns.google",
+                                "status": "ONLINE"
+                            }
+                        ],
+                        "health_interval": 30
+                    }
+                }
+            ],
+            "NAS-01": [
+                {
+                    "name": "SSH",
+                    "protocol": "TCP",
+                    "port": 22,
+                    "status": "running",
+                    "config": {}
+                },
+                {
+                    "name": "DHCP_CLIENT",
+                    "protocol": "UDP",
+                    "port": 68,
+                    "status": "running",
+                    "config": {}
+                },
+                {
+                    "name": "DNS_CLIENT",
+                    "protocol": "UDP",
+                    "port": 53,
+                    "status": "running",
+                    "config": {}
+                },
+                {
+                    "name": "ECHO",
+                    "protocol": "TCP",
+                    "port": 7,
+                    "status": "running",
+                    "config": {}
+                }
+            ],
+            "Wolf's Router": [
+                {
+                    "name": "SSH",
+                    "protocol": "TCP",
+                    "port": 22,
+                    "status": "running",
+                    "config": {}
+                }
+            ]
+        }
+    },
+    "layout": {
+        "RUT-02": {
+            "x": 305,
+            "y": 393
+        },
+        "Wolf DHCP Server": {
+            "x": 415,
+            "y": 17
+        },
+        "Wolf PC": {
+            "x": 83,
+            "y": 94
+        },
+        "Friend PC": {
+            "x": 637,
+            "y": 160
+        },
+        "Wolf Router": {
+            "x": 393,
+            "y": 102
+        },
+        "Google's Router": {
+            "x": 476,
+            "y": 261
+        },
+        "Google DHCP Server": {
+            "x": 137,
+            "y": 256
+        },
+        "Google's Switch": {
+            "x": 321,
+            "y": 383
+        },
+        "Worker PC 1": {
+            "x": 529,
+            "y": 531
+        },
+        "Worker PC 2": {
+            "x": 217,
+            "y": 545
+        },
+        "Wolf's Switch": {
+            "x": 1055,
+            "y": 380
+        },
+        "HOST-05": {
+            "x": 469,
+            "y": 152
+        },
+        "Wolf's PC": {
+            "x": 834,
+            "y": 472
+        },
+        "HOST-08": {
+            "x": 248,
+            "y": 110
+        },
+        "Friend's PC": {
+            "x": 1190,
+            "y": 544
+        },
+        "Wolf's Router": {
+            "x": 982,
+            "y": 203
+        },
+        "Wolf's DHCP Server": {
+            "x": 1264,
+            "y": 326
+        },
+        "ISP Router": {
+            "x": 692,
+            "y": 62
+        },
+        "NAS-01": {
+            "x": 805.5,
+            "y": 342.75
+        },
+        "AP-01": {
+            "x": 716.75,
+            "y": 636.5
+        }
+    },
+    "renames": {
+        "RUT-03": "Google's Router",
+        "SERV-02": "Google DHCP Server",
+        "SWT-02": "Google's Switch",
+        "HOST-04": "Worker PC 1",
+        "HOST-03": "Worker PC 2",
+        "HOST-06": "Wolf's PC",
+        "HOST-07": "Friend's PC",
+        "RUT-04": "Wolf's Router",
+        "SERV-03": "Wolf's DHCP Server",
+        "SWT-03": "Wolf's Switch",
+        "RUT-05": "ISP Router",
+        "SERV-01": "Wolf DHCP Server",
+        "HOST-02": "Wolf PC",
+        "HOST-01": "Friend PC",
+        "RUT-01": "Wolf Router",
+        "SWT-01": "Wolf's Switch"
+    },
+    "soc_state": {}
+}

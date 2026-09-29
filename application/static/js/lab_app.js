@@ -27,6 +27,15 @@ const CHL = {
             },
             icon: "/static/assets/SERV_off.png" // fallback
         },
+        NAS: {
+            prefix: "NAS",
+            icons: {
+                OFFLINE: "/static/assets/NAS_off.png",
+                ONLINE: "/static/assets/NAS_on.png",
+                ERROR: "/static/assets/NAS_Err.png"
+            },
+            icon: "/static/assets/NAS_off.png"
+        },
         SWITCH: {
             prefix: "SWT",
             icons: {
@@ -35,6 +44,15 @@ const CHL = {
                 ERROR: "/static/assets/SWITCH_Err.png"
             },
             icon: "/static/assets/SWITCH_off.png" // fallback
+        },
+        ACCESSPOINT: {
+            prefix: "AP",
+            icons: {
+                OFFLINE: "/static/assets/ACCESSPOINT_off.png",
+                ONLINE: "/static/assets/ACCESSPOINT_on.png",
+                ERROR: "/static/assets/ACCESSPOINT_Err.png"
+            },
+            icon: "/static/assets/ACCESSPOINT_off.png"
         },
         ROUTER: {
             prefix: "RUT",
@@ -1424,7 +1442,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const termPrompt = win.querySelector(".ncm-terminal-prompt");
             if (termPrompt) {
                 termPrompt.id = `term-prompt-${newId}`;
-                termPrompt.innerText = `root@${newId.toLowerCase()}:~$`;
+                termPrompt.innerText = `user@${newId.toLowerCase()}:~$`;
             }
             const termInput = win.querySelector(".ncm-terminal-input");
             if (termInput) {

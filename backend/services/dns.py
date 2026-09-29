@@ -1,30 +1,122 @@
 import threading
 import traceback
+import json
 from .base import ServiceDaemon
 
 
 class DNSServerDaemon(ServiceDaemon):
 
     def _get_config(self):
-        # 1. From active service model on the host
         if hasattr(self.host, "services"):
             for s in self.host.services:
                 if s.name.upper() in ("DNS", "DNS_SERVER") and getattr(s, "config", None):
                     return s.config
-        # 2. From saved _service_model reference
         if hasattr(self, "_service_model") and getattr(self._service_model, "config", None):
             return self._service_model.config
-        # 3. Fallback to self.config
         return getattr(self, "config", {}) or {}
 
+    def _sync_to_vfs(self):
+        # Write config records into a simulated BIND zone file on VFS
+        if not hasattr(self.host, "vfs"):
+            return
+            
+        vfs = self.host.vfs
+        etc_bind = vfs.path_to_tree("/etc/bind")
+        if not etc_bind:
+            vfs.curr_fol = vfs.tree
+            etc = vfs.get_item("etc")
+            if not etc:
+                from backend.database.fs import Folder
+                etc = Folder("etc")
+                etc.parent = vfs.tree
+                etc.path = "/etc"
+                vfs.tree.add(etc)
+            vfs.curr_fol = etc
+            bind = vfs.get_item("bind")
+            if not bind:
+                from backend.database.fs import Folder
+                bind = Folder("bind")
+                bind.parent = etc
+                bind.path = "/etc/bind"
+                etc.add(bind)
+            etc_bind = bind
+
+        cfg = self._get_config()
+        records = cfg.get("records", [])
+        
+        zone_content = "; BIND data file for local zone\\n$TTL 604800\\n"
+        zone_content += "@   IN  SOA ns.local. admin.local. ( 2 604800 86400 2419200 604800 )\\n"
+        
+        for rec in records:
+            if isinstance(rec, dict):
+                name = rec.get("name", "@")
+                rtype = rec.get("type", "A").upper()
+                target = rec.get("target", "")
+                priority = rec.get("priority", "")
+                port = rec.get("port", "")
+                
+                if rtype == "SRV":
+                    zone_content += f"{name}\\tIN\\t{rtype}\\t{priority} 100 {port} {target}\\n"
+                else:
+                    zone_content += f"{name}\\tIN\\t{rtype}\\t{target}\\n"
+                    
+        # Check TSIG key
+        if cfg.get("tsig_key"):
+            zone_content += f"\\n; TSIG Key Required for AXFR: {cfg['tsig_key']}\\n"
+            
+        from backend.database.fs import File
+        vfs.curr_fol = etc_bind
+        db_file = vfs.get_item("db.local")
+        if not db_file:
+            db_file = File("db.local")
+            db_file.set_path(etc_bind.path)
+            etc_bind.add(db_file)
+        db_file.contents = zone_content
+
+    def _read_from_vfs(self):
+        # Returns parsed records from the zone file
+        if not hasattr(self.host, "vfs"):
+            return []
+            
+        vfs = self.host.vfs
+        db_file = vfs.path_to_tree("/etc/bind/db.local")
+        if not db_file or not hasattr(db_file, "contents"):
+            return []
+            
+        records = []
+        lines = db_file.contents.split("\\n")
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith(";") or line.startswith("$") or line.startswith("@"):
+                continue
+            parts = [p for p in line.split() if p]
+            if len(parts) >= 4 and parts[1] == "IN":
+                name = parts[0]
+                rtype = parts[2]
+                if rtype == "SRV":
+                    target = parts[-1]
+                    port = parts[-2]
+                    records.append({"name": name, "type": rtype, "target": target, "port": port})
+                else:
+                    target = parts[3]
+                    records.append({"name": name, "type": rtype, "target": target})
+        return records
+        
+    def _get_zone_file_content(self):
+        if not hasattr(self.host, "vfs"):
+            return ""
+        db_file = self.host.vfs.path_to_tree("/etc/bind/db.local")
+        if not db_file:
+            return ""
+        return getattr(db_file, "contents", "")
+
     def on_start(self, service_model):
-        """Kick off the health-check loop when the service starts."""
         self._service_model = service_model
         self._stop_event = threading.Event()
+        self._sync_to_vfs()
         self._schedule_health_check(delay=1)
 
     def on_stop(self, service_model):
-        """Cancel any pending health-check timer."""
         if hasattr(self, '_stop_event'):
             self._stop_event.set()
         if hasattr(self, '_health_timer') and self._health_timer is not None:
@@ -32,8 +124,8 @@ class DNSServerDaemon(ServiceDaemon):
             self._health_timer = None
 
     def reload_config(self, cfg):
-        """Called when config is saved. Reschedule health check immediately."""
         self.config = cfg
+        self._sync_to_vfs()
         if hasattr(self, '_stop_event') and not self._stop_event.is_set():
             if hasattr(self, '_health_timer') and self._health_timer is not None:
                 self._health_timer.cancel()
@@ -54,17 +146,18 @@ class DNSServerDaemon(ServiceDaemon):
         if hasattr(self, '_stop_event') and self._stop_event.is_set():
             return
         try:
-            cfg = self._get_config()
-            records = cfg.get('records', [])
+            records = self._read_from_vfs()
             network = getattr(self.host, 'network', None)
             orchestrator = getattr(network, 'orchestrator', None)
 
-            for rec in records:
-                if not isinstance(rec, dict):
-                    continue
+            # Update status in the original config model so UI can see it
+            cfg = self._get_config()
+            cfg_records = cfg.get("records", [])
+
+            for idx, rec in enumerate(records):
                 target = rec.get('target', '').strip()
                 if not target:
-                    rec['status'] = 'OFFLINE'
+                    if idx < len(cfg_records): cfg_records[idx]['status'] = 'OFFLINE'
                     continue
 
                 reachable = False
@@ -74,7 +167,6 @@ class DNSServerDaemon(ServiceDaemon):
                         if not resolved_target:
                             resolved_target = target
                         result = orchestrator.ping(self.host, resolved_target, payload='dns_health', ttl=64)
-                        # result is dict with {"type": "ECHO_REPLY", ...} or None
                         if isinstance(result, dict) and result.get("type") == "ECHO_REPLY":
                             reachable = True
                         elif result is not None and 'SUCCESS' in str(result).upper():
@@ -83,7 +175,6 @@ class DNSServerDaemon(ServiceDaemon):
                         reachable = False
 
                 if not reachable and orchestrator:
-                    # Secondary reachability check: check if any device interface has this target IP
                     all_devs = (list(getattr(orchestrator, 'hosts', {}).values()) +
                                 list(getattr(orchestrator, 'routers', {}).values()))
                     for dev in all_devs:
@@ -94,41 +185,37 @@ class DNSServerDaemon(ServiceDaemon):
                         if reachable:
                             break
 
-                rec['status'] = 'ONLINE' if reachable else 'UNRESPONSIVE'
+                if idx < len(cfg_records): 
+                    cfg_records[idx]['status'] = 'ONLINE' if reachable else 'UNRESPONSIVE'
         except Exception:
             traceback.print_exc()
         finally:
-            # Re-schedule for the next interval
             self._schedule_health_check()
 
-    def _resolve(self, query: str, network, depth=0) -> str:
+    def _resolve(self, query: str, network, rtype="A", depth=0) -> str:
         if depth > 10:
-            return None # Prevent infinite loop
+            return None 
+            
+        records = self._read_from_vfs()
         
-        cfg = self._get_config()
-        if 'records' in cfg:
-            records = cfg['records']
-            if isinstance(records, list):
-                for rec in records:
-                    if isinstance(rec, dict) and rec.get('name', '').strip().upper() == query:
-                        rtype = rec.get('type', 'A').upper()
-                        target = rec.get('target', '').strip()
-                        if rtype == 'CNAME':
-                            return self._resolve(target.upper(), network, depth + 1)
-                        return target
-            elif isinstance(records, str):
-                for line in records.split('\n'):
-                    line = line.strip()
-                    if line and '=' in line:
-                        host, ip = line.split('=', 1)
-                        if host.strip().upper() == query:
-                            return ip.strip()
-            elif isinstance(records, dict):
-                for host, ip in records.items():
-                    if host.upper() == query:
-                        return ip
+        for rec in records:
+            if rec.get('name', '').strip().upper() == query:
+                rec_type = rec.get('type', 'A').upper()
+                target = rec.get('target', '').strip()
+                
+                # Handling generic A or specific record queries
+                if rec_type == 'CNAME' and rtype in ("A", "CNAME"):
+                    return self._resolve(target.upper(), network, rtype, depth + 1)
+                elif rec_type == rtype or (rtype == "A" and rec_type in ("A", "CNAME")):
+                    if rec_type == "SRV":
+                        return f"{target}:{rec.get('port', '0')}"
+                    return target
 
-        # Fallback to device names
+        if rtype == "PTR":
+            for rec in records:
+                if rec.get("target") == query and rec.get("type") in ("A", "CNAME"):
+                    return rec.get("name")
+
         all_devices = list(network.orchestrator.hosts.values()) + list(network.orchestrator.routers.values())
         for dev in all_devices:
             if dev.name.upper() == query:
@@ -151,21 +238,35 @@ class DNSServerDaemon(ServiceDaemon):
             return None
 
         try:
-            target_name = payload_str.upper()
+            # Payload format: "TYPE QUERY [TSIG_KEY]" or just "QUERY" (defaults to A)
+            parts = payload_str.split()
+            query_type = "A"
+            query_target = ""
+            tsig_key = None
+            
+            if len(parts) >= 2 and parts[0].upper() in ("A", "CNAME", "SRV", "PTR", "AXFR"):
+                query_type = parts[0].upper()
+                query_target = parts[1].upper()
+                if len(parts) >= 3:
+                    tsig_key = parts[2]
+            else:
+                query_target = parts[0].upper()
 
-            if target_name.startswith("GET ") or target_name.startswith("POST "):
-                return "DNS_ERROR: Invalid query."
+            if query_type == "AXFR":
+                cfg = self._get_config()
+                req_key = cfg.get("tsig_key")
+                if req_key and tsig_key != req_key:
+                    return "DNS_ERROR: AXFR Transfer Failed - Invalid or Missing TSIG Key"
+                return f"DNS_AXFR_RESPONSE:\\n{self._get_zone_file_content()}"
 
             network = connection.network
-            resolved_ip = self._resolve(target_name, network)
+            resolved = self._resolve(query_target, network, rtype=query_type)
             
-            if resolved_ip:
-                return f"DNS_RESPONSE: {payload_str} -> {resolved_ip}"
+            if resolved:
+                return f"DNS_RESPONSE: {query_type} {query_target} -> {resolved}"
             
-            return f"DNS_NXDOMAIN: '{payload_str}' not found."
+            return f"DNS_NXDOMAIN: '{query_target}' not found."
 
         except Exception as e:
             traceback.print_exc()
             return f"DNS_ERROR: {str(e)}"
-
-        return None

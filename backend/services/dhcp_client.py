@@ -157,6 +157,10 @@ class DHCPClientDaemon(ServiceDaemon):
                     intf.gateway = gateway
                     self.host.add_route("0.0.0.0/0", intf, next_hop=gateway)
 
+                # Sync the new IP Configuration back to the VFS
+                if hasattr(self.host, "_generate_system_files"):
+                    self.host._generate_system_files()
+
                 if self.host.network:
                     self.host.network.add_event(Event(
                         type="DHCP_ACK_RECEIVED",

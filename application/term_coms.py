@@ -2,6 +2,29 @@ import ipaddress
 import traceback
 import time
 
+def check_permission(item, user, mode):
+    if user == "root":
+        return True
+    
+    perms = getattr(item, "perms", "rw-rwxr--")
+    owner = getattr(item, "owner", "root")
+    group = getattr(item, "group", "root")
+    
+    # mode is 'r', 'w', or 'x'
+    # perms is rw-rwxr-- -> [0:3] owner, [3:6] group, [6:9] other
+    if len(perms) < 9:
+        return True
+        
+    idx = {'r': 0, 'w': 1, 'x': 2}.get(mode, 0)
+    
+    if user == owner:
+        return perms[idx] != '-'
+    # Basic group check (if user matches group name)
+    elif user == group:
+        return perms[3+idx] != '-'
+    else:
+        return perms[6+idx] != '-'
+
 class TerminalCommandHandler:
     def __init__(self, sim, ncm=None, state_manager=None):
         self.sim = sim
@@ -18,9 +41,12 @@ class TerminalCommandHandler:
         return None
 
     def get_prompt(self, device):
+        vfs = getattr(device, "vfs", None)
+        pwd = vfs.pwd() if vfs else "~"
         sessions = getattr(device, "_terminal_sessions", None)
+        local_user = getattr(device, 'current_user', 'root')
         if not sessions:
-            return f"root@{device.name.lower()}:~$ "
+            return f"{local_user}@{device.name.lower()}:[{pwd}]$ "
         curr = sessions[-1]
         if curr.get("state") == "AWAITING_PASSWORD":
             return f"{curr['user']}@{curr['remote_ip']}'s password: "
@@ -28,14 +54,98 @@ class TerminalCommandHandler:
             remote_dev = curr.get("remote_device")
             if remote_dev and getattr(remote_dev, "_terminal_sessions", None):
                 return self.get_prompt(remote_dev)
-            return f"{curr['user']}@{curr['remote_device_name'].lower()}:~$ "
-        return f"root@{device.name.lower()}:~$ "
-
+            
+            remote_vfs = getattr(remote_dev, "vfs", None) if remote_dev else None
+            remote_pwd = remote_vfs.pwd() if remote_vfs else "~"
+            return f"{curr['user']}@{curr['remote_device_name'].lower()}:[{remote_pwd}]$ "
+        return f"{local_user}@{device.name.lower()}:[{pwd}]$ "
     def execute(self, device, command_str):
+        sessions = getattr(device, "_terminal_sessions", None)
+        if sessions:
+            curr = sessions[-1]
+            if curr.get("state") == "AWAITING_NANO_INPUT":
+                if command_str.strip() == ":wq" or command_str.strip() == "EOF":
+                    vfs = getattr(device, "vfs", None)
+                    if vfs:
+                        from backend.database.fs import File
+                        filename = curr["file"]
+                        f = vfs.get_item(filename)
+                        if not f:
+                            f = File(filename)
+                            f.owner = getattr(device, "current_user", "root")
+                            f.group = getattr(device, "current_user", "root")
+                            f.set_path(vfs.curr_fol.path)
+                            vfs.curr_fol.add(f)
+                        
+                        f.contents = "\n".join(curr["content"])
+                    device._terminal_sessions.pop()
+                    return f"Saved {curr['file']}."
+                else:
+                    curr["content"].append(command_str)
+                    return ""
+                    
+        redirect_file = None
+        append_mode = False
+        if " >> " in command_str:
+            parts = command_str.split(" >> ", 1)
+            command_str = parts[0].strip()
+            redirect_file = parts[1].strip()
+            append_mode = True
+        elif " > " in command_str:
+            parts = command_str.split(" > ", 1)
+            command_str = parts[0].strip()
+            redirect_file = parts[1].strip()
+            append_mode = False
+
+        out = self._execute_inner(device, command_str)
+
+        if redirect_file and getattr(device, "vfs", None):
+            vfs = device.vfs
+            from backend.database.fs import File
+            f = vfs.get_item(redirect_file)
+            
+            if f:
+                if not check_permission(f, getattr(device, "current_user", "root"), 'w'):
+                    return f"bash: {redirect_file}: Permission denied"
+            else:
+                if not check_permission(vfs.curr_fol, getattr(device, "current_user", "root"), 'w'):
+                    return f"bash: {redirect_file}: Permission denied"
+                f = File(redirect_file)
+                f.owner = getattr(device, "current_user", "root")
+                f.group = getattr(device, "current_user", "root")
+                f.set_path(vfs.curr_fol.path)
+                vfs.curr_fol.add(f)
+            
+            if append_mode:
+                if isinstance(f.contents, list):
+                    f.contents.append(out)
+                else:
+                    f.contents = str(f.contents) + ("\n" + out if f.contents else out)
+            else:
+                f.contents = out
+            return ""
+            
+        return out
+
+    def _execute_inner(self, device, command_str):
         # 1. Handle active remote terminal session (e.g. SSH)
         sessions = getattr(device, "_terminal_sessions", None)
         if sessions:
             curr = sessions[-1]
+            if curr.get("state") == "AWAITING_SU_PASSWORD":
+                target_user = curr["target_user"]
+                entered_pass = command_str.strip()
+                users = getattr(device, "users", {})
+                if users.get(target_user) == entered_pass:
+                    device.current_user = target_user
+                    device._terminal_sessions.pop()
+                    return ""
+                else:
+                    curr["password_attempts"] = curr.get("password_attempts", 0) + 1
+                    if curr["password_attempts"] >= 3:
+                        device._terminal_sessions.pop()
+                        return "su: Authentication failure"
+                    return "Password: "
             if curr.get("state") == "AWAITING_PASSWORD":
                 entered_pass = command_str.strip()
                 from backend.services.ssh import SSHClientDaemon
@@ -59,8 +169,8 @@ class TerminalCommandHandler:
                         return f"{custom_motd}\nLast login: {time.strftime('%a %b %d %H:%M:%S %Y')} from {local_ip}"
                     return (
                         f"Welcome to AxiomOS on {remote_name}!\n"
-                        f" * Documentation:  https://noxos.org\n"
-                        f" * Management:     NCM v2.4\n"
+                        f" * Documentation:  https://axiomos.org\n"
+                        f" * Management:     NCM v4.2\n"
                         f"Last login: {time.strftime('%a %b %d %H:%M:%S %Y')} from {local_ip}"
                     )
                 else:
@@ -119,6 +229,9 @@ class TerminalCommandHandler:
         
         if cmd == "help":
             return self._handle_help(parts)
+        elif cmd in ("ls", "pwd", "cat", "mkdir", "touch", "rm", "tree", "cd", "scp"):
+            return self._handle_vfs_command(device, parts)
+
         elif cmd == "hostname":
             if len(parts) > 1 and parts[1].strip():
                 new_name = parts[1].strip()
@@ -159,6 +272,41 @@ class TerminalCommandHandler:
             return self._handle_service(device, parts)
         elif cmd == "nslookup":
             return self._handle_nslookup(device, parts)
+        elif cmd == "keygen":
+            return self._handle_keygen(device, parts)
+        elif cmd == "su":
+            return self._handle_su(device, parts)
+        elif cmd == "nano":
+            if len(parts) > 1 and parts[1] in ("--help", "-h"):
+                return "nano [FILE]\nOpen the nano interactive text editor for FILE.\nType your text, then type ':wq' or 'EOF' on a new line to save and exit."
+            if len(parts) < 2:
+                return "nano: missing filename"
+                
+            vfs = getattr(device, "vfs", None)
+            if vfs:
+                item = vfs.get_item(parts[1])
+                if item:
+                    if not check_permission(item, getattr(device, "current_user", "root"), 'w'):
+                        return f"nano: {parts[1]}: Permission denied"
+                else:
+                    if not check_permission(vfs.curr_fol, getattr(device, "current_user", "root"), 'w'):
+                        return f"nano: cannot create {parts[1]}: Permission denied"
+                        
+            if not hasattr(device, "_terminal_sessions"):
+                device._terminal_sessions = []
+            device._terminal_sessions.append({
+                "state": "AWAITING_NANO_INPUT",
+                "file": parts[1],
+                "content": []
+            })
+            return f"--- NANO EDITOR: {parts[1]} ---\nType your text. Type ':wq' or 'EOF' on a new line to save and exit."
+        elif cmd == "update":
+            return self._handle_update(device, parts)
+        elif cmd == "mount":
+            return self._handle_mount(device, parts)
+        elif cmd == "umount":
+            return self._handle_umount(device, parts)
+
         else:
             return f"AxiomOS > Command '{cmd}' not recognized."
             
@@ -177,6 +325,22 @@ class TerminalCommandHandler:
             output += "  ssh        - Connect to remote host via SSH\n"
             output += "  service    - Manage daemon services\n"
             output += "  nslookup   - Query DNS server for name resolution\n"
+            output += "  keygen     - Generates a TSIG key for secure DNS zone transfers\n"
+            output += "  su         - Change user ID or become superuser\n"
+            output += "  nano       - Text editor\n"
+            output += "  update     - Reload and apply system configurations\n"
+            output += "  mount      - Mount a new virtual drive\n"
+            output += "  umount     - Unmount a virtual drive\n"
+            output += "  ls         - List directory contents\n"
+            output += "  pwd        - Print working directory\n"
+            output += "  cd         - Change directory\n"
+            output += "  mkdir      - Make directories\n"
+            output += "  touch      - Change file timestamps (create empty file)\n"
+            output += "  cat        - Concatenate files and print on the standard output\n"
+            output += "  rm         - Remove files or directories\n"
+            output += "  tree       - List contents of directories in a tree-like format\n"
+            output += "  scp        - Secure copy (remote file copy program)\n"
+
             output += "  hostname   - Show current system hostname"
             return output
             
@@ -223,6 +387,20 @@ class TerminalCommandHandler:
             return "Usage:\n  route\n  route add [dest_subnet] via [next_hop_ip]\n  route del [dest_subnet]"
         elif topic == "service":
             return "Usage:\n  service list\n  service add <name> <protocol> <port>\n  service start <name>\n  service stop <name>\n  service remove <name>"
+        elif topic == "su":
+            return "Usage: su [USER]\nChange user ID or become superuser.\nIf USER is not specified, it defaults to root."
+        elif topic == "nano":
+            return "Usage: nano [FILE]\nOpen the nano interactive text editor for FILE.\nType your text, then type ':wq' or 'EOF' on a new line to save and exit."
+        elif topic == "update":
+            return "Usage: update\nReload and apply system configurations from /etc/hostname and /etc/network/interfaces without a reboot."
+        elif topic == "mount":
+            return "Usage: mount [NAME]\nMount a new virtual drive under /mnt/[NAME]. Requires root."
+        elif topic == "umount":
+            return "Usage: umount [NAME]\nUnmount a virtual drive from /mnt/[NAME]. Requires root."
+        elif topic == "keygen":
+            return "Usage: keygen\nGenerates a TSIG key for secure DNS zone transfers."
+        elif topic == "nslookup":
+            return "Usage: nslookup [options] [name] [server]\nOptions:\n  -type=TYPE   Query for specific record type (A, CNAME, SRV, PTR, AXFR)"
         elif topic == "hostname":
             return "Usage: hostname\nPrints the name of the current system."
         elif topic == "ip":
@@ -251,6 +429,177 @@ class TerminalCommandHandler:
                 return f"Unknown ip object '{sub_topic}'"
         else:
             return f"No manual entry for {topic}"
+
+
+    # VFS Command Handlers
+    def _handle_vfs_command(self, device, parts):
+        cmd = parts[0]
+        vfs = getattr(device, "vfs", None)
+        if not vfs:
+            return f"bash: {cmd}: File system not available on this device"
+            
+        # Provide help for VFS commands
+        if len(parts) > 1 and parts[1] in ("--help", "-h"):
+            if cmd == "pwd": return "pwd - Print name of current/working directory"
+            if cmd == "ls": return "ls [OPTION]... [FILE]...\nList information about the FILEs (the current directory by default).\nOptions:\n  -a  do not ignore entries starting with .\n  -l  use a long listing format"
+            if cmd == "tree": return "tree - list contents of directories in a tree-like format"
+            if cmd == "mkdir": return "mkdir DIRECTORY...\nCreate the DIRECTORY(ies), if they do not already exist."
+            if cmd == "touch": return "touch FILE...\nUpdate the access and modification times of each FILE to the current time.\nA FILE argument that does not exist is created empty."
+            if cmd == "cat": return "cat [FILE]...\nConcatenate FILE(s) to standard output."
+            if cmd == "rm": return "rm [OPTION]... [FILE]...\nRemove (unlink) the FILE(s).\nOptions:\n  -r  remove directories and their contents recursively"
+            if cmd == "cd": return "cd [dir]\nChange the shell working directory."
+            if cmd == "scp": return "scp <source> <user@host:destination>\nSecure copy (remote file copy program)."
+
+        if cmd == "pwd":
+            return vfs.pwd()
+            
+        elif cmd == "ls":
+            flags = [p for p in parts[1:] if p.startswith("-")]
+            args = [p for p in parts[1:] if not p.startswith("-")]
+            show_hidden = "-a" in "".join(flags)
+            
+            target = vfs.curr_fol
+            if args:
+                target = vfs.get_item(args[0])
+                if not target:
+                    return f"ls: {args[0]} is a file or doesn't exist."
+                
+            if not check_permission(target, getattr(device, "current_user", "root"), 'r'):
+                return f"ls: cannot open directory '{target.name}': Permission denied"
+                
+            import io
+            from contextlib import redirect_stdout
+            f = io.StringIO()
+            with redirect_stdout(f):
+                if hasattr(target, "disp"):
+                    target.disp(h=show_hidden)
+            
+            return f.getvalue().strip()
+            
+        elif cmd == "tree":
+            if not check_permission(vfs.curr_fol, getattr(device, "current_user", "root"), 'r'):
+                return f"tree: cannot open directory '{vfs.curr_fol.name}': Permission denied"
+            import io
+            from contextlib import redirect_stdout
+            f = io.StringIO()
+            with redirect_stdout(f):
+                print(vfs.curr_fol)
+            return f.getvalue().strip()
+            
+        elif cmd == "mkdir":
+            if len(parts) < 2:
+                return "mkdir: missing operand"
+            if not check_permission(vfs.curr_fol, getattr(device, "current_user", "root"), 'w'):
+                return "mkdir: cannot create directory: Permission denied"
+            name = parts[1]
+            if vfs.get_item(name):
+                return f"mkdir: cannot create directory '{name}': File exists"
+            from backend.database.fs import Folder
+            fol = Folder(name)
+            fol.owner = getattr(device, "current_user", "root")
+            fol.group = getattr(device, "current_user", "root")
+            fol.parent = vfs.curr_fol
+            fol.path = vfs.curr_fol.path + name if vfs.curr_fol.path == "/" else vfs.curr_fol.path + "/" + name
+            vfs.curr_fol.add(fol, h=name.startswith("."))
+            return ""
+            
+        elif cmd == "touch":
+            if len(parts) < 2:
+                return "touch: missing file operand"
+            if not check_permission(vfs.curr_fol, getattr(device, "current_user", "root"), 'w'):
+                return "touch: cannot touch: Permission denied"
+            name = parts[1]
+            if vfs.get_item(name):
+                return ""
+            from backend.database.fs import File
+            ext = name.split(".")[-1] if "." in name else ""
+            n = name.rsplit(".", 1)[0] if "." in name else name
+            if name.startswith("."):
+                n = name
+            f = File(n, ext)
+            f.owner = getattr(device, "current_user", "root")
+            f.group = getattr(device, "current_user", "root")
+            f.set_path(vfs.curr_fol.path)
+            f.contents = ""
+            vfs.curr_fol.add(f, h=name.startswith("."))
+            return ""
+            
+        elif cmd == "cat":
+            if len(parts) < 2:
+                return "cat: missing file operand"
+            name = parts[1]
+            item = vfs.get_item(name)
+            from backend.database.fs import File
+            if not isinstance(item, File):
+                return f"cat: {name} is a folder or doesn't exist."
+            if not check_permission(item, getattr(device, "current_user", "root"), 'r'):
+                return f"cat: {name}: Permission denied"
+                
+            out = f"========{item.name}========\n"
+            if item.contents:
+                if isinstance(item.contents, list):
+                    out += "\n".join(item.contents)
+                else:
+                    out += str(item.contents)
+            return out
+            
+        elif cmd == "rm":
+            if len(parts) < 2:
+                return "rm: missing operand"
+            if not check_permission(vfs.curr_fol, getattr(device, "current_user", "root"), 'w'):
+                return "rm: cannot remove: Permission denied"
+            flags = "".join([p for p in parts[1:] if p.startswith("-")])
+            args = [p for p in parts[1:] if not p.startswith("-")]
+            if not args:
+                return "rm: missing operand"
+            name = args[0]
+            item = vfs.get_item(name)
+            if not item:
+                return f"rm: cannot remove '{name}': No such file or directory"
+                
+            from backend.database.fs import Folder
+            if isinstance(item, Folder) and "r" not in flags:
+                return f"rm: cannot remove '{name}': Is a directory"
+                
+            if item in vfs.curr_fol.all:
+                vfs.curr_fol.all.remove(item)
+            if item in vfs.curr_fol.visible:
+                vfs.curr_fol.visible.remove(item)
+            if item in vfs.curr_fol.hidden:
+                vfs.curr_fol.hidden.remove(item)
+            return ""
+            
+        elif cmd == "cd":
+            if len(parts) < 2 or parts[1] == "~":
+                vfs.curr_fol = vfs.tree
+                return ""
+            if parts[1] == "..":
+                vfs.jmp_out()
+                return ""
+            if parts[1] == ".":
+                return ""
+                
+            # Check execute permission before changing directory
+            item = vfs.get_item(parts[1])
+            if item:
+                from backend.database.fs import Folder
+                if isinstance(item, Folder) and not check_permission(item, getattr(device, "current_user", "root"), 'x'):
+                    return f"bash: cd: {parts[1]}: Permission denied"
+                    
+            import io
+            from contextlib import redirect_stdout
+            f = io.StringIO()
+            with redirect_stdout(f):
+                vfs.jmp_into(parts[1])
+            err = f.getvalue().strip()
+            return err if err else ""
+
+        elif cmd == "scp":
+            if len(parts) < 3:
+                return "usage: scp <source> <user@host:destination>"
+            return "scp: transferring files to remote VFS requires active SSH daemon file handler (coming soon in Phase 3)"
+            
+        return f"bash: {cmd}: command not found"
 
     def _handle_curl(self, device, parts):
         if len(parts) < 2:
@@ -1117,83 +1466,235 @@ class TerminalCommandHandler:
 
     def _handle_nslookup(self, device, parts):
         if len(parts) < 2:
-            return "Usage: nslookup <hostname> [dns_server_ip]"
-        
-        hostname = parts[1]
-        
-        # Determine DNS Server to use
+            return "Usage: nslookup [-type=any|axfr|srv|ptr|a] <hostname> [dns_server_ip] [tsig_key]"
+            
+        qtype = "A"
+        hostname = ""
         dns_ip = None
-        if len(parts) >= 3:
-            dns_ip = parts[2]
-        else:
-            if hasattr(device, "services"):
-                for s in device.services:
-                    if s.name.upper() == "DNS_CLIENT" and getattr(s, "config", None):
-                        ns = s.config.get("nameserver")
-                        if ns and str(ns).strip():
-                            dns_ip = str(ns).strip()
-                            device.dns_server = dns_ip
-                            break
-            if not dns_ip:
-                dns_ip = getattr(device, "dns_server", None)
-            if not dns_ip and hasattr(device, "network") and getattr(device.network, "dhcp", None):
-                dhcp = device.network.dhcp
-                if getattr(dhcp, "scopes", None):
-                    for sc in dhcp.scopes:
-                        if getattr(sc, "dns", None):
-                            dns_ip = sc.dns
-                            break
-            
-        if not dns_ip:
-            return "Server:  UnKnown\nAddress:  UnKnown\n\n*** No DNS server configured for local system."
+        tsig_key = None
+        
+        args = parts[1:]
+        
+        for arg in args:
+            if arg.startswith("-type="):
+                qtype = arg.split("=")[1].upper()
+            elif arg.lower() == "ls" and qtype in ("ANY", "AXFR"):
+                continue
+            elif arg.startswith("-d"):
+                continue
+            elif not hostname:
+                hostname = arg
+            elif not dns_ip:
+                dns_ip = arg
+            elif not tsig_key:
+                tsig_key = arg
 
-            
-        output = f"Server:  UnKnown\nAddress:  {dns_ip}\n\n"
-        
-        # Send DNS query (UDP to port 53)
-        if not device.interfaces:
-            return "No interface to send DNS request."
-            
-        intf = device.interfaces[0]
-        from backend.network.packet import UDPPacket, Packet
-        
-        udp = UDPPacket(source_port=53535, destination_port=53, payload=hostname)
-        pkt = Packet(
-            source_ip=intf.ip,
-            destination_ip=dns_ip,
-            protocol="UDP",
-            payload=udp,
-            ttl=64
-        )
-        
-        # We need a way to capture the response, similar to ping.
-        # But `ping` relies on `source.last_icmp_result`.
-        # Since this is a quick simulation, we will add a small hook or use `ping`-like blocking.
-        # Alternatively, we can use the Orchestrator's internal resolve directly for simplicity if it's the exact DNS Server.
-        # But the prompt asks for real UDP integration.
-        
-        # Let's add `device.last_dns_result` logic.
-        device.last_dns_result = None
-        device.send_ip_packet(pkt, out_interface=intf)
-        
-        start_wait = time.time()
-        while time.time() - start_wait < 1.0:
-            if hasattr(device, "last_dns_result") and device.last_dns_result is not None:
-                break
-            time.sleep(0.01)
-            
-        res = getattr(device, "last_dns_result", None)
-        if not res:
-            return output + f"DNS request timed out.\n*** Request to UnKnown timed-out"
-            
-        if res.startswith("DNS_NXDOMAIN"):
-            return output + f"*** UnKnown can't find {hostname}: Non-existent domain"
-            
-        if res.startswith("DNS_RESPONSE"):
-            # format: DNS_RESPONSE: HOST -> IP
-            parts = res.split("->")
-            if len(parts) == 2:
-                ip = parts[1].strip()
-                return output + f"Non-authoritative answer:\nName:    {hostname}\nAddress:  {ip}"
+        if qtype == "ANY" or qtype == "LS":
+            qtype = "AXFR"
                 
-        return output + f"*** UnKnown failed: {res}"
+        if not dns_ip:
+            for s in getattr(device, "services", []):
+                if s.name.upper() in ("DNS_CLIENT", "DNS") and s.status.lower() == "running":
+                    dns_ip = s.config.get("dns_server")
+                    break
+        
+        if not dns_ip:
+            dns_ip = "8.8.8.8"
+            
+        dns_ip = dns_ip.strip()
+        
+        payload = f"{qtype} {hostname}"
+        if tsig_key:
+            payload += f" {tsig_key}"
+            
+        if self.sim:
+            from backend.network.packet import Packet, UDPPacket
+            
+            intf = device.interfaces[0] if device.interfaces else None
+            if not intf:
+                return "nslookup: Device has no network interfaces."
+                
+            udp = UDPPacket(source_port=12345, destination_port=53, payload=payload)
+            packet = Packet(
+                source_ip=intf.ip,
+                destination_ip=dns_ip,
+                protocol="UDP",
+                payload=udp,
+                ttl=64
+            )
+            
+            device.last_dns_result = None
+            device.send_ip_packet(packet, out_interface=intf)
+            
+            # Wait up to 500ms for response
+            start_wait = time.time()
+            while time.time() - start_wait < 0.5:
+                if getattr(device, "last_dns_result", None) is not None:
+                    break
+                time.sleep(0.01)
+                
+            output = f"Server:\t\t{dns_ip}\nAddress:\t{dns_ip}#53\n\n"
+            
+            response_str = getattr(device, "last_dns_result", None)
+            if response_str:
+                if response_str.startswith("DNS_AXFR_RESPONSE:\\n"):
+                    output += f"Zone dump for {hostname}:\n"
+                    output += response_str.replace("DNS_AXFR_RESPONSE:\\n", "")
+                elif response_str.startswith("DNS_RESPONSE: "):
+                    ans = response_str.replace("DNS_RESPONSE: ", "")
+                    output += f"Non-authoritative answer:\nName:\t{hostname}\nAnswer:\t{ans}"
+                elif response_str.startswith("DNS_NXDOMAIN: "):
+                    output += f"** server can't find {hostname}: NXDOMAIN"
+                else:
+                    output += f"** server failed: {response_str}"
+            else:
+                output += f";; connection timed out; no servers could be reached"
+            return output
+        return "Internal Error: Simulation not linked."
+
+    def _handle_keygen(self, device, parts):
+        if len(parts) < 2:
+            return "Usage: keygen <filename>\nGenerates a TSIG key for secure DNS zone transfers."
+        
+        filename = parts[1]
+        vfs = getattr(device, "vfs", None)
+        if not vfs:
+            return "keygen: File system not available."
+            
+        import secrets
+        key = secrets.token_hex(16)
+        
+        if vfs.get_item(filename):
+            return f"keygen: File '{filename}' already exists."
+            
+        from backend.database.fs import File
+        ext = filename.split(".")[-1] if "." in filename else "key"
+        name = filename.rsplit(".", 1)[0] if "." in filename else filename
+        f = File(name, ext)
+        f.set_path(vfs.curr_fol.path)
+        f.contents = key
+        vfs.curr_fol.add(f)
+        
+        return f"TSIG key generated and saved to {filename}\nKey: {key}"
+
+    def _handle_su(self, device, parts):
+        if len(parts) > 1 and parts[1] in ("--help", "-h"):
+            return "su [USER]\nChange user ID or become superuser.\nIf USER is not specified, it defaults to root."
+            
+        target_user = "root" if len(parts) < 2 else parts[1]
+        users = getattr(device, "users", {})
+        
+        if target_user not in users:
+            return f"su: user {target_user} does not exist"
+            
+        current_user = getattr(device, "current_user", "root")
+        if current_user == "root" and target_user != "root":
+            # root can switch to anyone without password
+            device.current_user = target_user
+            return ""
+            
+        if not hasattr(device, "_terminal_sessions"):
+            device._terminal_sessions = []
+            
+        device._terminal_sessions.append({
+            "state": "AWAITING_SU_PASSWORD",
+            "target_user": target_user,
+            "password_attempts": 0
+        })
+        return "Password: "
+
+    def _handle_update(self, device, parts):
+        if len(parts) > 1 and parts[1] in ("--help", "-h"):
+            return "update\nReload and apply system configurations from /etc/hostname and /etc/network/interfaces without a reboot."
+            
+        vfs = getattr(device, "vfs", None)
+        if not vfs:
+            return "update: file system not available"
+            
+        output = []
+        # Update hostname
+        hostname_file = vfs.path_to_tree("/etc/hostname")
+        if hostname_file and hasattr(hostname_file, "contents"):
+            new_name = str(hostname_file.contents).strip()
+            if new_name and new_name != device.name:
+                output.append(f"Applying new hostname: {new_name}")
+                if hasattr(device, "sim") and device.sim:
+                    device.sim.rename_device(device.name, new_name)
+                else:
+                    device.name = new_name
+                    
+        # Update network interfaces
+        interfaces_file = vfs.path_to_tree("/etc/network/interfaces")
+        if interfaces_file and hasattr(interfaces_file, "contents"):
+            lines = str(interfaces_file.contents).split("\n")
+            current_iface = None
+            for line in lines:
+                line = line.strip()
+                if line.startswith("iface "):
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        current_iface = next((i for i in device.interfaces if i.name == parts[1]), None)
+                elif line.startswith("address ") and current_iface:
+                    new_ip = line.split()[1]
+                    if new_ip != current_iface.ip:
+                        current_iface.ip = new_ip
+                        output.append(f"Applied new IP {new_ip} to {current_iface.name}")
+                        
+        return "\n".join(output) if output else "No changes applied."
+
+    def _handle_mount(self, device, parts):
+        if len(parts) > 1 and parts[1] in ("--help", "-h"):
+            return "mount [NAME]\nMount a new virtual drive under /mnt/[NAME]. Requires root."
+        if len(parts) < 2:
+            return "mount: missing drive name"
+            
+        name = parts[1].upper()
+        vfs = getattr(device, "vfs", None)
+        if not vfs: return "mount: file system not available"
+        
+        if not check_permission(vfs.tree, getattr(device, "current_user", "root"), 'w'):
+            return "mount: only root can mount drives"
+            
+        mnt = vfs.path_to_tree("/mnt")
+        if not mnt:
+            return "mount: /mnt directory does not exist"
+            
+        if mnt.get_item(name):
+            return f"mount: /mnt/{name} already exists"
+            
+        from backend.database.fs import Drive
+        new_drive = Drive(name)
+        new_drive.owner = "root"
+        new_drive.group = "root"
+        new_drive.parent = mnt
+        new_drive.path = f"/mnt/{name}"
+        mnt.add(new_drive)
+        
+        return f"Mounted virtual drive {name} at /mnt/{name}"
+
+    def _handle_umount(self, device, parts):
+        if len(parts) > 1 and parts[1] in ("--help", "-h"):
+            return "umount [NAME]\nUnmount a virtual drive from /mnt/[NAME]. Requires root."
+        if len(parts) < 2:
+            return "umount: missing drive name"
+            
+        name = parts[1].upper()
+        vfs = getattr(device, "vfs", None)
+        if not vfs: return "umount: file system not available"
+        
+        if not check_permission(vfs.tree, getattr(device, "current_user", "root"), 'w'):
+            return "umount: only root can unmount drives"
+            
+        mnt = vfs.path_to_tree("/mnt")
+        if not mnt:
+            return "umount: /mnt directory does not exist"
+            
+        drive = mnt.get_item(name)
+        if not drive:
+            return f"umount: /mnt/{name} not found"
+            
+        if drive in mnt.all: mnt.all.remove(drive)
+        if drive in mnt.visible: mnt.visible.remove(drive)
+        if drive in mnt.hidden: mnt.hidden.remove(drive)
+        
+        return f"Unmounted /mnt/{name}"

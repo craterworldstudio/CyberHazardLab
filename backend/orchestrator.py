@@ -12,6 +12,8 @@ from backend.core.event import Event
 from backend.network.network import Network
 from backend.network.dhcp import DHCP
 from backend.network.switch import Switch
+from backend.network.access_point import AccessPoint
+
 from backend.network.router import Router
 from backend.network.link import Link
 from backend.network.packet import Packet, ICMPPacket
@@ -143,6 +145,13 @@ class Simulation:
             if any(link.endpointA == p or link.endpointB == p for p in switch.ports.values()):
                 self.disconnect(link)
         return switch
+
+    def add_access_point(self, name: str) -> AccessPoint:
+        if name in self.hosts or name in self.routers or name in self.switches:
+            raise ValueError(f"Device '{name}' already exists.")
+        ap = AccessPoint(name=name, network=self.network)
+        self.switches[name] = ap
+        return ap
 
     def rename_device(self, old_name: str, new_name: str):
         if not new_name or not isinstance(new_name, str) or not new_name.strip():

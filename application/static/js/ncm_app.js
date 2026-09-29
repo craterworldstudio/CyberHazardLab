@@ -87,11 +87,13 @@ function createNCMWindow(deviceName, deviceType) {
                 : (deviceType === 'ROUTER'
                     ? `<button class="ncm-tab" data-tab="routes">ROUTING TABLE</button>
                        <button class="ncm-tab" data-tab="services">SERVICES</button>
-                       <button class="ncm-tab" data-tab="terminal">TERMINAL</button>
-                       <button class="ncm-tab" data-tab="browser">BROWSER</button>`
-                    : `<button class="ncm-tab" data-tab="services">SERVICES</button>
-                       <button class="ncm-tab" data-tab="terminal">TERMINAL</button>
-                       <button class="ncm-tab" data-tab="browser">BROWSER</button>`)
+                       <button class="ncm-tab" data-tab="terminal">TERMINAL</button>`
+                    : (['NAS', 'SERVER'].includes(deviceType)
+                        ? `<button class="ncm-tab" data-tab="services">SERVICES</button>
+                           <button class="ncm-tab" data-tab="terminal">TERMINAL</button>`
+                        : `<button class="ncm-tab" data-tab="services">SERVICES</button>
+                           <button class="ncm-tab" data-tab="terminal">TERMINAL</button>
+                           <button class="ncm-tab" data-tab="browser">BROWSER</button>`))
             }
             <button class="ncm-tab" data-tab="interfaces">${deviceType === 'SWITCH' ? 'SWITCH PORTS' : 'INTERFACES'}</button>
         </div>
@@ -130,7 +132,7 @@ function createNCMWindow(deviceName, deviceType) {
                         <div style="color: #5c6b73; margin-bottom: 15px;">System version 1.0.0. Type 'help' for available commands.</div>
                     </div>
                     <div style="display: flex; align-items: center; border: 1px solid rgba(0, 229, 255, 0.3); background: #06090e; padding: 8px;">
-                        <span class="ncm-terminal-prompt" id="term-prompt-${deviceName}" style="color: #00e5ff; font-family: monospace; font-weight: bold; margin-right: 8px;">root@${deviceName.toLowerCase()}:~$</span>
+                        <span class="ncm-terminal-prompt" id="term-prompt-${deviceName}" style="color: #00e5ff; font-family: monospace; font-weight: bold; margin-right: 8px;">user@${deviceName.toLowerCase()}:~$</span>
                         <input type="text" class="ncm-terminal-input" placeholder="_" style="flex: 1; background: transparent; border: none; color: #d5ebf2; font-family: monospace; font-size: 12px; outline: none;" onkeydown="handleTerminalInput(event, '${safeDev}')">
                     </div>
                 </div>
@@ -157,7 +159,7 @@ function createNCMWindow(deviceName, deviceType) {
                         <div style="color: #5c6b73; margin-bottom: 15px;">System version 1.0.0. Type 'help' for available commands.</div>
                     </div>
                     <div style="display: flex; align-items: center; border: 1px solid rgba(0, 229, 255, 0.3); background: #06090e; padding: 8px;">
-                        <span class="ncm-terminal-prompt" id="term-prompt-${deviceName}" style="color: #00e5ff; font-family: monospace; font-weight: bold; margin-right: 8px;">root@${deviceName.toLowerCase()}:~$</span>
+                        <span class="ncm-terminal-prompt" id="term-prompt-${deviceName}" style="color: #00e5ff; font-family: monospace; font-weight: bold; margin-right: 8px;">user@${deviceName.toLowerCase()}:~$</span>
                         <input type="text" class="ncm-terminal-input" placeholder="_" style="flex: 1; background: transparent; border: none; color: #d5ebf2; font-family: monospace; font-size: 12px; outline: none;" onkeydown="handleTerminalInput(event, '${safeDev}')">
                     </div>
                 </div>
