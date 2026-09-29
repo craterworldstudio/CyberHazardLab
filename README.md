@@ -1,5 +1,5 @@
 
-# 🛡️ Cyber Hazard Lab
+# 🛡️ Cyber Hazard Lab (Web Preview)
 
 ## 📝 Description
 
@@ -44,6 +44,11 @@ Designed specifically for students and aspiring network/security professionals, 
 
 *I probably won't implement all of 4.5 soon*
 *Also a good chance that I won't be implementing the Penetrator Dashboard because this project too way too long.*
+*This is final status of the web preview versions. Subsequent and additional features such as more devices, services, functionality will be app-only. It won't be paid and stuff free and open source, but it is suggested that you take some time to fill this form and submit or donate as this is a solo-student project with no funding backing them up.*
+
+[Feedback form](https://forms.gle/C4YNpw3WT8BL3B5R9) - Kindly fill out this form based on your experience with the project.
+[Kofi Link (not done yet, sorry..)]()
+
 ---
 
 ### 🔍 Detailed Phase Breakdown
