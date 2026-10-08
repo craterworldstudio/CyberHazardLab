@@ -50,6 +50,14 @@ class TerminalCommandHandler:
         curr = sessions[-1]
         if curr.get("state") == "AWAITING_PASSWORD":
             return f"{curr['user']}@{curr['remote_ip']}'s password: "
+        if curr.get("state") == "AWAITING_SU_PASSWORD":
+            return "Password: "
+        if curr.get("state") == "AWAITING_SCP_PASSWORD":
+            return f"{curr['user']}@{curr['remote_ip']}'s password: "
+        if curr.get("state") == "AWAITING_NANO_INPUT":
+            return ""
+        if curr.get("state") == "AWAITING_NC_LISTENER":
+            return f"[nc listening on {curr.get('port')}] $ "
         if curr.get("state") == "CONNECTED":
             remote_dev = curr.get("remote_device")
             if remote_dev and getattr(remote_dev, "_terminal_sessions", None):
@@ -57,14 +65,15 @@ class TerminalCommandHandler:
             
             remote_vfs = getattr(remote_dev, "vfs", None) if remote_dev else None
             remote_pwd = remote_vfs.pwd() if remote_vfs else "~"
-            return f"{curr['user']}@{curr['remote_device_name'].lower()}:[{remote_pwd}]$ "
+            return f"{getattr(remote_dev, 'current_user', curr['user'])}@{curr['remote_device_name'].lower()}:[{remote_pwd}]$ "
         return f"{local_user}@{device.name.lower()}:[{pwd}]$ "
     def execute(self, device, command_str):
         sessions = getattr(device, "_terminal_sessions", None)
         if sessions:
             curr = sessions[-1]
             if curr.get("state") == "AWAITING_NANO_INPUT":
-                if command_str.strip() == ":wq" or command_str.strip() == "EOF":
+                if command_str.startswith("__NANO_SAVE__"):
+                    new_content = command_str[len("__NANO_SAVE__"):]
                     vfs = getattr(device, "vfs", None)
                     if vfs:
                         from backend.database.fs import File
@@ -76,12 +85,13 @@ class TerminalCommandHandler:
                             f.group = getattr(device, "current_user", "root")
                             f.set_path(vfs.curr_fol.path)
                             vfs.curr_fol.add(f)
-                        
-                        f.contents = "\n".join(curr["content"])
+                        f.contents = new_content
                     device._terminal_sessions.pop()
                     return f"Saved {curr['file']}."
+                elif command_str.strip() == "__NANO_CANCEL__":
+                    device._terminal_sessions.pop()
+                    return f"Nano cancelled."
                 else:
-                    curr["content"].append(command_str)
                     return ""
                     
         redirect_file = None
@@ -180,9 +190,93 @@ class TerminalCommandHandler:
                         return f"Permission denied (publickey,password).\nConnection to {curr['remote_ip']} closed."
                     return "Permission denied, please try again."
 
+            if curr.get("state") == "AWAITING_SCP_PASSWORD":
+                entered_pass = command_str.strip()
+                from backend.services.ssh import SSHClientDaemon
+                client_daemon = SSHClientDaemon(device)
+                res = client_daemon.execute_remote(
+                    remote_ip=curr["remote_ip"],
+                    command="",
+                    username=curr["user"],
+                    password=entered_pass,
+                    port=curr.get("port", 22)
+                )
+                if res.get("success"):
+                    remote_dev = curr.get("remote_device")
+                    if remote_dev and hasattr(remote_dev, "vfs"):
+                        dest_path = curr["dest_path"]
+                        source_content = curr["source_content"]
+                        
+                        from backend.database.fs import File, Folder
+                        parts_path = [p for p in dest_path.split("/") if p]
+                        
+                        target_fol = remote_dev.vfs.tree
+                        filename = "copied_file"
+                        
+                        if dest_path.startswith("/"):
+                            target_fol = remote_dev.vfs.tree
+                        else:
+                            target_fol = remote_dev.vfs.curr_fol
+                            
+                        if len(parts_path) > 0:
+                            filename = parts_path[-1]
+                            for p in parts_path[:-1]:
+                                n_fol = target_fol.get_item(p)
+                                if not n_fol:
+                                    n_fol = Folder(p)
+                                    n_fol.set_path(target_fol.path)
+                                    target_fol.add(n_fol)
+                                target_fol = n_fol
+                                
+                        existing_file = target_fol.get_item(filename)
+                        if existing_file and isinstance(existing_file, Folder):
+                            # Copy into folder
+                            target_fol = existing_file
+                            filename = curr.get("source_filename", "copied_file")
+                            existing_file = target_fol.get_item(filename)
+                            
+                        if existing_file:
+                            existing_file.contents = source_content
+                        else:
+                            new_f = File(filename)
+                            new_f.contents = source_content
+                            new_f.owner = curr["user"]
+                            new_f.group = curr["user"]
+                            new_f.set_path(target_fol.path)
+                            target_fol.add(new_f)
+                            
+                        device._terminal_sessions.pop()
+                        return f"{filename}\t\t100%\t{len(source_content)}B\t0.0KB/s\t00:00"
+                    else:
+                        device._terminal_sessions.pop()
+                        return "scp: Remote device has no filesystem."
+                else:
+                    curr["password_attempts"] = curr.get("password_attempts", 0) + 1
+                    if curr["password_attempts"] >= 3:
+                        device._terminal_sessions.pop()
+                        return f"Permission denied (publickey,password).\nLost connection."
+                    return "Permission denied, please try again."
+
+            elif curr.get("state") == "AWAITING_NC_LISTENER":
+                trimmed = command_str.strip()
+                if trimmed in ("exit", "quit", "^C"):
+                    p = curr.get("port")
+                    device._terminal_sessions.pop()
+                    return f"nc listener on port {p} closed."
+                if not trimmed:
+                    return ""
+                return f"[nc listening on port {curr.get('port')} - waiting for connection...]"
             elif curr.get("state") == "CONNECTED":
                 trimmed = command_str.strip()
                 remote_dev = curr.get("remote_device")
+                if curr.get("is_reverse_shell"):
+                    if trimmed in ("exit", "logout"):
+                        device._terminal_sessions.pop()
+                        return "logout"
+                    if not trimmed:
+                        return ""
+                    return self.execute(remote_dev, command_str)
+
                 if remote_dev and getattr(remote_dev, "_terminal_sessions", None):
                     # Forward to remote device (which handles its own nested session/exit)
                     from backend.services.ssh import SSHClientDaemon
@@ -197,6 +291,10 @@ class TerminalCommandHandler:
                     return res.get("output", "")
 
                 if trimmed in ("exit", "logout"):
+                    orig_user = curr.get("original_ssh_user", curr.get("user"))
+                    if remote_dev and getattr(remote_dev, "current_user", "") != orig_user:
+                        remote_dev.current_user = orig_user
+                        return "exit"
                     remote_ip = curr["remote_ip"]
                     device._terminal_sessions.pop()
                     return f"logout\nConnection to {remote_ip} closed."
@@ -226,7 +324,42 @@ class TerminalCommandHandler:
         cmd = parts[0]
         if cmd in ("exit", "logout"):
             return "logout\n[Process completed - AxiomOS local shell cannot be exited]"
-        
+
+        if getattr(device, "status", "ONLINE").upper() == "OFFLINE":
+            if cmd == "poweron":
+                device.status = "ONLINE"
+                if hasattr(device, "interfaces"):
+                    for intf in device.interfaces:
+                        intf.status = "up"
+                if self.state_manager:
+                    self.state_manager.save()
+                return f"System started. Node {device.name} is now ONLINE."
+            return f"System is powered off. Node {device.name} is OFFLINE."
+
+        if cmd == "whoami":
+            return getattr(device, "current_user", "root")
+
+        elif cmd in ("poweroff", "shutdown"):
+            cur_user = getattr(device, "current_user", "root")
+            if cur_user != "root":
+                return f"{cmd}: Need to be root."
+            device.status = "OFFLINE"
+            if hasattr(device, "interfaces"):
+                for intf in device.interfaces:
+                    intf.status = "down"
+            if self.state_manager:
+                self.state_manager.save()
+            return f"System halted. Node {device.name} powered down."
+
+        elif cmd == "poweron":
+            device.status = "ONLINE"
+            if hasattr(device, "interfaces"):
+                for intf in device.interfaces:
+                    intf.status = "up"
+            if self.state_manager:
+                self.state_manager.save()
+            return f"Node {device.name} is now ONLINE."
+
         if cmd == "help":
             return self._handle_help(parts)
         elif cmd in ("ls", "pwd", "cat", "mkdir", "touch", "rm", "tree", "cd", "scp"):
@@ -248,7 +381,17 @@ class TerminalCommandHandler:
         elif cmd == "ip":
             return self._handle_ip(device, parts)
         elif cmd == "arp":
-            return self._handle_arp(device)
+            return self._handle_arp(device, parts)
+        elif cmd == "arpspoof":
+            return self._handle_arpspoof(device, parts)
+        elif cmd == "nmap":
+            return self._handle_nmap(device, parts)
+        elif cmd == "nc":
+            return self._handle_nc(device, parts)
+        elif cmd == "ss":
+            return self._handle_ss(device, parts)
+        elif cmd == "netstat":
+            return self._handle_netstat(device, parts)
         elif cmd == "route":
             return self._handle_legacy_route(device, parts)
         elif cmd == "ping":
@@ -256,10 +399,7 @@ class TerminalCommandHandler:
         elif cmd == "curl":
             return self._handle_curl(device, parts)
         elif cmd in ("tracert", "traceroute"):
-
             return self._handle_tracert(device, parts)
-        elif cmd in ("netstat", "ss"):
-            return self._handle_netstat(device, parts)
         elif cmd == "ifconfig":
             # Just an alias mapping for our ip addr logic
             parts = ["ip", "addr", "show"]
@@ -294,12 +434,21 @@ class TerminalCommandHandler:
                         
             if not hasattr(device, "_terminal_sessions"):
                 device._terminal_sessions = []
+                
+            content = ""
+            if vfs:
+                item = vfs.get_item(parts[1])
+                if item and hasattr(item, "contents"):
+                    content = str(item.contents)
+                    
             device._terminal_sessions.append({
                 "state": "AWAITING_NANO_INPUT",
-                "file": parts[1],
-                "content": []
+                "file": parts[1]
             })
-            return f"--- NANO EDITOR: {parts[1]} ---\nType your text. Type ':wq' or 'EOF' on a new line to save and exit."
+            
+            import json
+            payload = json.dumps({"filename": parts[1], "content": content})
+            return f"__NANO_OPEN__{payload}"
         elif cmd == "update":
             return self._handle_update(device, parts)
         elif cmd == "mount":
@@ -317,9 +466,13 @@ class TerminalCommandHandler:
             output += "  ping       - Send ICMP ECHO_REQUEST packets\n"
             output += "  tracert    - Trace route to a remote host\n"
             output += "  netstat    - Print network connections and routing tables\n"
+            output += "  ss         - Another utility to investigate sockets\n"
+            output += "  nmap       - Network exploration tool and port scanner\n"
+            output += "  nc         - Arbitrary TCP/UDP connections, listeners and reverse shells\n"
+            output += "  arpspoof   - Intercept packets on a switched LAN using ARP poisoning\n"
             output += "  ifconfig   - Configure a network interface\n"
             output += "  ip         - Show / manipulate routing, devices, policy routing and tunnels\n"
-            output += "  arp        - (Legacy) Display the local ARP cache\n"
+            output += "  arp        - Display or manipulate the local ARP cache\n"
             output += "  route      - (Legacy) Display the routing table\n"
             output += "  echo       - Send RFC 862 Echo probe (TCP/UDP)\n"
             output += "  ssh        - Connect to remote host via SSH\n"
@@ -341,6 +494,10 @@ class TerminalCommandHandler:
             output += "  tree       - List contents of directories in a tree-like format\n"
             output += "  scp        - Secure copy (remote file copy program)\n"
 
+            output += "  whoami     - Print effective current username\n"
+            output += "  poweroff   - Power down / turn off the device (root only)\n"
+            output += "  shutdown   - Power down / turn off the device (root only)\n"
+            output += "  poweron    - Power on / turn on the device\n"
             output += "  hostname   - Show current system hostname"
             return output
             
@@ -383,26 +540,200 @@ class TerminalCommandHandler:
             return "Usage: ifconfig\nDisplays the status of the currently active interfaces."
         elif topic == "arp":
             return "Usage: arp\nDisplays the legacy ARP cache table."
-        elif topic == "route":
-            return "Usage:\n  route\n  route add [dest_subnet] via [next_hop_ip]\n  route del [dest_subnet]"
         elif topic == "service":
-            return "Usage:\n  service list\n  service add <name> <protocol> <port>\n  service start <name>\n  service stop <name>\n  service remove <name>"
+            if len(parts) == 2:
+                return """service - manage and configure background system daemons
+Usage: service COMMAND [args...]
+
+Commands:
+  list [-a]              List running services (or all supported services with -a)
+  add <name> <proto> <port>
+                         Register a new service (e.g. service add DNS UDP 53)
+  start <name>           Start/activate a registered daemon
+  stop <name>            Stop/deactivate a running daemon
+  remove <name>          Unregister and remove a service
+  config <name> show     Display current parameters for a service
+  config <name> <k>=<v>  Set a configuration parameter (e.g. service config dns tsig_key=abc)
+
+Use 'help service [command]' for detailed information on subcommands."""
+
+            sub = parts[2].lower()
+            if sub == "list":
+                return """service list - inspect active and available services
+Usage: service list [-a]
+
+Options:
+  -a    Show all supported services on the system, including inactive ones.
+Without options, displays all registered services and their current state."""
+            elif sub == "add":
+                return """service add - register a new service daemon
+Usage: service add <NAME> <PROTOCOL> <PORT>
+
+Arguments:
+  NAME      Service identifier (e.g., DNS, DHCP, HTTP, SSH, ECHO)
+  PROTOCOL  Transport protocol (TCP or UDP)
+  PORT      Listening port number (e.g., 53, 67, 80, 22, 7)"""
+            elif sub == "start":
+                return """service start - activate a registered service
+Usage: service start <NAME>
+
+Spawns the background daemon and begins listening on the configured port."""
+            elif sub == "stop":
+                return """service stop - deactivate a running service
+Usage: service stop <NAME>
+
+Terminates the active daemon process and closes open listener sockets."""
+            elif sub == "remove":
+                return """service remove - delete a registered service
+Usage: service remove <NAME>
+
+Stops and completely unregisters the service from the device."""
+            elif sub == "config":
+                return """service config - inspect or modify daemon configuration
+Usage:
+  service config <NAME> show
+  service config <NAME> <KEY>=<VALUE>
+  service config <NAME> <KEY> <VALUE>
+
+Examples:
+  service config DNS show
+  service config DNS tsig_key=MySecretKey123
+  service config DNS health_interval=60
+  service config DNS_CLIENT nameserver=10.0.0.2"""
+            else:
+                return f"Unknown service command '{sub}'. See 'help service' for available commands."
+
+        elif topic == "route":
+            if len(parts) == 2:
+                return """route - IP routing table management
+Usage: route [COMMAND [args...]]
+
+Commands:
+  (no args)                     Display the kernel routing table
+  add <dest_net> via <gw>       Install a new route to destination network via gateway
+  del <dest_net>                Delete existing route for specified destination
+
+Examples:
+  route
+  route add 10.0.2.0/24 via 10.0.1.1
+  route add 0.0.0.0/0 via 10.0.0.1
+  route del 10.0.2.0/24"""
+            sub = parts[2].lower()
+            if sub == "add":
+                return "route add - add static routing entry\nUsage: route add <dest_subnet> via <next_hop_ip>\nExample: route add 192.168.1.0/24 via 10.0.0.1"
+            elif sub in ("del", "delete"):
+                return "route del - remove static routing entry\nUsage: route del <dest_subnet>\nExample: route del 192.168.1.0/24"
+            else:
+                return f"Unknown route command '{sub}'. See 'help route'."
+
+        elif topic == "scp":
+            return """scp - secure copy over SSH
+Usage: scp <source_path> <user>@<remote_ip>:<destination_path>
+
+Arguments:
+  source_path        Path to local file on VFS (e.g. tsig.key, /etc/bind/db.local)
+  user@remote_ip     Target user and IP address of remote SSH server
+  destination_path   Destination file or directory path on remote VFS
+
+Note: Requires the target host to have the SSH service running on port 22."""
+
         elif topic == "su":
-            return "Usage: su [USER]\nChange user ID or become superuser.\nIf USER is not specified, it defaults to root."
+            return """su - switch user identity
+Usage: su [USER]
+
+Options/Arguments:
+  USER    Target user account (defaults to root if omitted)
+Prompts for password unless switching from root to another user."""
+
         elif topic == "nano":
-            return "Usage: nano [FILE]\nOpen the nano interactive text editor for FILE.\nType your text, then type ':wq' or 'EOF' on a new line to save and exit."
+            return """nano - interactive text editor
+Usage: nano <FILE>
+
+Opens the file for editing. If the file does not exist, it will be created.
+Use the overlay editor or type ':wq' on a new line to save and exit."""
+
         elif topic == "update":
-            return "Usage: update\nReload and apply system configurations from /etc/hostname and /etc/network/interfaces without a reboot."
+            return """update - reload local network & hostname configuration
+Usage: update
+
+Reloads /etc/hostname and /etc/network/interfaces and applies changes immediately."""
+
         elif topic == "mount":
-            return "Usage: mount [NAME]\nMount a new virtual drive under /mnt/[NAME]. Requires root."
+            return """mount - mount storage volume
+Usage: mount [NAME]
+
+Mounts a virtual drive under /mnt/[NAME]. Requires root permissions."""
+
         elif topic == "umount":
-            return "Usage: umount [NAME]\nUnmount a virtual drive from /mnt/[NAME]. Requires root."
+            return """umount - unmount storage volume
+Usage: umount [NAME]
+
+Unmounts the volume from /mnt/[NAME]. Requires root permissions."""
+
         elif topic == "keygen":
-            return "Usage: keygen\nGenerates a TSIG key for secure DNS zone transfers."
+            return """keygen - cryptographic TSIG key generator
+Usage: keygen <FILENAME>
+
+Generates a random 128-bit hex key and saves it to the specified file on VFS.
+Used for authenticating DNS AXFR zone transfers."""
+
         elif topic == "nslookup":
-            return "Usage: nslookup [options] [name] [server]\nOptions:\n  -type=TYPE   Query for specific record type (A, CNAME, SRV, PTR, AXFR)"
+            return """nslookup - query Internet name servers
+Usage: nslookup [-type=TYPE] <name> [server] [tsig_key | key_file]
+
+Options:
+  -type=TYPE    Query record type: A, CNAME, SRV, PTR, AXFR (default: A)
+
+Arguments:
+  name          Domain name, IP address (for PTR), or zone name (for AXFR)
+  server        Optional DNS server IP to query (defaults to configured nameserver)
+  tsig_key      Optional TSIG key string or path to key file for AXFR zone transfers"""
+
         elif topic == "hostname":
-            return "Usage: hostname\nPrints the name of the current system."
+            return """hostname - show or set system hostname
+Usage:
+  hostname            Show current system hostname
+  hostname <NEW_NAME> Set system hostname"""
+
+        elif topic == "ls":
+            return """ls - list directory contents
+Usage: ls [OPTIONS] [PATH]
+
+Options:
+  -a    Include hidden files (starting with '.')
+  -l    Use long listing format"""
+
+        elif topic == "cat":
+            return """cat - concatenate and display file contents
+Usage: cat <FILE>"""
+
+        elif topic == "rm":
+            return """rm - remove files or directories
+Usage: rm [-r] <PATH>
+
+Options:
+  -r    Remove directories and their contents recursively"""
+
+        elif topic == "mkdir":
+            return """mkdir - create directories
+Usage: mkdir <DIRECTORY>"""
+
+        elif topic == "touch":
+            return """touch - create empty file or update timestamps
+Usage: touch <FILE>"""
+
+        elif topic == "cd":
+            return """cd - change working directory
+Usage: cd [PATH]"""
+
+        elif topic == "pwd":
+            return """pwd - print current working directory
+Usage: pwd"""
+
+        elif topic == "tree":
+            return """tree - list directory tree
+Usage: tree"""
+
         elif topic == "ip":
             if len(parts) == 2:
                 output = "Usage: ip [ OPTIONS ] OBJECT { COMMAND | help }\n"
@@ -427,6 +758,66 @@ class TerminalCommandHandler:
                 return "ip maddr - multicast address management"
             else:
                 return f"Unknown ip object '{sub_topic}'"
+        elif topic == "ss":
+            return """ss - another utility to investigate sockets
+Usage: ss [OPTIONS]
+
+Options:
+  -t, --tcp        Display TCP sockets
+  -u, --udp        Display UDP sockets
+  -l, --listening  Display only listening sockets
+  -a, --all        Display both listening and non-listening sockets
+  -p, --processes  Show process using socket
+  -n, --numeric    Do not try to resolve service names"""
+        elif topic == "nmap":
+            return """nmap - Network exploration tool and security / port scanner
+Usage: nmap [Scan Type...] [Options] {target specification}
+
+TARGET SPECIFICATION:
+  Can pass hostnames, IP addresses, networks (e.g. 10.0.0.2, 10.0.0.0/24)
+SCAN TECHNIQUES:
+  -sS/sT: TCP SYN / Connect scan (default)
+  -sU: UDP scan
+  -sn: Ping scan (disable port scan, host discovery)
+PORT SPECIFICATION:
+  -p <port ranges>: Only scan specified ports
+    Ex: -p22; -p1-100; -p 22,80,443"""
+        elif topic == "nc":
+            return """nc (netcat) - arbitrary TCP and UDP connections and listens
+Usage:
+  nc [-v] [-z] hostname port
+  nc -l -p port
+  nc hostname port -e /bin/sh
+
+Options:
+  -l        Listen mode, for inbound connects
+  -p port   Local port number
+  -v        Verbose mode
+  -z        Zero-I/O mode [used for scanning]
+  -u        UDP mode
+  -e prog   Program to execute after connection (reverse shell)"""
+        elif topic == "arpspoof":
+            return """arpspoof - intercept packets on a switched LAN using ARP poisoning
+Usage:
+  arpspoof [-i interface] -t target_ip host_to_spoof
+  arpspoof target_ip host_to_spoof
+
+Options:
+  -i interface   Specify interface to use (default: eth0)
+  -t target_ip   Specify target host whose ARP cache will be poisoned
+  host_to_spoof  The IP address to spoof (e.g. Default Gateway)"""
+        elif topic == "arp":
+            return """arp - manipulate the system ARP cache
+Usage:
+  arp [-a]                 Display current ARP cache
+  arp -s <ip> <hw_addr>    Add a static entry to ARP cache
+  arp -d <ip>              Delete an entry from ARP cache"""
+        elif topic == "whoami":
+            return "whoami - print effective userid\nUsage: whoami"
+        elif topic in ("poweroff", "shutdown"):
+            return "poweroff / shutdown - power down the local system\nUsage: poweroff\nRequires root privileges."
+        elif topic == "poweron":
+            return "poweron - power on the system\nUsage: poweron"
         else:
             return f"No manual entry for {topic}"
 
@@ -456,14 +847,42 @@ class TerminalCommandHandler:
         elif cmd == "ls":
             flags = [p for p in parts[1:] if p.startswith("-")]
             args = [p for p in parts[1:] if not p.startswith("-")]
-            show_hidden = "-a" in "".join(flags)
+            show_hidden = any("a" in f for f in flags)
             
             target = vfs.curr_fol
             if args:
-                target = vfs.get_item(args[0])
+                arg_path = args[0]
+                if arg_path in ("/", "~"):
+                    target = vfs.tree
+                elif arg_path.startswith("/"):
+                    target = vfs.path_to_tree(arg_path)
+                else:
+                    target = vfs.get_item(arg_path)
+                    if not target and "/" in arg_path:
+                        cur = vfs.curr_fol
+                        for seg in arg_path.split("/"):
+                            if not seg or seg == ".":
+                                continue
+                            elif seg == "..":
+                                cur = cur.parent if cur.parent else cur
+                            else:
+                                sub = None
+                                for itm in cur.all:
+                                    if itm.name == seg:
+                                        sub = itm
+                                        break
+                                cur = sub
+                                if not cur:
+                                    break
+                        target = cur
                 if not target:
-                    return f"ls: {args[0]} is a file or doesn't exist."
+                    return f"ls: cannot access '{args[0]}': No such file or directory"
                 
+            from backend.database.fs import Folder, File
+            if isinstance(target, File):
+                ext = f".{target.ext}" if target.ext else ""
+                return f"{target.name}{ext}"
+
             if not check_permission(target, getattr(device, "current_user", "root"), 'r'):
                 return f"ls: cannot open directory '{target.name}': Permission denied"
                 
@@ -528,10 +947,32 @@ class TerminalCommandHandler:
             if len(parts) < 2:
                 return "cat: missing file operand"
             name = parts[1]
-            item = vfs.get_item(name)
+            if name.startswith("/"):
+                item = vfs.path_to_tree(name)
+            else:
+                item = vfs.get_item(name)
+                if not item and "/" in name:
+                    cur = vfs.curr_fol
+                    for seg in name.split("/"):
+                        if not seg or seg == ".":
+                            continue
+                        elif seg == "..":
+                            cur = cur.parent if cur.parent else cur
+                        else:
+                            sub = None
+                            for itm in cur.all:
+                                iname = itm.name + (f".{itm.ext}" if getattr(itm, "ext", None) else "")
+                                if iname == seg or itm.name == seg:
+                                    sub = itm
+                                    break
+                            cur = sub
+                            if not cur:
+                                break
+                    item = cur
+
             from backend.database.fs import File
             if not isinstance(item, File):
-                return f"cat: {name} is a folder or doesn't exist."
+                return f"cat: {name}: No such file or directory"
             if not check_permission(item, getattr(device, "current_user", "root"), 'r'):
                 return f"cat: {name}: Permission denied"
                 
@@ -570,7 +1011,10 @@ class TerminalCommandHandler:
             return ""
             
         elif cmd == "cd":
-            if len(parts) < 2 or parts[1] == "~":
+            if len(parts) < 2 or parts[1] in ("~", ""):
+                vfs.curr_fol = vfs.tree
+                return ""
+            if parts[1] == "/":
                 vfs.curr_fol = vfs.tree
                 return ""
             if parts[1] == "..":
@@ -578,26 +1022,88 @@ class TerminalCommandHandler:
                 return ""
             if parts[1] == ".":
                 return ""
-                
-            # Check execute permission before changing directory
-            item = vfs.get_item(parts[1])
-            if item:
-                from backend.database.fs import Folder
-                if isinstance(item, Folder) and not check_permission(item, getattr(device, "current_user", "root"), 'x'):
-                    return f"bash: cd: {parts[1]}: Permission denied"
-                    
-            import io
-            from contextlib import redirect_stdout
-            f = io.StringIO()
-            with redirect_stdout(f):
-                vfs.jmp_into(parts[1])
-            err = f.getvalue().strip()
-            return err if err else ""
+
+            target_path = parts[1]
+            user = getattr(device, "current_user", "root")
+
+            if target_path.startswith("/"):
+                target = vfs.path_to_tree(target_path)
+            else:
+                target = vfs.get_item(target_path)
+                if not target and "/" in target_path:
+                    cur = vfs.curr_fol
+                    for seg in target_path.split("/"):
+                        if not seg or seg == ".":
+                            continue
+                        elif seg == "..":
+                            cur = cur.parent if cur.parent else cur
+                        else:
+                            sub = None
+                            for itm in cur.all:
+                                if itm.name == seg:
+                                    sub = itm
+                                    break
+                            cur = sub
+                            if not cur:
+                                break
+                    target = cur
+
+            if not target:
+                return f"bash: cd: {target_path}: No such file or directory"
+
+            from backend.database.fs import Folder
+            if not isinstance(target, Folder):
+                return f"bash: cd: {target_path}: Not a directory"
+
+            if not check_permission(target, user, 'x'):
+                return f"bash: cd: {target_path}: Permission denied"
+
+            vfs.curr_fol = target
+            return ""
 
         elif cmd == "scp":
             if len(parts) < 3:
                 return "usage: scp <source> <user@host:destination>"
-            return "scp: transferring files to remote VFS requires active SSH daemon file handler (coming soon in Phase 3)"
+                
+            source_path = parts[1]
+            dest_str = parts[2]
+            
+            if "@" not in dest_str or ":" not in dest_str:
+                return "scp: invalid destination format. Use user@host:path"
+                
+            user_host, dest_path = dest_str.split(":", 1)
+            username, remote_ip = user_host.split("@", 1)
+            
+            # Lookup route and remote host
+            network = getattr(device, "network", None)
+            if not network:
+                return "scp: Network offline."
+                
+            dest_host = network.get_host_by_ip(remote_ip)
+            if not dest_host:
+                return f"ssh: connect to host {remote_ip} port 22: Connection refused"
+            
+            vfs = getattr(device, "vfs", None)
+            if not vfs:
+                return "scp: No local filesystem."
+            source_file = vfs.path_to_tree(source_path)
+            if not source_file or not hasattr(source_file, "contents"):
+                return f"scp: {source_path}: No such file"
+                
+            if not hasattr(device, "_terminal_sessions"):
+                device._terminal_sessions = []
+                
+            device._terminal_sessions.append({
+                "state": "AWAITING_SCP_PASSWORD",
+                "user": username,
+                "remote_ip": remote_ip,
+                "remote_device": dest_host,
+                "source_content": source_file.contents,
+                "source_filename": source_file.name,
+                "dest_path": dest_path,
+                "password_attempts": 0
+            })
+            return self.get_prompt(device)
             
         return f"bash: {cmd}: command not found"
 
@@ -751,6 +1257,8 @@ class TerminalCommandHandler:
                                 net = ipaddress.IPv4Interface(ip_cidr)
                                 intf.ip = str(net.ip)
                                 intf.subnet = str(net.network)
+                                if hasattr(device, "_generate_system_files"):
+                                    device._generate_system_files()
                                 if self.state_manager: self.state_manager.save()
                                 return f"Added {ip_cidr} to {dev_name}."
                             except Exception as e:
@@ -758,6 +1266,8 @@ class TerminalCommandHandler:
                         else:
                             intf.ip = None
                             intf.subnet = None
+                            if hasattr(device, "_generate_system_files"):
+                                device._generate_system_files()
                             if self.state_manager: self.state_manager.save()
                             return f"Deleted IP from {dev_name}."
                 else:
@@ -917,20 +1427,647 @@ class TerminalCommandHandler:
         else:
             return f"Object \"{obj}\" is unknown, try \"ip help\"."
 
-    def _handle_arp(self, device):
-        output = "ARP Cache:\n"
+    def _handle_arp(self, device, parts=None):
+        parts = parts or ["arp"]
+        if len(parts) > 1 and parts[1] in ("--help", "-h"):
+            return """arp - manipulate the system ARP cache
+Usage:
+  arp [-a]                 Display current ARP cache
+  arp -s <ip> <hw_addr>    Add a static entry to ARP cache
+  arp -d <ip>              Delete an entry from ARP cache"""
+
+        if len(parts) >= 4 and parts[1] == "-s":
+            ip_val = parts[2]
+            mac_val = parts[3]
+            for intf in getattr(device, "interfaces", []):
+                if hasattr(intf, "arp") and intf.arp:
+                    intf.arp.cache[ip_val] = mac_val
+            return f"Added static ARP entry: {ip_val} -> {mac_val}"
+
+        elif len(parts) >= 3 and parts[1] == "-d":
+            ip_val = parts[2]
+            deleted = False
+            for intf in getattr(device, "interfaces", []):
+                if hasattr(intf, "arp") and intf.arp and ip_val in intf.arp.cache:
+                    del intf.arp.cache[ip_val]
+                    deleted = True
+            return f"Deleted ARP entry for {ip_val}" if deleted else f"No ARP entry found for {ip_val}"
+
+        output = f"{'Address':<18} {'HWtype':<10} {'HWaddress':<20} {'Flags':<8} {'Iface'}\n"
         has_arp = False
         for intf in getattr(device, "interfaces", []):
             if hasattr(intf, "arp") and intf.arp:
                 has_arp = True
                 for ip, mac in intf.arp.cache.items():
-                    output += f"({intf.name}) {ip} -> {mac}\n"
-        
+                    output += f"{ip:<18} {'ether':<10} {mac:<20} {'C':<8} {intf.name}\n"
+
         if not has_arp:
             return "ARP not supported on this device."
-        elif output == "ARP Cache:\n":
-            output += "(empty)\n"
-        return output
+        elif output.strip().endswith("Iface"):
+            return "Address                  HWtype     HWaddress            Flags    Iface\n(empty cache)"
+        return output.rstrip()
+
+    def _handle_arpspoof(self, device, parts):
+        if len(parts) < 3 or (len(parts) > 1 and parts[1] in ("--help", "-h")):
+            return """arpspoof - intercept packets on a switched LAN using ARP poisoning
+Usage:
+  arpspoof [-i interface] -t target_ip host_to_spoof
+  arpspoof target_ip host_to_spoof
+
+Options:
+  -i interface   Specify interface to use (default: eth0)
+  -t target_ip   Specify target host whose ARP cache will be poisoned
+  host_to_spoof  The IP address to spoof (e.g. Default Gateway)"""
+
+        args = parts[1:]
+        target_ip = None
+        host_to_spoof = None
+        if "-t" in args:
+            idx = args.index("-t")
+            if idx + 1 < len(args):
+                target_ip = args[idx + 1]
+            rem = [a for i, a in enumerate(args) if i != idx and i != idx + 1 and not a.startswith("-i")]
+            if rem:
+                host_to_spoof = rem[0]
+        elif len(args) >= 2:
+            target_ip = args[0]
+            host_to_spoof = args[1]
+
+        if not target_ip or not host_to_spoof:
+            return "Usage: arpspoof [-i interface] -t target_ip host_to_spoof"
+
+        src_intf = device.interfaces[0] if getattr(device, "interfaces", None) else None
+        if not src_intf:
+            return "arpspoof: No active interface found on this device."
+
+        target_dev = None
+        target_intf = None
+        all_devices = list(getattr(self.sim, "hosts", {}).values()) + list(getattr(self.sim, "routers", {}).values())
+        for dev in all_devices:
+            for intf in getattr(dev, "interfaces", []):
+                if getattr(intf, "ip", "") == target_ip:
+                    target_dev = dev
+                    target_intf = intf
+                    break
+            if target_dev:
+                break
+
+        if not target_dev or not target_intf:
+            return f"arpspoof: Target host {target_ip} not found on the network."
+
+        if hasattr(target_intf, "arp") and target_intf.arp:
+            target_intf.arp.cache[host_to_spoof] = src_intf.mac
+
+        if getattr(device, "network", None):
+            from backend.core.event import Event
+            device.network.add_event(Event(
+                type="ARP_SPOOF_DETECTED",
+                severity="CRITICAL",
+                source=device.name,
+                destination=target_ip,
+                protocol="ARP",
+                metadata={
+                    "attacker_ip": src_intf.ip,
+                    "attacker_mac": src_intf.mac,
+                    "target_ip": target_ip,
+                    "target_host": target_dev.name,
+                    "poisoned_ip": host_to_spoof
+                }
+            ))
+
+        return f"[+] Sent ARP reply: {host_to_spoof} is-at {src_intf.mac} to {target_ip}\n[+] ARP cache poisoned on {target_dev.name} ({target_ip}). Packets for {host_to_spoof} now route to {device.name}."
+
+    def _handle_nmap(self, device, parts):
+        if len(parts) < 2 or (len(parts) > 1 and parts[1] in ("--help", "-h")):
+            return """Nmap 7.94 ( https://nmap.org )
+Usage: nmap [Scan Type...] [Options] {target specification}
+
+TARGET SPECIFICATION:
+  Can pass hostnames, IP addresses, networks (e.g. 10.0.0.2, 10.0.0.0/24)
+SCAN TECHNIQUES:
+  -sS/sT: TCP SYN / Connect scan (default)
+  -sU: UDP scan
+  -sn: Ping scan (disable port scan, host discovery)
+PORT SPECIFICATION:
+  -p <port ranges>: Only scan specified ports
+    Ex: -p22; -p1-100; -p 22,80,443"""
+
+        args = parts[1:]
+        target = None
+        ports_to_scan = None
+        ping_sweep = False
+        proto_filter = "ALL"
+
+        i = 0
+        while i < len(args):
+            arg = args[i]
+            if arg == "-sn":
+                ping_sweep = True
+            elif arg in ("-sS", "-sT"):
+                proto_filter = "TCP"
+            elif arg == "-sU":
+                proto_filter = "UDP"
+            elif arg == "-p":
+                if i + 1 < len(args):
+                    ports_to_scan = self._parse_nmap_ports(args[i+1])
+                    i += 1
+                else:
+                    return "nmap: -p requires port range argument"
+            elif arg.startswith("-p"):
+                ports_to_scan = self._parse_nmap_ports(arg[2:])
+            elif not arg.startswith("-"):
+                target = arg
+            i += 1
+
+        if not target:
+            return "nmap: missing target specification"
+
+        if ports_to_scan is None and not ping_sweep:
+            ports_to_scan = [21, 22, 23, 25, 53, 67, 68, 80, 110, 123, 135, 139, 143, 443, 445, 3389, 8080]
+
+        import ipaddress, time
+        output = [f"Starting Nmap 7.94 ( https://nmap.org ) at {time.strftime('%Y-%m-%d %H:%M UTC')}"]
+
+        is_network = False
+        target_net = None
+        try:
+            if "/" in target:
+                target_net = ipaddress.IPv4Network(target, strict=False)
+                is_network = True
+        except Exception:
+            is_network = False
+
+        if is_network:
+            live_hosts = []
+            all_devices = list(getattr(self.sim, "hosts", {}).values()) + list(getattr(self.sim, "routers", {}).values())
+            for dev in all_devices:
+                for intf in getattr(dev, "interfaces", []):
+                    if getattr(intf, "ip", None):
+                        try:
+                            dev_ip = ipaddress.IPv4Address(intf.ip)
+                            if dev_ip in target_net:
+                                live_hosts.append((dev, intf))
+                        except Exception:
+                            pass
+
+            if ping_sweep:
+                for dev, intf in live_hosts:
+                    output.append(f"Nmap scan report for {dev.name} ({intf.ip})")
+                    output.append(f"Host is up (0.0003{len(dev.name)}s latency).")
+                    output.append(f"MAC Address: {intf.mac} (Virtual Network Adapter)")
+                output.append(f"\nNmap done: {target_net.num_addresses} IP addresses ({len(live_hosts)} hosts up) scanned in 0.42 seconds")
+                return "\n".join(output)
+            else:
+                for dev, intf in live_hosts:
+                    output.append(f"\nNmap scan report for {dev.name} ({intf.ip})")
+                    output.append(f"Host is up (0.00028s latency).")
+                    open_ports = self._scan_device_ports(dev, ports_to_scan, proto_filter)
+                    if open_ports:
+                        output.append(f"{'PORT':<9} {'STATE':<7} SERVICE")
+                        for p, proto, svc_name in open_ports:
+                            output.append(f"{f'{p}/{proto}':<9} {'open':<7} {svc_name}")
+                    else:
+                        output.append("All scanned ports are closed.")
+                output.append(f"\nNmap done: {target_net.num_addresses} IP addresses ({len(live_hosts)} hosts up) scanned in 0.88 seconds")
+                return "\n".join(output)
+
+        resolved_ip = target
+        from application.dns_resolver import resolve_hostname
+        net = getattr(device, "network", None)
+        if net and not target.replace(".", "").isdigit():
+            r = resolve_hostname(target, device)
+            if r: resolved_ip = r
+
+        target_dev = None
+        all_devices = list(getattr(self.sim, "hosts", {}).values()) + list(getattr(self.sim, "routers", {}).values())
+        for dev in all_devices:
+            if dev.name.lower() == target.lower():
+                target_dev = dev
+                break
+            for intf in getattr(dev, "interfaces", []):
+                if getattr(intf, "ip", "") == resolved_ip:
+                    target_dev = dev
+                    break
+            if target_dev: break
+
+        if not target_dev:
+            output.append(f"Note: Host seems down. If it is really up, but blocking our ping probes, try -Pn")
+            output.append(f"Nmap done: 1 IP address (0 hosts up) scanned in 2.01 seconds")
+            return "\n".join(output)
+
+        output.append(f"Nmap scan report for {target_dev.name} ({resolved_ip})")
+        output.append(f"Host is up (0.00035s latency).")
+
+        if ping_sweep:
+            intf_mac = target_dev.interfaces[0].mac if target_dev.interfaces else "unknown"
+            output.append(f"MAC Address: {intf_mac}")
+            output.append(f"Nmap done: 1 IP address (1 host up) scanned in 0.05 seconds")
+            return "\n".join(output)
+
+        open_ports = self._scan_device_ports(target_dev, ports_to_scan, proto_filter)
+        closed_count = max(0, len(ports_to_scan) - len(open_ports))
+        if closed_count > 0:
+            output.append(f"Not shown: {closed_count} closed tcp/udp ports (reset)")
+
+        if open_ports:
+            output.append(f"{'PORT':<9} {'STATE':<7} SERVICE")
+            for p, proto, svc_name in open_ports:
+                output.append(f"{f'{p}/{proto}':<9} {'open':<7} {svc_name}")
+        else:
+            output.append("All scanned ports are closed.")
+
+        output.append(f"\nNmap done: 1 IP address (1 host up) scanned in 0.15 seconds")
+
+        if getattr(device, "network", None):
+            from backend.core.event import Event
+            device.network.add_event(Event(
+                type="PORT_SCAN_DETECTED",
+                severity="HIGH",
+                source=device.name,
+                destination=resolved_ip,
+                protocol="TCP/UDP",
+                metadata={"target": target_dev.name, "ports": [p[0] for p in open_ports]}
+            ))
+
+        return "\n".join(output)
+
+    def _parse_nmap_ports(self, arg):
+        ports = []
+        for part in arg.split(","):
+            part = part.strip()
+            if "-" in part:
+                try:
+                    s, e = part.split("-", 1)
+                    s_val = int(s)
+                    e_val = int(e)
+                    ports.extend(range(s_val, min(e_val + 1, s_val + 1000)))
+                except: pass
+            else:
+                try: ports.append(int(part))
+                except: pass
+        return ports if ports else [22, 53, 80]
+
+    def _scan_device_ports(self, dev, ports, proto_filter):
+        PORT_NAMES = {
+            21: "ftp", 22: "ssh", 23: "telnet", 25: "smtp", 53: "domain",
+            67: "dhcps", 68: "dhcpc", 80: "http", 110: "pop3", 123: "ntp",
+            135: "msrpc", 139: "netbios-ssn", 143: "imap", 443: "https",
+            445: "microsoft-ds", 3389: "ms-wbt-server", 8080: "http-proxy"
+        }
+        res = []
+        for s in getattr(dev, "services", []):
+            if getattr(s, "status", "").lower() == "running":
+                s_port = getattr(s, "port", 0)
+                s_proto = getattr(s, "protocol", "TCP").upper()
+                if proto_filter != "ALL" and s_proto != proto_filter:
+                    continue
+                if s_port in ports:
+                    name = PORT_NAMES.get(s_port, s.name.lower())
+                    res.append((s_port, s_proto.lower(), name))
+        return sorted(res, key=lambda x: x[0])
+
+    def _handle_nc(self, device, parts):
+        if len(parts) < 2 or parts[1] in ("--help", "-h"):
+            return """nc (netcat) - arbitrary TCP and UDP connections and listens
+Usage:
+  nc [-v] [-z] hostname port
+  nc -l -p port
+  nc hostname port -e /bin/sh
+
+Options:
+  -l        Listen mode, for inbound connects
+  -p port   Local port number
+  -v        Verbose mode
+  -z        Zero-I/O mode [used for scanning]
+  -u        UDP mode
+  -e prog   Program to execute after connection (reverse shell)"""
+
+        args = parts[1:]
+        is_listen = "-l" in args or any("l" in a for a in args if a.startswith("-") and not a.startswith("--"))
+        port = None
+        target = None
+        exec_prog = None
+        is_zero = "-z" in args or any("z" in a for a in args if a.startswith("-") and not a.startswith("--"))
+
+        i = 0
+        while i < len(args):
+            arg = args[i]
+            if arg in ("-p", "--port"):
+                if i + 1 < len(args):
+                    try: port = int(args[i+1])
+                    except: pass
+                    i += 1
+            elif arg in ("-e", "--exec"):
+                if i + 1 < len(args):
+                    exec_prog = args[i+1]
+                    i += 1
+            elif arg.isdigit():
+                port = int(arg)
+            elif not arg.startswith("-"):
+                target = arg
+            i += 1
+
+        if is_listen:
+            listen_port = port or 4444
+            if not hasattr(device, "_terminal_sessions"):
+                device._terminal_sessions = []
+            device._terminal_sessions.append({
+                "state": "AWAITING_NC_LISTENER",
+                "port": listen_port
+            })
+            return f"listening on [any] {listen_port} ..."
+
+        if not target or not port:
+            return "Usage: nc [options] hostname port"
+
+        resolved_ip = target
+        from application.dns_resolver import resolve_hostname
+        net = getattr(device, "network", None)
+        if net and not target.replace(".", "").isdigit():
+            r = resolve_hostname(target, device)
+            if r: resolved_ip = r
+
+        target_dev = None
+        all_devices = list(getattr(self.sim, "hosts", {}).values()) + list(getattr(self.sim, "routers", {}).values())
+        for dev in all_devices:
+            for intf in getattr(dev, "interfaces", []):
+                if getattr(intf, "ip", "") == resolved_ip:
+                    target_dev = dev
+                    break
+            if target_dev: break
+
+        if not target_dev:
+            return f"nc: connect to {target} port {port} (tcp) failed: Connection refused"
+
+        listener_session = None
+        for s in getattr(target_dev, "_terminal_sessions", []):
+            if s.get("state") == "AWAITING_NC_LISTENER" and s.get("port") == port:
+                listener_session = s
+                break
+
+        if exec_prog and listener_session:
+            src_ip = device.interfaces[0].ip if device.interfaces else "unknown"
+            listener_session["state"] = "CONNECTED"
+            listener_session["remote_device"] = device
+            listener_session["remote_device_name"] = device.name
+            listener_session["remote_ip"] = src_ip
+            listener_session["user"] = getattr(device, "current_user", "user")
+            listener_session["port"] = port
+            listener_session["is_reverse_shell"] = True
+
+            if net:
+                from backend.core.event import Event
+                net.add_event(Event(
+                    type="REVERSE_SHELL_CONNECTED",
+                    severity="CRITICAL",
+                    source=device.name,
+                    destination=target_dev.name,
+                    protocol="TCP",
+                    port=port,
+                    metadata={"victim": device.name, "attacker": target_dev.name, "program": exec_prog}
+                ))
+
+            return ""
+
+        is_port_open = False
+        svc_name = "unknown"
+        for s in getattr(target_dev, "services", []):
+            if getattr(s, "port", 0) == port and getattr(s, "status", "").lower() == "running":
+                is_port_open = True
+                svc_name = getattr(s, "name", "unknown").lower()
+                break
+
+        if is_port_open or listener_session:
+            if is_zero:
+                return f"Connection to {target} {port} port [tcp/{svc_name}] succeeded!"
+            if port == 22:
+                return "SSH-2.0-AxiomSSH_1.0"
+            elif port == 80:
+                return "HTTP/1.1 200 OK\r\nServer: AxiomHTTP/1.0\r\nContent-Type: text/html\r\n\r\n<!DOCTYPE html><html><body><h1>Cyber Hazard Lab HTTP Server</h1></body></html>"
+            elif port == 7:
+                return "Axiom Echo Service Ready"
+            else:
+                return f"Connected to {target}:{port}. Type exit to close."
+
+        return f"nc: connect to {target} port {port} (tcp) failed: Connection refused"
+
+    PORT_SERVICE_MAP = {
+        7: "echo",
+        20: "ftp-data",
+        21: "ftp",
+        22: "ssh",
+        23: "telnet",
+        25: "smtp",
+        53: "domain",
+        67: "bootps",
+        68: "bootpc",
+        69: "tftp",
+        80: "http",
+        88: "kerberos",
+        110: "pop3",
+        123: "ntp",
+        143: "imap",
+        161: "snmp",
+        389: "ldap",
+        443: "https",
+        445: "microsoft-ds",
+        636: "ldaps",
+        3306: "mysql",
+        3389: "ms-wbt-server",
+        8080: "http-alt",
+    }
+
+    def _fmt_endpoint(self, ip, port, numeric):
+        if port is None or port == "*":
+            return f"{ip}:*"
+        if numeric:
+            return f"{ip}:{port}"
+        svc = self.PORT_SERVICE_MAP.get(port)
+        return f"{ip}:{svc}" if svc else f"{ip}:{port}"
+
+    def _get_device_sockets(self, device):
+        sockets = []
+
+        # Determine host primary IP
+        dev_ip = "0.0.0.0"
+        if hasattr(device, "interfaces") and device.interfaces:
+            for iface in device.interfaces:
+                if getattr(iface, "ip", None) and iface.ip != "0.0.0.0":
+                    dev_ip = iface.ip
+                    break
+
+        # 1. Listening services
+        if hasattr(device, "services"):
+            for srv in device.services:
+                if getattr(srv, "status", "").lower() == "running":
+                    proto = getattr(srv, "protocol", "tcp").lower()
+                    port = getattr(srv, "port", 0)
+                    name = getattr(srv, "name", "").lower()
+
+                    # Filter out non-listening client utilities
+                    if port <= 0 or name in ("ssh_client", "dns_client"):
+                        continue
+
+                    local_addr = dev_ip if dev_ip != "0.0.0.0" else "0.0.0.0"
+
+                    sockets.append({
+                        "proto": proto,
+                        "state": "LISTEN" if proto == "tcp" else "UNCONN",
+                        "is_listen": True,
+                        "recv_q": "0",
+                        "send_q": "128" if proto == "tcp" else "0",
+                        "local_ip": local_addr,
+                        "local_port": port,
+                        "peer_ip": "*" if proto == "tcp" else "*",
+                        "peer_port": None,
+                        "pid": 100 + port,
+                        "proc": name
+                    })
+
+        # 2. NC listeners
+        for s in getattr(device, "_terminal_sessions", []):
+            if s.get("state") == "AWAITING_NC_LISTENER":
+                port = s.get("port", 0)
+                local_addr = dev_ip if dev_ip != "0.0.0.0" else "0.0.0.0"
+                sockets.append({
+                    "proto": "tcp",
+                    "state": "LISTEN",
+                    "is_listen": True,
+                    "recv_q": "0",
+                    "send_q": "128",
+                    "local_ip": local_addr,
+                    "local_port": port,
+                    "peer_ip": "*",
+                    "peer_port": None,
+                    "pid": 1337,
+                    "proc": "nc"
+                })
+
+        # 3. Established sessions (outgoing from this device)
+        dev_ip = device.interfaces[0].ip if (getattr(device, "interfaces", []) and device.interfaces[0].ip != "0.0.0.0") else "127.0.0.1"
+        for s in getattr(device, "_terminal_sessions", []):
+            if s.get("state") == "CONNECTED":
+                port = s.get("port", 22)
+                r_ip = s.get("remote_ip", "10.0.0.1")
+                l_port = 49152 + (hash(s.get("remote_device_name", "") + str(port)) % 10000)
+                sockets.append({
+                    "proto": "tcp",
+                    "state": "ESTAB",
+                    "is_listen": False,
+                    "recv_q": "0",
+                    "send_q": "0",
+                    "local_ip": dev_ip,
+                    "local_port": l_port,
+                    "peer_ip": r_ip,
+                    "peer_port": port,
+                    "pid": 2048,
+                    "proc": "nc" if s.get("is_reverse_shell") else "ssh"
+                })
+
+        # 4. Established sessions (incoming into this device)
+        net = getattr(device, "network", None)
+        if net and hasattr(net, "hosts"):
+            for other_dev in net.hosts.values():
+                if other_dev is not device:
+                    for s in getattr(other_dev, "_terminal_sessions", []):
+                        if s.get("state") == "CONNECTED" and s.get("remote_device") == device:
+                            port = s.get("port", 22)
+                            other_ip = other_dev.interfaces[0].ip if (getattr(other_dev, "interfaces", []) and other_dev.interfaces[0].ip != "0.0.0.0") else "10.0.0.1"
+                            r_port = 49152 + (hash(device.name + str(port)) % 10000)
+                            sockets.append({
+                                "proto": "tcp",
+                                "state": "ESTAB",
+                                "is_listen": False,
+                                "recv_q": "0",
+                                "send_q": "0",
+                                "local_ip": dev_ip,
+                                "local_port": port,
+                                "peer_ip": other_ip,
+                                "peer_port": r_port,
+                                "pid": 100 + port,
+                                "proc": "sshd" if port == 22 else ("nc" if s.get("is_reverse_shell") else "server")
+                            })
+
+        return sockets
+
+    def _handle_ss(self, device, parts):
+        if len(parts) > 1 and parts[1] in ("--help", "-h"):
+            return """ss - another utility to investigate sockets
+Usage: ss [OPTIONS]
+
+Options:
+  -t, --tcp        Display TCP sockets
+  -u, --udp        Display UDP sockets
+  -l, --listening  Display only listening sockets
+  -a, --all        Display both listening and non-listening sockets
+  -p, --processes  Show process using socket
+  -n, --numeric    Do not try to resolve service names"""
+
+        flag_chars = set()
+        long_flags = set()
+        for p in parts[1:]:
+            if p.startswith("--"):
+                long_flags.add(p.lower())
+            elif p.startswith("-"):
+                for c in p[1:]:
+                    flag_chars.add(c.lower())
+
+        has_t = "t" in flag_chars or "--tcp" in long_flags
+        has_u = "u" in flag_chars or "--udp" in long_flags
+        if not has_t and not has_u:
+            show_tcp = True
+            show_udp = True
+        else:
+            show_tcp = has_t
+            show_udp = has_u
+
+        has_l = "l" in flag_chars or "--listening" in long_flags
+        has_a = "a" in flag_chars or "--all" in long_flags
+        if has_l and not has_a:
+            show_listen = True
+            show_estab = False
+        elif has_a:
+            show_listen = True
+            show_estab = True
+        else:
+            show_listen = False
+            show_estab = True
+
+        show_proc = "p" in flag_chars or "--processes" in long_flags
+        numeric = "n" in flag_chars or "--numeric" in long_flags
+
+        sockets = self._get_device_sockets(device)
+        filtered = []
+        for s in sockets:
+            if s["proto"] == "tcp" and not show_tcp:
+                continue
+            if s["proto"] == "udp" and not show_udp:
+                continue
+            if s["is_listen"] and not show_listen:
+                continue
+            if not s["is_listen"] and not show_estab:
+                continue
+            filtered.append(s)
+
+        if show_proc:
+            header = f"{'Netid':<6} {'State':<10} {'Recv-Q':<7} {'Send-Q':<7} {'Local Address:Port':<24} {'Peer Address:Port':<20} Process"
+        else:
+            header = f"{'Netid':<6} {'State':<10} {'Recv-Q':<7} {'Send-Q':<7} {'Local Address:Port':<24} {'Peer Address:Port':<20}"
+
+        if not filtered:
+            return f"{header}\n(No active sockets found)"
+
+        lines = [header]
+        for s in filtered:
+            local = self._fmt_endpoint(s["local_ip"], s["local_port"], numeric)
+            peer = self._fmt_endpoint(s["peer_ip"], s["peer_port"], numeric) if s["peer_port"] is not None else "*:*"
+            if show_proc:
+                proc_str = f'users:(("{s["proc"]}",pid={s["pid"]},fd=3))'
+                lines.append(f"{s['proto']:<6} {s['state']:<10} {s['recv_q']:<7} {s['send_q']:<7} {local:<24} {peer:<20} {proc_str}")
+            else:
+                lines.append(f"{s['proto']:<6} {s['state']:<10} {s['recv_q']:<7} {s['send_q']:<7} {local:<24} {peer:<20}")
+
+        return "\n".join(lines)
 
     def _handle_legacy_route(self, device, parts):
         if not hasattr(device, "routes"):
@@ -1119,26 +2256,96 @@ class TerminalCommandHandler:
             return f"Tracert failed: {str(e)}"
 
     def _handle_netstat(self, device, parts):
-        args = parts[1:]
-        output = "Active Internet connections (w/o servers)\n"
-        output += "Proto Recv-Q Send-Q Local Address           Foreign Address         State\n"
-        
-        has_sockets = False
-        
-        # Check if device has any ports open/listening
-        if hasattr(device, "services"):
-            for srv in device.services:
-                if getattr(srv, "status", "").lower() == "running":
-                    port = getattr(srv, "port", 0)
-                    proto = getattr(srv, "protocol", "tcp").lower()
-                    local = f"0.0.0.0:{port}"
-                    output += f"{proto:<5} 0      0      {local:<23} 0.0.0.0:*               LISTEN\n"
-                    has_sockets = True
-                    
-        if not has_sockets:
-            output = "Active Internet connections (w/o servers)\nProto Recv-Q Send-Q Local Address           Foreign Address         State\n(No active sockets found)"
-            
-        return output
+        if len(parts) > 1 and parts[1] in ("--help", "-h"):
+            return """netstat - print network connections, routing tables, interface statistics
+Usage: netstat [OPTIONS]
+
+Options:
+  -t, --tcp        Display TCP sockets
+  -u, --udp        Display UDP sockets
+  -l, --listening  Display only listening sockets
+  -a, --all        Display both listening and non-listening sockets
+  -p, --programs   Show PID and program names
+  -n, --numeric    Don't resolve names"""
+
+        flag_chars = set()
+        long_flags = set()
+        for p in parts[1:]:
+            if p.startswith("--"):
+                long_flags.add(p.lower())
+            elif p.startswith("-"):
+                for c in p[1:]:
+                    flag_chars.add(c.lower())
+
+        has_t = "t" in flag_chars or "--tcp" in long_flags
+        has_u = "u" in flag_chars or "--udp" in long_flags
+        if not has_t and not has_u:
+            show_tcp = True
+            show_udp = True
+        else:
+            show_tcp = has_t
+            show_udp = has_u
+
+        has_l = "l" in flag_chars or "--listening" in long_flags
+        has_a = "a" in flag_chars or "--all" in long_flags
+        if has_l and not has_a:
+            show_listen = True
+            show_estab = False
+        elif has_a:
+            show_listen = True
+            show_estab = True
+        else:
+            show_listen = False
+            show_estab = True
+
+        show_proc = "p" in flag_chars or "--programs" in long_flags or "--processes" in long_flags
+        numeric = "n" in flag_chars or "--numeric" in long_flags
+
+        sockets = self._get_device_sockets(device)
+        filtered = []
+        for s in sockets:
+            if s["proto"] == "tcp" and not show_tcp:
+                continue
+            if s["proto"] == "udp" and not show_udp:
+                continue
+            if s["is_listen"] and not show_listen:
+                continue
+            if not s["is_listen"] and not show_estab:
+                continue
+            filtered.append(s)
+
+        if show_listen and show_estab:
+            title = "Active Internet connections (servers and established)"
+        elif show_listen:
+            title = "Active Internet connections (only servers)"
+        else:
+            title = "Active Internet connections (w/o servers)"
+
+        if show_proc:
+            cols = f"{'Proto':<5} {'Recv-Q':<7} {'Send-Q':<7} {'Local Address':<23} {'Foreign Address':<23} {'State':<11} PID/Program name"
+        else:
+            cols = f"{'Proto':<5} {'Recv-Q':<7} {'Send-Q':<7} {'Local Address':<23} {'Foreign Address':<23} {'State':<11}"
+
+        if not filtered:
+            return f"{title}\n{cols}\n(No active sockets found)"
+
+        lines = [title, cols]
+        for s in filtered:
+            local = self._fmt_endpoint(s["local_ip"], s["local_port"], numeric)
+            foreign = self._fmt_endpoint(s["peer_ip"], s["peer_port"], numeric) if s["peer_port"] is not None else "0.0.0.0:*"
+            state_str = s["state"]
+            if s["proto"] == "udp" and s["is_listen"]:
+                state_str = ""
+            elif state_str == "ESTAB":
+                state_str = "ESTABLISHED"
+
+            if show_proc:
+                prog_col = f"{s['pid']}/{s['proc']}"
+                lines.append(f"{s['proto']:<5} {s['recv_q']:<7} {s['send_q']:<7} {local:<23} {foreign:<23} {state_str:<11} {prog_col}")
+            else:
+                lines.append(f"{s['proto']:<5} {s['recv_q']:<7} {s['send_q']:<7} {local:<23} {foreign:<23} {state_str:<11}")
+
+        return "\n".join(lines)
 
     def _handle_echo(self, device, parts):
         if len(parts) < 2:
@@ -1461,8 +2668,110 @@ class TerminalCommandHandler:
                     return f"Error: {str(e)}"
             return "Failed."
             
+        elif action == "config":
+            if len(parts) < 3:
+                return "Usage: service config <name> [key=value | key value | show]"
+            name = parts[2].upper()
+            svc = next((s for s in getattr(device, "services", []) if s.name.upper() == name), None)
+            if not svc:
+                return f"service: {name} not found on this device."
+            
+            if len(parts) == 3 or parts[3].lower() == "show":
+                daemon = device.get_service_daemon(svc.name)
+                effective_cfg = dict(getattr(svc, "config", {}) or {})
+                if daemon and hasattr(daemon, "_get_config"):
+                    try:
+                        d_cfg = daemon._get_config()
+                        if isinstance(d_cfg, dict):
+                            effective_cfg.update(d_cfg)
+                    except Exception:
+                        pass
+                
+                output = f"Configuration for {name}:\n"
+                if not effective_cfg:
+                    return output + "  (none)"
+                
+                for k, v in effective_cfg.items():
+                    if k == "records" and isinstance(v, list):
+                        output += f"  records:\n"
+                        output += f"    {'TYPE':<8} {'NAME':<20} {'TARGET':<22} {'STATUS'}\n"
+                        output += f"    {'-'*8} {'-'*20} {'-'*22} {'-'*10}\n"
+                        for r in v:
+                            if isinstance(r, dict):
+                                rtype = r.get("type", "A")
+                                rname = r.get("name", "@")
+                                rtarget = r.get("target", "")
+                                raw_status = r.get("status", "ONLINE")
+                                rstatus = "STATIC" if rtype.upper() == "PTR" else raw_status
+                                output += f"    {rtype:<8} {rname:<20} {rtarget:<22} [{rstatus}]\n"
+                            else:
+                                output += f"    {r}\n"
+                    elif k == "scopes" and isinstance(v, list):
+                        output += f"  scopes:\n"
+                        output += f"    {'SUBNET':<18} {'START':<16} {'END':<16} {'ROUTER/DNS'}\n"
+                        output += f"    {'-'*18} {'-'*16} {'-'*16} {'-'*16}\n"
+                        for sc in v:
+                            if isinstance(sc, dict):
+                                snet = sc.get("subnet", "")
+                                p_start = sc.get("pool_start", "")
+                                p_end = sc.get("pool_end", "")
+                                gw = sc.get("gateway", "")
+                                output += f"    {snet:<18} {p_start:<16} {p_end:<16} {gw}\n"
+                            else:
+                                output += f"    {sc}\n"
+                    elif k == "users" and isinstance(v, dict):
+                        user_str = ", ".join([f"{u}:{p}" for u, p in v.items()])
+                        output += f"  {k} = {user_str}\n"
+                    else:
+                        output += f"  {k} = {v}\n"
+                return output.rstrip()
+                
+            cfg = dict(getattr(svc, "config", {}))
+            raw_kv = " ".join(parts[3:]).strip()
+            if "=" in raw_kv:
+                k, v = raw_kv.split("=", 1)
+            elif len(parts[3:]) >= 2:
+                k, v = parts[3], " ".join(parts[4:])
+            else:
+                return "Usage: service config <name> <key>=<value>"
+                
+            k = k.strip().lower()
+            v = v.strip()
+            
+            # If configuring users, parse user string (e.g. "admin:dns, root:toor") into dict
+            if k == "users":
+                if isinstance(v, str):
+                    parsed_users = {}
+                    # Support comma-separated or space-separated user:pass pairs
+                    tokens = [t.strip() for t in v.replace(",", " ").split() if t.strip()]
+                    for token in tokens:
+                        if ":" in token:
+                            u_name, u_pass = token.split(":", 1)
+                            parsed_users[u_name.strip()] = u_pass.strip()
+                    if parsed_users:
+                        cfg["users"] = parsed_users
+                        # Synchronize with host system accounts
+                        if hasattr(device, "users"):
+                            device.users.update(parsed_users)
+                    else:
+                        cfg["users"] = v
+                else:
+                    cfg["users"] = v
+            else:
+                cfg[k] = v
+                
+            svc.config = cfg
+            
+            daemon = device.get_service_daemon(svc.name)
+            if daemon and hasattr(daemon, "reload_config"):
+                daemon.reload_config(svc.config)
+                
+            if self.state_manager:
+                self.state_manager.save()
+            return f"Config updated for {name}: {k}='{v}'"
+            
         else:
-            return "Usage: service {list|add|start|stop|remove}"
+            return "Usage: service {list|add|start|stop|remove|config}"
 
     def _handle_nslookup(self, device, parts):
         if len(parts) < 2:
@@ -1491,18 +2800,41 @@ class TerminalCommandHandler:
 
         if qtype == "ANY" or qtype == "LS":
             qtype = "AXFR"
+            
+        import ipaddress
+        try:
+            ipaddress.ip_address(hostname)
+            if qtype == "A":  # If user didn't specify type, auto-switch to PTR
+                qtype = "PTR"
+        except ValueError:
+            pass
                 
         if not dns_ip:
             for s in getattr(device, "services", []):
                 if s.name.upper() in ("DNS_CLIENT", "DNS") and s.status.lower() == "running":
-                    dns_ip = s.config.get("dns_server")
-                    break
+                    dns_ip = s.config.get("nameserver") or s.config.get("dns_server") or s.config.get("dns")
+                    if dns_ip:
+                        break
+
+        if not dns_ip:
+            dns_ip = getattr(device, "dns_server", None)
         
         if not dns_ip:
-            dns_ip = "8.8.8.8"
+            return ";; connection timed out; no servers could be reached"
             
         dns_ip = dns_ip.strip()
         
+        # If tsig_key is provided and corresponds to a file on local VFS, load key from file
+        if tsig_key:
+            vfs = getattr(device, "vfs", None)
+            if vfs:
+                k_file = vfs.get_item(tsig_key) or vfs.path_to_tree(tsig_key)
+                if k_file and hasattr(k_file, "contents") and k_file.contents:
+                    if isinstance(k_file.contents, list):
+                        tsig_key = "".join(k_file.contents).strip()
+                    else:
+                        tsig_key = str(k_file.contents).strip()
+
         payload = f"{qtype} {hostname}"
         if tsig_key:
             payload += f" {tsig_key}"
@@ -1545,6 +2877,9 @@ class TerminalCommandHandler:
                     output += f"Non-authoritative answer:\nName:\t{hostname}\nAnswer:\t{ans}"
                 elif response_str.startswith("DNS_NXDOMAIN: "):
                     output += f"** server can't find {hostname}: NXDOMAIN"
+                elif response_str.startswith("DNS_ERROR: "):
+                    err_msg = response_str.replace("DNS_ERROR: ", "")
+                    output += f"** server can't find {hostname}: {err_msg}"
                 else:
                     output += f"** server failed: {response_str}"
             else:
@@ -1669,6 +3004,8 @@ class TerminalCommandHandler:
         new_drive.parent = mnt
         new_drive.path = f"/mnt/{name}"
         mnt.add(new_drive)
+        if hasattr(device, "_generate_system_files"):
+            device._generate_system_files()
         
         return f"Mounted virtual drive {name} at /mnt/{name}"
 
@@ -1697,4 +3034,7 @@ class TerminalCommandHandler:
         if drive in mnt.visible: mnt.visible.remove(drive)
         if drive in mnt.hidden: mnt.hidden.remove(drive)
         
+        if hasattr(device, "_generate_system_files"):
+            device._generate_system_files()
+
         return f"Unmounted /mnt/{name}"

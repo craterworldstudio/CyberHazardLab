@@ -1133,10 +1133,14 @@ body {
 
 .ncm-tab-content {
     display: none;
+    width: 100%;
 }
 
 .ncm-tab-content.active {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
 }
 
 .ncm-config-placeholder {
@@ -1176,4 +1180,34 @@ body {
     -webkit-user-select: text;
     user-select: text;
     cursor: text;
+}
+
+/* ============================================
+   WIRELESS COVERAGE & AP RADIUS
+   ============================================ */
+.ap-coverage-circle {
+    fill: rgba(0, 229, 255, 0.04);
+    stroke: rgba(0, 229, 255, 0.45);
+    stroke-width: 1.5;
+    stroke-dasharray: 6 4;
+    pointer-events: none;
+    transition: r 0.15s ease, cx 0.05s ease, cy 0.05s ease;
+}
+
+.hide-ap-coverage .ap-coverage-circle {
+    display: none !important;
+}
+
+/* Wireless connection line representation */
+.wireless-link .link-path {
+    stroke: #00e5ff !important;
+    stroke-width: 2 !important;
+    stroke-dasharray: 6 5 !important;
+    animation: wirelessDash 1.2s linear infinite;
+}
+
+@keyframes wirelessDash {
+    to {
+        stroke-dashoffset: -22;
+    }
 }

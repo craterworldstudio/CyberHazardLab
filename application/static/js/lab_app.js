@@ -18,6 +18,16 @@ const CHL = {
             },
             icon: "/static/assets/PC_off.png" // fallback
         },
+        LAPTOP: {
+            prefix: "LAP",
+            textLabel: "Laptop",
+            icons: {
+                OFFLINE: "/static/assets/LAPTOP_off.png",
+                ONLINE: "/static/assets/LAPTOP_on.png",
+                ERROR: "/static/assets/LAPTOP_Err.png"
+            },
+            icon: null
+        },
         SERVER: {
             prefix: "SERV",
             icons: {
@@ -241,6 +251,16 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             if(CHL.links) CHL.links.forEach(l => l.updatePath());
         }
+
+        if (view === "ap-coverage") {
+            const floor = document.getElementById("topologyFloor");
+            floor.classList.toggle("hide-ap-coverage");
+            if (!floor.classList.contains("hide-ap-coverage")) {
+                btn.classList.add("active");
+            } else {
+                btn.classList.remove("active");
+            }
+        }
     }
 
     // Global Master Poll Object
@@ -291,8 +311,16 @@ document.addEventListener("DOMContentLoaded", () => {
             // 2. Sync Canvas Devices Status
             for (const backendDevice of state.devices) {
                 const localDevice = devices.find(d => d.id === backendDevice.name);
-                if (localDevice && backendDevice.status !== localDevice.status) {
-                    localDevice.updateStatus(backendDevice.status);
+                if (localDevice) {
+                    if (backendDevice.status !== localDevice.status) {
+                        localDevice.updateStatus(backendDevice.status);
+                    }
+                    if (backendDevice.coverage_radius !== undefined && localDevice.coverageRadius !== backendDevice.coverage_radius) {
+                        localDevice.coverageRadius = backendDevice.coverage_radius;
+                        if (localDevice.type && localDevice.type.toUpperCase() === "ACCESSPOINT") {
+                            renderAPCoverageCircle(localDevice);
+                        }
+                    }
                 }
             }
             
@@ -417,6 +445,9 @@ document.addEventListener("DOMContentLoaded", () => {
             this.type = type;
             this.status = status || "OFFLINE";
             this.position = { x, y };
+            if (this.type && this.type.toUpperCase() === "ACCESSPOINT") {
+                this.coverageRadius = 200;
+            }
 
             this.element = document.createElement("div");
             this.element.className = "device-node";
@@ -453,13 +484,34 @@ document.addEventListener("DOMContentLoaded", () => {
             this.element.style.top = `${y}px`;
 
             updateDeviceConnectedLinks(this.id);
+            if (this.type && this.type.toUpperCase() === "ACCESSPOINT") {
+                if (typeof renderAPCoverageCircle === "function") renderAPCoverageCircle(this);
+            }
+            if (this.type && (this.type.toUpperCase() === "LAPTOP" || this.type.toUpperCase() === "ACCESSPOINT")) {
+                if (typeof evaluateWirelessAssociations === "function") evaluateWirelessAssociations();
+            }
         }
 
         updateStatus(status) {
             this.status = status;
             const config = CHL.DEVICE_CONFIG[this.type] || CHL.DEVICE_CONFIG.PC;
             const iconPath = config.icons ? (config.icons[this.status] || config.icons.OFFLINE) : config.icon;
-            if (iconPath) this.img.src = iconPath;
+            if (iconPath) {
+                this.img.src = iconPath;
+                this.img.style.display = "";
+                if (this.placeholder) this.placeholder.style.display = "none";
+            } else {
+                this.img.style.display = "none";
+                if (!this.placeholder) {
+                    this.placeholder = document.createElement("div");
+                    this.placeholder.className = "device-placeholder";
+                    this.placeholder.style.cssText = "width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; border: 1px dashed #00e5ff; color: #00e5ff; margin: 0 auto; background: rgba(0,229,255,0.05); border-radius: 4px; user-select: none;";
+                    this.placeholder.textContent = config.textLabel || this.type;
+                    this.element.insertBefore(this.placeholder, this.label);
+                } else {
+                    this.placeholder.style.display = "flex";
+                }
+            }
         }
 
         getCenter() {
@@ -608,7 +660,8 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!dev || !dev.interfaces) return null;
             const intf = dev.interfaces.find(i => i.connected_to === targetName);
             if (!intf) return null;
-            if (dev.type.toUpperCase() === "SWITCH") {
+            const devType = (dev.type || "").toUpperCase();
+            if (devType === "SWITCH" || devType === "ACCESSPOINT") {
                 return "PORT " + (intf.port_number || intf.name.replace("Port-", "")); 
             } else {
                 return intf.ip_only || intf.ip || "No IP";
@@ -919,8 +972,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function executeConnectDevice(device) {
-
-        
+        const isLaptop = d => d && d.type && d.type.toUpperCase() === "LAPTOP";
+        if (isLaptop(device) || isLaptop(connectionSourceDevice)) {
+            console.warn("[CHL] Laptops only connect wirelessly to Access Points and cannot be cabled via Connect tool.");
+            if (connectionSourceDevice) {
+                connectionSourceDevice.setPendingConnect(false);
+                connectionSourceDevice = null;
+            }
+            return;
+        }
 
         if (!connectionSourceDevice) {
             connectionSourceDevice = device;
@@ -1036,6 +1096,10 @@ document.addEventListener("DOMContentLoaded", () => {
             }
     
             updateCounts();
+            if (device.type && device.type.toUpperCase() === "ACCESSPOINT") {
+                removeAPCoverageCircle(device.id);
+            }
+            evaluateWirelessAssociations();
             console.log(`[CHL:REMOVE] Device ${device.id} removed.`);
         } catch (error) {
             console.error(`[CHL:REMOVE] Failed to remove ${device.id}:`, error);
@@ -1247,9 +1311,20 @@ document.addEventListener("DOMContentLoaded", () => {
         const device = new NetworkDevice( backendDevice.name, type, backendDevice.status, x, y
         );
 
+        if (backendDevice.coverage_radius !== undefined) {
+            device.coverageRadius = backendDevice.coverage_radius;
+        } else if (type.toUpperCase() === "ACCESSPOINT") {
+            device.coverageRadius = 200;
+        }
+
         devices.push(device);
         floor.appendChild(device.element);
         updateCounts();
+
+        if (type.toUpperCase() === "ACCESSPOINT") {
+            renderAPCoverageCircle(device);
+        }
+        evaluateWirelessAssociations();
 
         console.log(
             `[CHL] Created visual device ${device.id} (${type})`
@@ -1401,6 +1476,8 @@ document.addEventListener("DOMContentLoaded", () => {
         draggingFromPalette = false;
         paletteDeviceType = null;
         creatingPaletteDevice = false;
+
+        evaluateWirelessAssociations();
     }
 
     async function saveLayout() {
@@ -1430,6 +1507,11 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         updateDeviceConnectedLinks(newId);
+
+        if (svgLayer) {
+            const circle = svgLayer.querySelector(`.ap-coverage-circle[data-device="${oldId}"]`);
+            if (circle) circle.setAttribute("data-device", newId);
+        }
 
         // Also update open NCM window if open under oldId
         if (typeof ncmWindows !== 'undefined' && ncmWindows.has(oldId)) {
@@ -1508,6 +1590,169 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     /* =========================================
+       WIRELESS COVERAGE & ASSOCIATIONS
+       ========================================= */
+
+    function getOrCreateAPCoverageLayer() {
+        let layer = document.getElementById("apCoverageLayer");
+        if (!layer && svgLayer) {
+            layer = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            layer.setAttribute("id", "apCoverageLayer");
+            layer.setAttribute("class", "ap-coverage-layer");
+            svgLayer.insertBefore(layer, svgLayer.firstChild);
+        }
+        return layer;
+    }
+
+    function renderAPCoverageCircle(device) {
+        if (!device || !device.type || device.type.toUpperCase() !== "ACCESSPOINT") return;
+        const layer = getOrCreateAPCoverageLayer();
+        if (!layer) return;
+
+        let circle = layer.querySelector(`.ap-coverage-circle[data-device="${device.id}"]`);
+        if (!circle) {
+            circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            circle.setAttribute("class", "ap-coverage-circle");
+            circle.setAttribute("data-device", device.id);
+            layer.appendChild(circle);
+        }
+        const center = device.getCenter();
+        const radius = device.coverageRadius !== undefined ? device.coverageRadius : 200;
+        circle.setAttribute("cx", center.x);
+        circle.setAttribute("cy", center.y);
+        circle.setAttribute("r", radius);
+    }
+
+    function removeAPCoverageCircle(deviceId) {
+        const layer = getOrCreateAPCoverageLayer();
+        if (!layer) return;
+        const circle = layer.querySelector(`.ap-coverage-circle[data-device="${deviceId}"]`);
+        if (circle) circle.remove();
+    }
+
+    function updateAllAPCoverageCircles() {
+        devices.forEach(dev => {
+            if (dev.type && dev.type.toUpperCase() === "ACCESSPOINT") {
+                renderAPCoverageCircle(dev);
+            }
+        });
+    }
+
+    window.updateAPCoverageRadius = function(deviceId, newRadius) {
+        const dev = devices.find(d => d.id === deviceId);
+        if (dev) {
+            dev.coverageRadius = Number(newRadius);
+            renderAPCoverageCircle(dev);
+            evaluateWirelessAssociations();
+        }
+    };
+
+    const pendingWirelessOps = new Set();
+
+    async function evaluateWirelessAssociations() {
+        const laptops = devices.filter(d => d.type && d.type.toUpperCase() === "LAPTOP");
+        const aps = devices.filter(d => d.type && d.type.toUpperCase() === "ACCESSPOINT");
+
+        for (const laptop of laptops) {
+            if (pendingWirelessOps.has(laptop.id)) continue;
+
+            const laptopCenter = laptop.getCenter();
+
+            // Find existing link between this laptop and an AP
+            const existingLink = links.find(l =>
+                !l.isPhysicallyCut &&
+                ((l.source.id === laptop.id && l.target.type && l.target.type.toUpperCase() === "ACCESSPOINT") ||
+                 (l.target.id === laptop.id && l.source.type && l.source.type.toUpperCase() === "ACCESSPOINT"))
+            );
+
+            let connectedAP = null;
+            if (existingLink) {
+                connectedAP = (existingLink.source.id === laptop.id) ? existingLink.target : existingLink.source;
+            }
+
+            // 1. If currently connected to an AP, check if still within its coverage radius
+            if (connectedAP) {
+                const apCenter = connectedAP.getCenter();
+                const dist = Math.hypot(laptopCenter.x - apCenter.x, laptopCenter.y - apCenter.y);
+                const radius = connectedAP.coverageRadius !== undefined ? connectedAP.coverageRadius : 200;
+
+                if (dist > radius) {
+                    console.log(`[CHL:WIRELESS] Laptop ${laptop.id} moved out of range of AP ${connectedAP.id} (dist: ${dist.toFixed(1)}px > radius: ${radius}px). Disconnecting.`);
+                    pendingWirelessOps.add(laptop.id);
+                    deleteLink(existingLink.id);
+
+                    try {
+                        await apiRequest("POST", "/api/ntm/disconnect", {
+                            device_a: laptop.id,
+                            device_b: connectedAP.id
+                        });
+                    } catch (err) {
+                        console.warn(`[CHL:WIRELESS] Failed to disconnect ${laptop.id} from ${connectedAP.id}:`, err);
+                    } finally {
+                        pendingWirelessOps.delete(laptop.id);
+                    }
+
+                    // Disconnected - check below if entering another AP
+                    connectedAP = null;
+                } else {
+                    // Still in range: ensure styled with .wireless-link
+                    if (!existingLink.isWireless) {
+                        existingLink.isWireless = true;
+                        if (existingLink.group) existingLink.group.classList.add("wireless-link");
+                    }
+                    continue;
+                }
+            }
+
+            // 2. If laptop has NO connection, check if it entered any AP radius
+            if (!connectedAP && aps.length > 0) {
+                const inRangeAPs = [];
+                for (const ap of aps) {
+                    const apCenter = ap.getCenter();
+                    const dist = Math.hypot(laptopCenter.x - apCenter.x, laptopCenter.y - apCenter.y);
+                    const radius = ap.coverageRadius !== undefined ? ap.coverageRadius : 200;
+                    if (dist <= radius) {
+                        inRangeAPs.push({ ap, dist });
+                    }
+                }
+
+                if (inRangeAPs.length > 0) {
+                    let minDist = Math.min(...inRangeAPs.map(i => i.dist));
+                    const candidates = inRangeAPs.filter(i => Math.abs(i.dist - minDist) < 0.5);
+
+                    let chosen;
+                    if (candidates.length === 1) {
+                        chosen = candidates[0].ap;
+                    } else {
+                        // Equidistant tie-breaker: connect randomly
+                        const randIdx = Math.floor(Math.random() * candidates.length);
+                        chosen = candidates[randIdx].ap;
+                        console.log(`[CHL:WIRELESS] Equidistant APs for ${laptop.id}. Randomly chosen: ${chosen.id}`);
+                    }
+
+                    console.log(`[CHL:WIRELESS] Auto-connecting ${laptop.id} to AP ${chosen.id} (dist: ${minDist.toFixed(1)}px).`);
+                    pendingWirelessOps.add(laptop.id);
+
+                    const newLink = createConnection(laptop, chosen);
+                    if (newLink) {
+                        newLink.isWireless = true;
+                        if (newLink.group) newLink.group.classList.add("wireless-link");
+                    }
+
+                    try {
+                        await connectDevices(laptop, chosen);
+                    } catch (err) {
+                        console.error(`[CHL:WIRELESS] Failed to connect ${laptop.id} to ${chosen.id}:`, err);
+                        if (newLink) deleteLink(newLink.id);
+                    } finally {
+                        pendingWirelessOps.delete(laptop.id);
+                    }
+                }
+            }
+        }
+    }
+
+    /* =========================================
        INITIALIZATION: PROTOTYPE SCENE
        ========================================= */
 
@@ -1537,6 +1782,8 @@ document.addEventListener("DOMContentLoaded", () => {
     .then(() => loadLinks())
     .then(() => {
         updateCounts();
+        updateAllAPCoverageCircles();
+        evaluateWirelessAssociations();
     })
     .catch(error => {
         console.error(

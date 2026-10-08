@@ -1,0 +1,96 @@
+================================================================================
+CYBER HAZARD LAB (CHL) - SYSTEM & SERVICE IMPLEMENTATION REFERENCE
+================================================================================
+
+1. CORE ENTITIES & ARCHITECTURE
+--------------------------------------------------------------------------------
+- Simulation (backend/orchestrator.py):
+  * Holds .network, .hosts (dict), .routers (dict), .switches (dict).
+  * Manages global simulation loop, topology instantiation, and device renaming.
+- Network (backend/network/network.py):
+  * Maintains .events (list of Event objects) and link registry.
+  * Dispatches packet transmission between connected interfaces.
+- Node / Host / Router / Switch (backend/core/node.py, host.py, router.py, switch.py):
+  * Host inherits Node: contains .interfaces, .services (list of Service), .daemons (dict of daemon instances), .users (dict), .vfs (FileSystem instance).
+  * Router: contains routing table (.routes), forwards packets between subnets, handles default gateway logic.
+  * Switch: Layer-2 MAC learning table (.mac_table), floods broadcast frames (FF:FF:FF:FF:FF:FF), forwards unicast based on MAC.
+- Interface (backend/core/interface.py):
+  * Properties: .name, .ip, .mac, .subnet (CIDR), .gateway, .status ("up"/"down"), .connected (bool).
+
+2. VIRTUAL FILE SYSTEM (VFS)
+--------------------------------------------------------------------------------
+- Location: backend/database/fs.py & backend/database/basefs.json
+- Classes: FileSystem, Folder, File.
+- Attributes:
+  * File(name, ext): .contents (str/list), .owner, .group, .perms ("rw-rwxr--"), .path.
+  * Folder(name): .children (list of File/Folder), .parent, .owner, .group, .perms.
+- Key Methods:
+  * vfs.get_item(path): Resolves relative/absolute path to File or Folder.
+  * vfs.pwd(): Returns current working directory path string.
+  * vfs.cd(path): Navigates directory tree.
+- Permission Check (application/term_coms.py: check_permission(item, user, mode)):
+  * Mode: 'r' (0), 'w' (1), 'x' (2).
+  * Root always returns True.
+  * Checks owner bits [0:3], group bits [3:6], and other bits [6:9].
+
+3. SERVICE SYSTEM & DAEMONS
+--------------------------------------------------------------------------------
+- Service Model (backend/core/service.py):
+  * Holds metadata: .name, .protocol ("TCP"/"UDP"), .port (int), .status ("running"/"stopped"), .config (dict).
+- Device Daemon Binding:
+  * device.services: list of Service models.
+  * device.daemons: dict mapping service name (uppercase) -> Daemon instance.
+  * device.get_service_daemon(name): Retrieves running daemon.
+
+[DNS SERVICE] (backend/services/dns.py)
+* Port: 53 (UDP & TCP). Daemon: DNSServerDaemon.
+* Config: .records (list of dicts), .tsig_key (str or None), .health_interval (int).
+* Record Structure:
+  - A:     {"type": "A", "name": "dns.google", "target": "8.8.8.8", "status": "ONLINE"}
+  - CNAME: {"type": "CNAME", "name": "d.g", "target": "dns.google", "status": "ONLINE"}
+  - PTR:   {"type": "PTR", "name": "10.0.0.2", "target": "nas.local", "status": "ONLINE"}
+  - SRV:   {"type": "SRV", "name": "_nas._tcp.local", "target": "nas.local", "port": 22, "priority": 10, "weight": 10, "status": "ONLINE"}
+* AXFR Transfers:
+  - If daemon.tsig_key is None or empty: AXFR is permitted anonymously, returns full zone dump.
+  - If daemon.tsig_key is set: Requires matching key string in request. Missing/invalid key raises REFUSED.
+* Zone File Sync: Automatically parses & syncs with VFS file /etc/bind/named.conf.local and zone files.
+
+[SSH SERVICE] (backend/services/ssh.py & backend/protocols/ssh_protocol.py)
+* Port: 22 (TCP). Daemon: SSHServerDaemon, SSHClientDaemon.
+* Config: .motd (str), .permit_root (bool), .users (dict of user:password).
+* Default Fallback: If .users is empty, falls back to SSHUserAuthProtocol.DEFAULT_ACCOUNTS ("admin":"password", "root":"toor", "user":"user123").
+* Command Execution: SSHClientDaemon.execute_remote(...) executes commands on target host and streams output.
+
+[DHCP SERVICE] (backend/services/dhcp_server.py & dhcp_client.py)
+* Ports: 67 (Server UDP), 68 (Client UDP).
+* DHCPServerDaemon Config: .scopes (list of subnet dicts with pool_start, pool_end, gateway, dns_server).
+* Protocol Flow: DHCP Discover (broadcast) -> DHCP Offer -> DHCP Request -> DHCP Ack.
+* DHCP Relay (backend/services/dhcp_relay.py): Listens on 67, forwards broadcast to remote server IP.
+
+[HTTP & ECHO SERVICES] (backend/services/http.py, echo.py)
+* HTTP: Port 80 (TCP). HTTPServerDaemon serves static files or returns HTTP 200 OK.
+* Echo: Port 7 (UDP/TCP). EchoServerDaemon echoes received payload.
+
+4. TERMINAL COMMAND HANDLER
+--------------------------------------------------------------------------------
+- Location: application/term_coms.py (TerminalCommandHandler)
+- Command Dispatch:
+  * Network / Interface: ip addr [show|add|del], ip route [show|add|del], ifconfig, ping, tracert/traceroute, arp [-a|-s|-d], ss [-t|-u|-l|-a|-n|-p], netstat.
+  * Recon & Exploitation: nmap [-p|-sn|-sS|-sT|-sU] <target>, arpspoof [-i] -t <target> <host>, nc [-z|-v|-l|-p|-e] <target> <port>.
+  * DNS / Security: nslookup [-type=A|CNAME|PTR|SRV|AXFR] <name> [server] [key], keygen <file>.
+  * Service Mgmt: service list [-a], service start <name>, service stop <name>, service config <name> [key=value|show].
+  * VFS Commands: ls [-a|-l], pwd, cd, cat, mkdir, touch, rm [-r], tree, nano, mount, umount, scp.
+  * Session State Machine: Handles multi-turn input for AWAITING_SU_PASSWORD, AWAITING_NANO_INPUT, AWAITING_SSH_PASSWORD, AWAITING_NC_LISTENER, and interactive Reverse Shells.
+
+5. TELEMETRY & EVENT BUS
+--------------------------------------------------------------------------------
+- Location: backend/core/event.py
+- Event Structure:
+  * Event(type="...", source="...", destination="...", severity="LOW|MEDIUM|HIGH|CRITICAL", metadata={...})
+- Event Categories:
+  * NETWORK_TRAFFIC (PACKET_TX, PACKET_RX, ARP_REPLY, ICMP_ECHO)
+  * SERVICE_LIFECYCLE (SERVICE_STARTED, SERVICE_STOPPED, CONFIG_UPDATED)
+  * SECURITY_AUTH (SSH_LOGIN_SUCCESS, SSH_AUTH_FAILED, SU_AUTH_FAILED)
+  * DNS_ACTIVITY (DNS_QUERY, DNS_AXFR_REQUEST, DNS_AXFR_DENIED)
+- Pipeline: Node/Network -> network.events -> NTM / API (/api/soc/events) -> SOC Dashboard.
+================================================================================

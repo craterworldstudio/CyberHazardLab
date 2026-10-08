@@ -18,6 +18,11 @@ async function loadDevices() {
             
             const pos = layout[backendDevice.name] || {x: 0, y: 0};
             const device = new CHL.NetworkDevice( backendDevice.name, type, backendDevice.status, pos.x, pos.y );
+            if (backendDevice.coverage_radius !== undefined) {
+                device.coverageRadius = backendDevice.coverage_radius;
+            } else if (type === "ACCESSPOINT") {
+                device.coverageRadius = 200;
+            }
 
             CHL.devices.push(device);
             CHL.floor.appendChild(device.element);
@@ -59,6 +64,13 @@ async function loadLinks() {
 
         const link = new CHL.NetworkLink( linkId, sourceDevice, targetDevice
         );
+
+        const isWireless = (sourceDevice.type.toUpperCase() === "LAPTOP" && targetDevice.type.toUpperCase() === "ACCESSPOINT") ||
+                           (sourceDevice.type.toUpperCase() === "ACCESSPOINT" && targetDevice.type.toUpperCase() === "LAPTOP");
+        if (isWireless) {
+            link.isWireless = true;
+            link.group.classList.add("wireless-link");
+        }
 
         CHL.links.push(link);
         CHL.svgLayer.appendChild(link.group);

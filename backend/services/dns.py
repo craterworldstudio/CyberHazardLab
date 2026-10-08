@@ -7,13 +7,33 @@ from .base import ServiceDaemon
 class DNSServerDaemon(ServiceDaemon):
 
     def _get_config(self):
+        cfg = {}
         if hasattr(self.host, "services"):
             for s in self.host.services:
                 if s.name.upper() in ("DNS", "DNS_SERVER") and getattr(s, "config", None):
-                    return s.config
-        if hasattr(self, "_service_model") and getattr(self._service_model, "config", None):
-            return self._service_model.config
-        return getattr(self, "config", {}) or {}
+                    cfg = dict(s.config)
+                    break
+        elif hasattr(self, "_service_model") and getattr(self._service_model, "config", None):
+            cfg = dict(self._service_model.config)
+        else:
+            cfg = dict(getattr(self, "config", {}) or {})
+            
+        # If tsig_key is not set in config, check if /etc/bind/db.local specifies one via comment
+        if not cfg.get("tsig_key") and hasattr(self.host, "vfs"):
+            try:
+                db_file = self.host.vfs.path_to_tree("/etc/bind/db.local")
+                if db_file and hasattr(db_file, "contents") and db_file.contents:
+                    content = "\n".join(db_file.contents) if isinstance(db_file.contents, list) else str(db_file.contents)
+                    for line in content.split("\n"):
+                        line = line.strip()
+                        if line.startswith("; TSIG Key Required for AXFR:"):
+                            extracted = line.split(":", 1)[1].strip()
+                            if extracted:
+                                cfg["tsig_key"] = extracted
+                                break
+            except Exception:
+                pass
+        return cfg
 
     def _sync_to_vfs(self):
         # Write config records into a simulated BIND zone file on VFS
@@ -44,8 +64,8 @@ class DNSServerDaemon(ServiceDaemon):
         cfg = self._get_config()
         records = cfg.get("records", [])
         
-        zone_content = "; BIND data file for local zone\\n$TTL 604800\\n"
-        zone_content += "@   IN  SOA ns.local. admin.local. ( 2 604800 86400 2419200 604800 )\\n"
+        zone_content = "; BIND data file for local zone\n$TTL 604800\n"
+        zone_content += "@   IN  SOA ns.local. admin.local. ( 2 604800 86400 2419200 604800 )\n"
         
         for rec in records:
             if isinstance(rec, dict):
@@ -56,13 +76,16 @@ class DNSServerDaemon(ServiceDaemon):
                 port = rec.get("port", "")
                 
                 if rtype == "SRV":
-                    zone_content += f"{name}\\tIN\\t{rtype}\\t{priority} 100 {port} {target}\\n"
+                    if priority or port:
+                        zone_content += f"{name}\tIN\t{rtype}\t{priority} 100 {port} {target}\n"
+                    else:
+                        zone_content += f"{name}\tIN\t{rtype}\t{target}\n"
                 else:
-                    zone_content += f"{name}\\tIN\\t{rtype}\\t{target}\\n"
+                    zone_content += f"{name}\tIN\t{rtype}\t{target}\n"
                     
         # Check TSIG key
         if cfg.get("tsig_key"):
-            zone_content += f"\\n; TSIG Key Required for AXFR: {cfg['tsig_key']}\\n"
+            zone_content += f"\n; TSIG Key Required for AXFR: {cfg['tsig_key']}\n"
             
         from backend.database.fs import File
         vfs.curr_fol = etc_bind
@@ -84,7 +107,7 @@ class DNSServerDaemon(ServiceDaemon):
             return []
             
         records = []
-        lines = db_file.contents.split("\\n")
+        lines = db_file.contents.split("\n")
         for line in lines:
             line = line.strip()
             if not line or line.startswith(";") or line.startswith("$") or line.startswith("@"):
@@ -94,8 +117,12 @@ class DNSServerDaemon(ServiceDaemon):
                 name = parts[0]
                 rtype = parts[2]
                 if rtype == "SRV":
-                    target = parts[-1]
-                    port = parts[-2]
+                    if len(parts) >= 7:
+                        target = parts[-1]
+                        port = parts[-2]
+                    else:
+                        target = parts[-1]
+                        port = "0"
                     records.append({"name": name, "type": rtype, "target": target, "port": port})
                 else:
                     target = parts[3]
@@ -160,13 +187,29 @@ class DNSServerDaemon(ServiceDaemon):
                     if idx < len(cfg_records): cfg_records[idx]['status'] = 'OFFLINE'
                     continue
 
+                rtype = rec.get('type', 'A').upper()
                 reachable = False
-                if orchestrator and hasattr(orchestrator, 'ping'):
+                
+                # For PTR records: name is the IP address (e.g. 10.0.0.2), target is hostname (e.g. nas.local).
+                # We can check health by resolving the target hostname back to IP or checking the PTR IP (rec['name']).
+                check_ip = None
+                if rtype == 'PTR':
+                    # First try to resolve target hostname back to an IP
+                    resolved_ip = self._resolve(target.upper(), network, rtype="A")
+                    if resolved_ip:
+                        check_ip = resolved_ip
+                    elif rec.get('name'):
+                        check_ip = rec.get('name').strip()
+                elif rtype == 'CNAME':
+                    check_ip = self._resolve(target.upper(), network, rtype="A")
+                    if not check_ip:
+                        check_ip = target
+                else:
+                    check_ip = target
+
+                if orchestrator and hasattr(orchestrator, 'ping') and check_ip:
                     try:
-                        resolved_target = self._resolve(target.upper(), network) if rec.get('type', 'A').upper() == 'CNAME' else target
-                        if not resolved_target:
-                            resolved_target = target
-                        result = orchestrator.ping(self.host, resolved_target, payload='dns_health', ttl=64)
+                        result = orchestrator.ping(self.host, check_ip, payload='dns_health', ttl=64)
                         if isinstance(result, dict) and result.get("type") == "ECHO_REPLY":
                             reachable = True
                         elif result is not None and 'SUCCESS' in str(result).upper():
@@ -174,19 +217,28 @@ class DNSServerDaemon(ServiceDaemon):
                     except Exception:
                         reachable = False
 
-                if not reachable and orchestrator:
-                    all_devs = (list(getattr(orchestrator, 'hosts', {}).values()) +
-                                list(getattr(orchestrator, 'routers', {}).values()))
-                    for dev in all_devs:
-                        for intf in getattr(dev, 'interfaces', []):
-                            if getattr(intf, 'ip', None) == target:
-                                reachable = True
-                                break
-                        if reachable:
+                if not reachable and check_ip:
+                    # Check local host interfaces directly
+                    for intf in getattr(self.host, 'interfaces', []):
+                        if getattr(intf, 'ip', None) == check_ip:
+                            reachable = True
                             break
+                    # Check network devices if attached
+                    if not reachable and network and hasattr(network, 'devices'):
+                        for dev in network.devices:
+                            for intf in getattr(dev, 'interfaces', []):
+                                if getattr(intf, 'ip', None) == check_ip:
+                                    reachable = True
+                                    break
+                            if reachable:
+                                break
 
                 if idx < len(cfg_records): 
-                    cfg_records[idx]['status'] = 'ONLINE' if reachable else 'UNRESPONSIVE'
+                    # If PTR record, default to STATIC/ONLINE if reverse target or IP exists
+                    if rtype == 'PTR':
+                        cfg_records[idx]['status'] = 'ONLINE' if (reachable or rec.get('target')) else 'UNRESPONSIVE'
+                    else:
+                        cfg_records[idx]['status'] = 'ONLINE' if reachable else 'UNRESPONSIVE'
         except Exception:
             traceback.print_exc()
         finally:
@@ -224,11 +276,6 @@ class DNSServerDaemon(ServiceDaemon):
                     ip = dev.interfaces[0].ip
                 if ip:
                     return ip
-
-        if query == "DNS.GOOGLE":
-            for intf in getattr(self.host, "interfaces", []):
-                if getattr(intf, "ip", "") == "8.8.8.8":
-                    return "8.8.8.8"
 
         return None
 

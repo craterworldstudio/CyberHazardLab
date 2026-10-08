@@ -14,6 +14,14 @@ class DHCPScope:
         # mac -> {"ip": str, "expires_at": float, "state": "OFFERED" | "COMMITTED"}
         self.leases: dict[str, dict] = {}
 
+    @property
+    def dns_server(self) -> str:
+        return self.dns
+
+    @dns_server.setter
+    def dns_server(self, value: str):
+        self.dns = value
+
     def contains(self, ip: str) -> bool:
         try:
             return ipaddress.ip_address(ip) in self.network
@@ -134,8 +142,18 @@ class DHCP:
         scope.commit(interface.mac, ip)
         interface.ip = ip
         interface.subnet = str(scope.network)
-        if interface.owner and hasattr(interface.owner, "_install_connected_route"):
-            interface.owner._install_connected_route(interface)
+        if interface.owner:
+            if hasattr(interface.owner, "_install_connected_route"):
+                interface.owner._install_connected_route(interface)
+            dns_val = getattr(scope, "dns_server", None) or getattr(scope, "dns", None)
+            if dns_val and hasattr(interface.owner, "dns_server") and not getattr(interface.owner, "dns_server", None):
+                interface.owner.dns_server = dns_val
+            if scope.gateway:
+                interface.gateway = scope.gateway
+                if hasattr(interface.owner, "default_gateway") and not getattr(interface.owner, "default_gateway", None):
+                    interface.owner.default_gateway = scope.gateway
+            if hasattr(interface.owner, "_generate_system_files"):
+                interface.owner._generate_system_files()
         return ip
 
     def get_configured_ips(self, exclude_mac: str | None = None) -> set[str]:

@@ -144,6 +144,11 @@ class DHCPClientDaemon(ServiceDaemon):
                 dns = msg.get_option(OPT_DNS_SERVER)
                 if dns:
                     self.host.dns_server = dns
+                    dns_svc = next((s for s in getattr(self.host, "services", []) if s.name.upper() == "DNS_CLIENT"), None)
+                    if dns_svc:
+                        if not hasattr(dns_svc, "config") or not isinstance(dns_svc.config, dict):
+                            dns_svc.config = {}
+                        dns_svc.config["nameserver"] = dns
 
                 # Apply IP & subnet to interface
                 net = ipaddress.IPv4Network(f"{assigned_ip}/{mask}", strict=False)

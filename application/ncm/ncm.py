@@ -266,6 +266,9 @@ class NetworkConfigurationManager:
                         out_intf = intf  # use the interface we just configured
                         device_obj.add_route("0.0.0.0/0", out_intf, next_hop=gw_val)
 
+                if hasattr(device_obj, '_generate_system_files'):
+                    device_obj._generate_system_files()
+
                 return intf
         raise ValueError(f"Interface {interface_name} not found on {device_obj.name}")
 

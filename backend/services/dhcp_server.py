@@ -54,8 +54,9 @@ class DHCPServerDaemon(ServiceDaemon):
             dhcp_svc = next((s for s in getattr(self.host, "services", []) if s.name.upper() == "DHCP"), None)
             if dhcp_svc and getattr(dhcp_svc, "config", None):
                 cfg = dhcp_svc.config
-                # Support new multiple scopes format if present
-                if "scopes" in cfg and isinstance(cfg["scopes"], list):
+                applied_from_scopes = False
+                # Support new multiple scopes format if present and non-empty
+                if "scopes" in cfg and isinstance(cfg["scopes"], list) and len(cfg["scopes"]) > 0:
                     for sc in cfg["scopes"]:
                         if "subnet" in sc and sc["subnet"]:
                             # Check if this scope config applies to our target network
@@ -67,7 +68,8 @@ class DHCPServerDaemon(ServiceDaemon):
                                     if "gateway" in sc and sc["gateway"]:
                                         scope.gateway = str(sc["gateway"]).strip()
                                     if "dns" in sc and sc["dns"]:
-                                        scope.dns_server = str(sc["dns"]).strip()
+                                        scope.dns = str(sc["dns"]).strip()
+                                        scope.dns_server = scope.dns
                                     if "domain_name" in sc and sc["domain_name"]:
                                         scope.domain_name = str(sc["domain_name"]).strip()
                                     if "lease_time" in sc and sc["lease_time"]:
@@ -75,15 +77,17 @@ class DHCPServerDaemon(ServiceDaemon):
                                     if "pool_start" in sc and "pool_end" in sc and sc["pool_start"] and sc["pool_end"]:
                                         scope.start_ip = ipaddress.IPv4Address(sc["pool_start"])
                                         scope.end_ip = ipaddress.IPv4Address(sc["pool_end"])
+                                    applied_from_scopes = True
                                     break
                             except Exception:
                                 pass
-                else:
-                    # Fallback to old single-scope format
+                if not applied_from_scopes:
+                    # Fallback to single-scope format
                     if "gateway" in cfg and cfg["gateway"]:
                         scope.gateway = str(cfg["gateway"]).strip()
                     if "dns" in cfg and cfg["dns"]:
-                        scope.dns_server = str(cfg["dns"]).strip()
+                        scope.dns = str(cfg["dns"]).strip()
+                        scope.dns_server = scope.dns
                     if "domain_name" in cfg and cfg["domain_name"]:
                         scope.domain_name = str(cfg["domain_name"]).strip()
                     if "lease_time" in cfg and cfg["lease_time"]:
@@ -98,6 +102,15 @@ class DHCPServerDaemon(ServiceDaemon):
                             scope.end_ip = ipaddress.IPv4Address(cfg["pool_end"])
                         except Exception:
                             pass
+
+            dns_val = getattr(scope, 'dns_server', None) or getattr(scope, 'dns', None)
+            if not dns_val or dns_val == "8.8.8.8":
+                for s in getattr(self.host, "services", []):
+                    if s.name.upper() in ("DNS", "DNS_SERVER") and s.status.lower() == "running":
+                        if self.host.interfaces and self.host.interfaces[0].ip:
+                            dns_val = self.host.interfaces[0].ip
+                            scope.dns = dns_val
+                            break
 
             with open('/tmp/dhcp_debug.txt', 'a') as f: f.write(f'DHCP DISCOVER RECEIVED. lookup: {lookup_target}, scope: {scope}\n');
             if msg.message_type == DHCPDISCOVER:
@@ -119,8 +132,8 @@ class DHCPServerDaemon(ServiceDaemon):
                 reply.set_option(OPT_ROUTER, scope.gateway)
                 reply.set_option(OPT_LEASE_TIME, scope.lease_time)
                 reply.set_option(OPT_SERVER_ID, server_ip)
-                if getattr(scope, 'dns_server', None):
-                    reply.set_option(OPT_DNS_SERVER, scope.dns_server)
+                if dns_val:
+                    reply.set_option(OPT_DNS_SERVER, dns_val)
                 if msg.get_option(OPT_RELAY_AGENT):
                     reply.set_option(OPT_RELAY_AGENT, msg.get_option(OPT_RELAY_AGENT))
 
@@ -181,8 +194,8 @@ class DHCPServerDaemon(ServiceDaemon):
                 reply.set_option(OPT_ROUTER, scope.gateway)
                 reply.set_option(OPT_LEASE_TIME, scope.lease_time)
                 reply.set_option(OPT_SERVER_ID, server_ip)
-                if getattr(scope, 'dns_server', None):
-                    reply.set_option(OPT_DNS_SERVER, scope.dns_server)
+                if dns_val:
+                    reply.set_option(OPT_DNS_SERVER, dns_val)
                 if msg.get_option(OPT_RELAY_AGENT):
                     reply.set_option(OPT_RELAY_AGENT, msg.get_option(OPT_RELAY_AGENT))
 

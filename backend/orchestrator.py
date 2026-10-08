@@ -69,7 +69,7 @@ class Simulation:
     def get_device_type(self, value_str: str) -> DeviceType:
         cleaned = str(value_str).lower().strip()
         for member in DeviceType:
-            if member.value == cleaned:
+            if member.value == cleaned or member.value.replace("_", "") == cleaned.replace("_", ""):
                 return member
         return DeviceType.OTHER
 
@@ -263,6 +263,15 @@ class Simulation:
         self.network.add_link(link)
         interface_a.connect_link(link)
         interface_b.connect_link(link)
+        if self.is_running:
+            for intf in (interface_a, interface_b):
+                node = getattr(intf, "owner", None)
+                if node and node in self.hosts.values():
+                    dhcp_svc = next((s for s in getattr(node, "services", []) if s.name.upper() == "DHCP_CLIENT" and s.status.lower() == "running"), None)
+                    if dhcp_svc:
+                        daemon = node.get_service_daemon("DHCP_CLIENT")
+                        if daemon:
+                            daemon.on_start(dhcp_svc)
         return link
 
     def connect_host_to_switch(self, host, switch, host_intf=None, port_num=None) -> Link:
@@ -270,7 +279,14 @@ class Simulation:
             host = self.get_host(host)
         if isinstance(switch, str):
             switch = self.switches[switch]
-        return switch.connect(host, host_intf.name if host_intf else "eth0")
+        link = switch.connect(host, host_intf.name if host_intf else "eth0")
+        if self.is_running and host:
+            dhcp_svc = next((s for s in getattr(host, "services", []) if s.name.upper() == "DHCP_CLIENT" and s.status.lower() == "running"), None)
+            if dhcp_svc:
+                daemon = host.get_service_daemon("DHCP_CLIENT")
+                if daemon:
+                    daemon.on_start(dhcp_svc)
+        return link
 
     def connect_switch_to_router(self, switch, router_interface) -> Link:
         if isinstance(switch, str):

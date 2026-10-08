@@ -82,7 +82,7 @@ function createNCMWindow(deviceName, deviceType) {
         <div class="ncm-tabs" style="background: #080c10; border-bottom: 1px solid rgba(255,255,255,0.05);">
             <button class="ncm-tab active" data-tab="health">HEALTH</button>
             <button class="ncm-tab" data-tab="config">CONFIG</button>
-            ${deviceType === 'SWITCH' 
+            ${(deviceType === 'SWITCH' || deviceType === 'ACCESSPOINT')
                 ? `<button class="ncm-tab" data-tab="mac_table">MAC TABLE</button>`
                 : (deviceType === 'ROUTER'
                     ? `<button class="ncm-tab" data-tab="routes">ROUTING TABLE</button>
@@ -95,7 +95,7 @@ function createNCMWindow(deviceName, deviceType) {
                            <button class="ncm-tab" data-tab="terminal">TERMINAL</button>
                            <button class="ncm-tab" data-tab="browser">BROWSER</button>`))
             }
-            <button class="ncm-tab" data-tab="interfaces">${deviceType === 'SWITCH' ? 'SWITCH PORTS' : 'INTERFACES'}</button>
+            <button class="ncm-tab" data-tab="interfaces">${(deviceType === 'SWITCH' || deviceType === 'ACCESSPOINT') ? 'SWITCH PORTS' : 'INTERFACES'}</button>
         </div>
 
         <div class="ncm-content" style="background: #0a0f18; display: flex; flex-direction: column;">
@@ -114,7 +114,7 @@ function createNCMWindow(deviceName, deviceType) {
                 </div>
             </div>
 
-            ${deviceType === 'SWITCH' ? `
+            ${(deviceType === 'SWITCH' || deviceType === 'ACCESSPOINT') ? `
             <div class="ncm-tab-content" data-content="mac_table">
                 <div class="ncm-mac-table"></div>
             </div>
@@ -126,7 +126,7 @@ function createNCMWindow(deviceName, deviceType) {
                 <div class="ncm-services-list"></div>
             </div>
             <div class="ncm-tab-content" data-content="terminal">
-                <div style="display: flex; flex-direction: column; height: 100%;">
+                <div style="display: flex; flex-direction: column; height: 100%; flex: 1; min-height: 0;">
                     <div class="ncm-terminal-output" style="flex: 1; background: #06090e; color: #d5ebf2; font-family: monospace; font-size: 12px; padding: 10px; overflow-y: auto; border: 1px solid rgba(0, 229, 255, 0.15); margin-bottom: 10px;">
                         <div style="color: #00e5ff; font-weight: bold; letter-spacing: 1px;">> AxiomOS (Network Operations Execution)</div>
                         <div style="color: #5c6b73; margin-bottom: 15px;">System version 1.0.0. Type 'help' for available commands.</div>
@@ -138,7 +138,7 @@ function createNCMWindow(deviceName, deviceType) {
                 </div>
             </div>
             <div class="ncm-tab-content" data-content="browser">
-                <div style="display: flex; flex-direction: column; height: 100%;">
+                <div style="display: flex; flex-direction: column; height: 100%; flex: 1; min-height: 0;">
                     <div style="display: flex; margin-bottom: 10px;">
                         <input type="text" class="browser-url-input ncm-input" placeholder="http://hostname/path" style="flex: 1; padding: 5px; background: #06090e; color: #fff; border: 1px solid #00e5ff;">
                         <button class="browser-go-btn ncm-btn" style="margin-left: 5px; padding: 5px 15px;">GO</button>
@@ -153,7 +153,7 @@ function createNCMWindow(deviceName, deviceType) {
                 <div class="ncm-services-list"></div>
             </div>
             <div class="ncm-tab-content" data-content="terminal">
-                <div style="display: flex; flex-direction: column; height: 100%;">
+                <div style="display: flex; flex-direction: column; height: 100%; flex: 1; min-height: 0;">
                     <div class="ncm-terminal-output" style="flex: 1; background: #06090e; color: #d5ebf2; font-family: monospace; font-size: 12px; padding: 10px; overflow-y: auto; border: 1px solid rgba(0, 229, 255, 0.15); margin-bottom: 10px;">
                         <div style="color: #00e5ff; font-weight: bold; letter-spacing: 1px;">> AxiomOS (Network Operations Execution)</div>
                         <div style="color: #5c6b73; margin-bottom: 15px;">System version 1.0.0. Type 'help' for available commands.</div>
@@ -165,7 +165,7 @@ function createNCMWindow(deviceName, deviceType) {
                 </div>
             </div>
             <div class="ncm-tab-content" data-content="browser">
-                <div style="display: flex; flex-direction: column; height: 100%;">
+                <div style="display: flex; flex-direction: column; height: 100%; flex: 1; min-height: 0;">
                     <div style="display: flex; margin-bottom: 10px;">
                         <input type="text" class="browser-url-input ncm-input" placeholder="http://hostname/path" style="flex: 1; padding: 5px; background: #06090e; color: #fff; border: 1px solid #00e5ff;">
                         <button class="browser-go-btn ncm-btn" style="margin-left: 5px; padding: 5px 15px;">GO</button>
@@ -335,7 +335,7 @@ async function loadNCMDevice(deviceName, window) {
             `/api/ntm/devices/${encodeURIComponent(deviceName)}`
         );
         deviceData.services = services;
-        if (deviceData.type.toUpperCase() === 'SWITCH') {
+        if (deviceData.type.toUpperCase() === 'SWITCH' || deviceData.type.toUpperCase() === 'ACCESSPOINT') {
             renderNCMMacTable(window, deviceName, deviceData.mac_table || {});
             window._renderedMacKey = JSON.stringify(deviceData.mac_table || {});
         } else if (deviceData.type.toUpperCase() === 'ROUTER') {
@@ -375,6 +375,15 @@ async function restartNCMDevice(deviceName, win) {
     }
 }
 
+async function toggleNCMDevicePower(deviceName, win) {
+    try {
+        await apiRequest("POST", `/api/ncm/devices/${encodeURIComponent(deviceName)}/power`, { state: "toggle" });
+        loadNCMDevice(deviceName, win);
+    } catch (error) {
+        console.error("[CHL:NCM] Failed to toggle device power", error);
+    }
+}
+
 function renderNCMConfig(win, deviceName, deviceData) {
     const safeDev = deviceName.replace(/'/g, "\\'");
     const container = win.querySelector('[data-content="config"]');
@@ -386,17 +395,28 @@ function renderNCMConfig(win, deviceName, deviceData) {
     win._lastDeviceData = deviceData;
     const devType = (deviceData.type || "HOST").toUpperCase();
     const services = deviceData.services || [];
+    const isOnline = (deviceData.status || "OFFLINE").toUpperCase() === "ONLINE";
 
     // Upper Section: Node Configuration based on device type
     let nodeConfigHtml = "";
-    if (devType === "SWITCH") {
+    if (devType === "SWITCH" || devType === "ACCESSPOINT") {
         const autoMac = deviceData.auto_mac_learning !== undefined ? String(deviceData.auto_mac_learning) : "inherit";
+        const titleLabel = devType === "ACCESSPOINT" ? "// ACCESS POINT IDENTIFIER / HOSTNAME" : "// SWITCH IDENTIFIER / HOSTNAME";
         nodeConfigHtml = `
             <div style="display: grid; grid-template-columns: 1fr; gap: 12px;">
                 <div>
-                    <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// SWITCH IDENTIFIER / HOSTNAME</div>
+                    <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">${titleLabel}</div>
                     <input type="text" id="ncm-cfg-hostname-${deviceName}" value="${deviceData.name}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 7px; font-family: monospace; font-size: 11px;">
                 </div>
+                ${devType === "ACCESSPOINT" ? `
+                <div>
+                    <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// WIRELESS COVERAGE RADIUS (PX)</div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <input type="range" id="ncm-cfg-coverage-slider-${deviceName}" min="50" max="600" step="10" value="${deviceData.coverage_radius || 200}" style="flex: 1; accent-color: #00e5ff; cursor: pointer;">
+                        <input type="number" id="ncm-cfg-coverage-${deviceName}" min="50" max="600" value="${deviceData.coverage_radius || 200}" style="width: 70px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 7px; font-family: monospace; font-size: 11px; text-align: center;">
+                    </div>
+                </div>
+                ` : ''}
                 <div>
                     <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// AUTO MAC LEARNING (CAM TABLE)</div>
                     <select id="ncm-cfg-mac-learning-${deviceName}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 7px; font-family: monospace; font-size: 11px;">
@@ -500,6 +520,7 @@ function renderNCMConfig(win, deviceName, deviceData) {
                     <button id="btn-save-node-cfg-${deviceName}" style="flex: 2; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; color: #00e5ff; padding: 8px 12px; font-family: monospace; font-weight: bold; letter-spacing: 1px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#00e5ff'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(0, 229, 255, 0.1)'; this.style.color='#00e5ff';" onclick="saveNCMNodeConfig('${safeDev}', this.closest('.ncm-window'))">[ SAVE NODE CONFIG ]</button>
                     
                     <button style="flex: 1; background: rgba(255, 170, 0, 0.1); border: 1px solid #ffaa00; color: #ffaa00; padding: 8px 12px; font-family: monospace; font-weight: bold; letter-spacing: 1px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='#ffaa00'; this.style.color='#0a0f18';" onmouseout="this.style.background='rgba(255, 170, 0, 0.1)'; this.style.color='#ffaa00';" onclick="restartNCMDevice('${safeDev}', this.closest('.ncm-window'))">[ REBOOT ]</button>
+                    <button style="flex: 1; background: ${isOnline ? 'rgba(255, 51, 102, 0.1)' : 'rgba(0, 255, 136, 0.1)'}; border: 1px solid ${isOnline ? '#ff3366' : '#00ff88'}; color: ${isOnline ? '#ff3366' : '#00ff88'}; padding: 8px 12px; font-family: monospace; font-weight: bold; letter-spacing: 1px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='${isOnline ? '#ff3366' : '#00ff88'}'; this.style.color='#0a0f18';" onmouseout="this.style.background='${isOnline ? 'rgba(255, 51, 102, 0.1)' : 'rgba(0, 255, 136, 0.1)'}'; this.style.color='${isOnline ? '#ff3366' : '#00ff88'}';" onclick="toggleNCMDevicePower('${safeDev}', this.closest('.ncm-window'))">[ ${isOnline ? 'POWER OFF' : 'POWER ON'} ]</button>
                 </div>
             </div>
         </div>
@@ -523,6 +544,24 @@ function renderNCMConfig(win, deviceName, deviceData) {
 
     // Render the active service's configuration details
     renderNCMSelectedServiceConfig(deviceName, win, curSvcName);
+
+    // Live sync for AP Coverage Radius
+    if (devType === "ACCESSPOINT") {
+        const slider = document.getElementById(`ncm-cfg-coverage-slider-${deviceName}`);
+        const numInput = document.getElementById(`ncm-cfg-coverage-${deviceName}`);
+        if (slider && numInput) {
+            slider.addEventListener("input", (e) => {
+                const val = parseInt(e.target.value, 10);
+                numInput.value = val;
+                if (window.updateAPCoverageRadius) window.updateAPCoverageRadius(deviceName, val);
+            });
+            numInput.addEventListener("input", (e) => {
+                const val = parseInt(e.target.value, 10) || 50;
+                slider.value = val;
+                if (window.updateAPCoverageRadius) window.updateAPCoverageRadius(deviceName, val);
+            });
+        }
+    }
 }
 
 function renderNCMSelectedServiceConfig(deviceName, win, serviceName) {
@@ -752,11 +791,14 @@ ${eps[path]}
         
             // 2. Build Rows
             let trs = records.map((r) => {
-                const st = (r.status || 'PENDING').toUpperCase();
-                const stColor = st === 'ONLINE' ? '#00ff00' : st === 'PENDING' ? '#ffaa00' : '#ff3333';
+                const isPtr = (r.type || '').toUpperCase() === 'PTR';
+                const rawSt = (r.status || 'PENDING').toUpperCase();
+                const st = isPtr ? (rawSt === 'UNRESPONSIVE' ? 'ONLINE' : rawSt) : rawSt;
+                const stDisplay = isPtr ? 'STATIC' : st;
+                const stColor = (st === 'ONLINE' || isPtr) ? '#00ff00' : st === 'PENDING' ? '#ffaa00' : '#ff3333';
                 return `
                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2);">
-                    <td style="padding: 6px; color: ${stColor}; font-weight: bold;" class="dns-status" data-status="${st}">[ ${st} ]</td>
+                    <td style="padding: 6px; color: ${stColor}; font-weight: bold;" class="dns-status" data-status="${st}">[ ${stDisplay} ]</td>
                     <td style="padding: 6px; color: #ffaa00;" class="dns-type">${r.type || 'A'}</td>
                     <td style="padding: 6px; color: #00e5ff;" class="dns-name">${r.name}</td>
                     <td style="padding: 6px; color: #d5ebf2;" class="dns-target">${r.target}</td>
@@ -801,6 +843,8 @@ ${eps[path]}
                                 <option value="AAAA">AAAA</option>
                                 <option value="CNAME">CNAME</option>
                                 <option value="MX">MX</option>
+                                <option value="PTR">PTR</option>
+                                <option value="SRV">SRV</option>
                             </select>
         
                             <input type="text" class="dns-new-name" placeholder="Domain (e.g. www)" style="background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 4px; font-family: monospace; font-size: 10px; outline: none;">
@@ -869,6 +913,7 @@ async function saveNCMNodeConfig(deviceName, win) {
     const macLearnInput = document.getElementById(`ncm-cfg-mac-learning-${deviceName}`);
     const macAgingInput = document.getElementById(`ncm-cfg-mac-aging-${deviceName}`);
     const stpInput = document.getElementById(`ncm-cfg-stp-${deviceName}`);
+    const coverageInput = document.getElementById(`ncm-cfg-coverage-${deviceName}`);
 
     const payload = {};
     if (hostInput && hostInput.value) payload.hostname = hostInput.value.trim();
@@ -878,6 +923,10 @@ async function saveNCMNodeConfig(deviceName, win) {
     if (macLearnInput) payload.auto_mac_learning = macLearnInput.value;
     if (macAgingInput && macAgingInput.value) payload.mac_aging_time = parseInt(macAgingInput.value, 10);
     if (stpInput) payload.stp_enabled = stpInput.value === "true";
+    if (coverageInput && coverageInput.value) {
+        payload.coverage_radius = parseInt(coverageInput.value, 10);
+        if (window.updateAPCoverageRadius) window.updateAPCoverageRadius(deviceName, payload.coverage_radius);
+    }
 
     try {
         if (btn) btn.innerText = "SAVING...";
@@ -1438,6 +1487,52 @@ async function handleTerminalInput(event, deviceName) {
             }
 
             if (response.output) {
+                if (response.output.startsWith("__NANO_OPEN__")) {
+                    const payload = JSON.parse(response.output.replace("__NANO_OPEN__", ""));
+                    
+                    const nanoUI = document.createElement("div");
+                    nanoUI.style.position = "absolute";
+                    nanoUI.style.top = "0"; nanoUI.style.left = "0"; nanoUI.style.right = "0"; nanoUI.style.bottom = "0";
+                    nanoUI.style.background = "#06090e";
+                    nanoUI.style.zIndex = "10";
+                    nanoUI.style.display = "flex";
+                    nanoUI.style.flexDirection = "column";
+                    nanoUI.style.padding = "10px";
+                    
+                    nanoUI.innerHTML = `
+                        <div style="color: #00e5ff; font-weight: bold; margin-bottom: 5px;">GNU nano - ${escapeHtml(payload.filename)}</div>
+                        <textarea style="flex: 1; background: transparent; color: #d5ebf2; border: none; outline: none; font-family: monospace; font-size: 13px; resize: none;">${payload.content}</textarea>
+                        <div style="display: flex; gap: 10px; margin-top: 5px; color: #5c6b73; font-size: 11px;">
+                            <button class="nano-save ncm-btn" style="padding: 4px 10px;">^O Save & Exit</button>
+                            <button class="nano-cancel ncm-btn" style="padding: 4px 10px;">^X Cancel</button>
+                        </div>
+                    `;
+                    
+                    const termContainer = win.querySelector('[data-content="terminal"] > div');
+                    termContainer.style.position = "relative";
+                    termContainer.appendChild(nanoUI);
+                    
+                    const ta = nanoUI.querySelector("textarea");
+                    ta.focus();
+                    
+                    const closeNano = async (cmd) => {
+                        nanoUI.remove();
+                        const res = await apiRequest("POST", `/api/ncm/devices/${encodeURIComponent(deviceName)}/terminal`, { command: cmd });
+                        if (res.prompt && promptSpan) promptSpan.textContent = res.prompt;
+                        if (res.output) {
+                            outputDiv.innerHTML += `<div style="color: #00e5ff; margin-top: 5px; white-space: pre-wrap; word-break: break-all;">${escapeHtml(res.output)}</div>`;
+                            outputDiv.scrollTop = outputDiv.scrollHeight;
+                        }
+                        inputField.disabled = false;
+                        inputField.focus();
+                    };
+                    
+                    nanoUI.querySelector(".nano-save").onclick = () => closeNano("__NANO_SAVE__" + ta.value);
+                    nanoUI.querySelector(".nano-cancel").onclick = () => closeNano("__NANO_CANCEL__");
+                    
+                    return; // Stop normal output rendering
+                }
+                
                 // Render multiline response with artificial latency
                 const lines = response.output.split('\n');
                 
@@ -1461,7 +1556,7 @@ async function handleTerminalInput(event, deviceName) {
                         await new Promise(resolve => setTimeout(resolve, delay));
                     }
                     
-                    outputDiv.innerHTML += `<div style="color: #d5ebf2; white-space: pre;">${escapeHtml(line)}</div>`;
+                    outputDiv.innerHTML += `<div style="color: #d5ebf2; white-space: pre-wrap; word-break: break-all;">${escapeHtml(line) || ' '}</div>`;
                     outputDiv.scrollTop = outputDiv.scrollHeight;
                 }
             }
@@ -1603,7 +1698,7 @@ async function refreshNCMHealth(deviceName, window) {
 async function refreshNCMTables(deviceName, window) {
     try {
         const deviceData = await apiRequest("GET", `/api/ntm/devices/${encodeURIComponent(deviceName)}`);
-        if (deviceData.type.toUpperCase() === 'SWITCH' && deviceData.mac_table) {
+        if ((deviceData.type.toUpperCase() === 'SWITCH' || deviceData.type.toUpperCase() === 'ACCESSPOINT') && deviceData.mac_table) {
             renderNCMMacTable(window, deviceName, deviceData.mac_table);
         } else if (deviceData.type.toUpperCase() === 'ROUTER' && deviceData.routes) {
             renderNCMRoutingTable(window, deviceName, deviceData.routes);
@@ -1631,7 +1726,7 @@ setInterval(() => {
             if (!win.hidden && deviceName !== "GLOBAL_NETWORK") {
                 const deviceData = window.SimulationState.devices.find(d => d.name === deviceName);
                 if (deviceData) {
-                    if (deviceData.type.toUpperCase() === 'SWITCH' && deviceData.mac_table) {
+                    if ((deviceData.type.toUpperCase() === 'SWITCH' || deviceData.type.toUpperCase() === 'ACCESSPOINT') && deviceData.mac_table) {
                         renderNCMMacTable(win, deviceName, deviceData.mac_table);
                     } else if (deviceData.type.toUpperCase() === 'ROUTER' && deviceData.routes) {
                         renderNCMRoutingTable(win, deviceName, deviceData.routes);
@@ -1762,10 +1857,10 @@ function renderNCMHealth(window, health) {
                     <div style="color: #5c6b73;">> UPTIME</div>
                     <div class="ncm-health-uptime" style="color: #d5ebf2;">${health.uptime || '00:00:00'}</div>
                     
-                    <div style="color: #5c6b73;">> ${deviceName.startsWith('SWT') ? 'SWITCH_PORTS' : 'INTERFACES'}</div>
+                    <div style="color: #5c6b73;">> ${(deviceName.startsWith('SWT') || deviceName.startsWith('AP')) ? 'SWITCH_PORTS' : 'INTERFACES'}</div>
                     <div class="ncm-health-interfaces" style="color: #d5ebf2;">${health.interfaces_active ?? 0} / ${health.interfaces_total ?? 0} ACTIVE</div>
                     
-                    ${!deviceName.startsWith('SWT') ? `
+                    ${!(deviceName.startsWith('SWT') || deviceName.startsWith('AP')) ? `
                     <div style="color: #5c6b73;">> SERVICES</div>
                     <div class="ncm-health-services" style="color: #d5ebf2;">${health.services_total ?? 0} TOTAL <span style="color: #00e5ff; margin-left: 8px;">(${health.services_running ?? 0} RUNNING)</span></div>
                     ` : ''}

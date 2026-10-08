@@ -113,6 +113,8 @@ class SSHServerDaemon(ServiceDaemon):
                     break
 
             is_valid = SSHUserAuthProtocol.verify(username, password, srv_config)
+            if not is_valid and hasattr(self.host, "users") and isinstance(self.host.users, dict):
+                is_valid = self.host.users.get(username) == password
 
             if is_valid:
                 session["authenticated"] = True

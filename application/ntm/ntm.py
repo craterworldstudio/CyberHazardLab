@@ -197,7 +197,7 @@ class NetworkTopologyManager:
         if device_type == "switch":
             return self.simulation.add_switch(name)
 
-        if device_type == "accesspoint":
+        if device_type in ("accesspoint", "access_point"):
             return self.simulation.add_access_point(name)
 
     

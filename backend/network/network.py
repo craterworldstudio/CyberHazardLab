@@ -72,6 +72,15 @@ class Network:
 		if getattr(self, "on_event", None):
 			self.on_event(event)
 
+		# Redirect and collect events into local host files
+		if hasattr(self, "hosts") and isinstance(self.hosts, dict):
+			src_dev = self.hosts.get(event.source)
+			dst_dev = self.hosts.get(event.destination)
+			if src_dev and hasattr(src_dev, "log_event"):
+				src_dev.log_event(event)
+			if dst_dev and hasattr(dst_dev, "log_event") and dst_dev != src_dev:
+				dst_dev.log_event(event)
+
 	def connect(self, source:Host, destination:Host, protocol:str, port:int):
 		src_ip = source.get_ip()
 		dst_ip = destination.get_ip()

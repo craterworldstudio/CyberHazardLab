@@ -24,8 +24,9 @@ def resolve_hostname(device, hostname, timeout=0.5):
         dhcp = device.network.dhcp
         if getattr(dhcp, "scopes", None):
             for sc in dhcp.scopes:
-                if getattr(sc, "dns", None):
-                    dns_ip = sc.dns
+                sc_dns = getattr(sc, "dns_server", None) or getattr(sc, "dns", None)
+                if sc_dns:
+                    dns_ip = sc_dns
                     break
 
     if not dns_ip:

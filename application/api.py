@@ -174,6 +174,8 @@ class API:
                         dev.nat_enabled = bool(d["nat_enabled"])
                     if "status" in d:
                         dev.status = d["status"]
+                    if "coverage_radius" in d and hasattr(dev, "coverage_radius"):
+                        dev.coverage_radius = int(d["coverage_radius"])
                     if "soc_threat_level" in d:
                         dev.soc_threat_level = d["soc_threat_level"]
                 
@@ -773,7 +775,12 @@ class API:
             if not svc:
                 return {"error": f"Service {service_name} not found on {device.name}"}, 404
 
-            svc.config = body
+            if isinstance(svc.config, dict) and isinstance(body, dict):
+                merged = dict(svc.config)
+                merged.update(body)
+                svc.config = merged
+            else:
+                svc.config = body
 
             if svc.name.upper() == "DNS_CLIENT" and isinstance(body, dict) and "nameserver" in body:
                 device.dns_server = str(body["nameserver"]).strip()
@@ -907,6 +914,12 @@ class API:
             if "nat_enabled" in body:
                 device.nat_enabled = bool(body["nat_enabled"])
                 
+            if "coverage_radius" in body:
+                try:
+                    device.coverage_radius = max(50, min(1000, int(body["coverage_radius"])))
+                except Exception:
+                    pass
+                
             self.state_manager.save()
             return {
                 "success": True, 
@@ -937,6 +950,29 @@ class API:
             result = self.ncm.restart_device(resource[1])
             self.state_manager.save()
             return self._serialize(result)
+
+        # POST /api/ncm/devices/<device>/power
+        if method == "POST" and len(resource) == 3 and resource[0] == "devices" and resource[2] == "power":
+            sim = self.ntm.simulation
+            device = sim.hosts.get(resource[1]) or sim.routers.get(resource[1]) or sim.switches.get(resource[1])
+            if not device:
+                return {"error": "Device not found"}, 404
+            
+            desired = body.get("state") if isinstance(body, dict) else None
+            curr_status = getattr(device, "status", "ONLINE").upper()
+            if not desired or desired == "toggle":
+                new_status = "OFFLINE" if curr_status == "ONLINE" else "ONLINE"
+            elif str(desired).lower() in ("on", "online"):
+                new_status = "ONLINE"
+            else:
+                new_status = "OFFLINE"
+                
+            device.status = new_status
+            if hasattr(device, "interfaces"):
+                for intf in device.interfaces:
+                    intf.status = "up" if new_status == "ONLINE" else "down"
+            self.state_manager.save()
+            return {"status": "success", "device": device.name, "power": new_status}
 
 
         
@@ -976,7 +1012,7 @@ class API:
                 getattr( device, "device_type", None ), "value", "host")
 
         elif device in self.ntm.simulation.switches.values():
-            device_type = "switch"
+            device_type = "accesspoint" if getattr(device, "is_wireless", False) else "switch"
 
         elif device in self.ntm.simulation.routers.values():
             device_type = "router"
@@ -1029,6 +1065,8 @@ class API:
         result["mac_aging_time"] = getattr(device, "mac_aging_time", 300)
         result["stp_enabled"] = getattr(device, "stp_enabled", False)
         result["nat_enabled"] = getattr(device, "nat_enabled", False)
+        if getattr(device, "is_wireless", False):
+            result["coverage_radius"] = getattr(device, "coverage_radius", 200)
 
         if hasattr(device, "services"):
             svcs = [

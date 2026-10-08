@@ -175,15 +175,18 @@ class StateManager:
 
 
         for switch in self.simulation.switches.values():
-            devices.append({
+            sw_data = {
                 "name": switch.name,
-                "type": "switch",
+                "type": "accesspoint" if getattr(switch, "is_wireless", False) else "switch",
                 "status": getattr(switch, "status", "OFFLINE"),
                 "soc_threat_level": getattr(switch, "soc_threat_level", "Normal"),
                 "auto_mac_learning": getattr(switch, "auto_mac_learning", "inherit"),
                 "mac_aging_time": getattr(switch, "mac_aging_time", 300),
                 "stp_enabled": getattr(switch, "stp_enabled", False)
-            })
+            }
+            if getattr(switch, "is_wireless", False):
+                sw_data["coverage_radius"] = getattr(switch, "coverage_radius", 200)
+            devices.append(sw_data)
 
         for router in self.simulation.routers.values():
             d = {

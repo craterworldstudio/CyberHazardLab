@@ -190,9 +190,21 @@ class SSHUserAuthProtocol:
     @classmethod
     def verify(cls, username: str, password: str, config: Optional[dict] = None) -> bool:
         """Validates credentials against custom host config or default accounts."""
-        if config and "users" in config and isinstance(config["users"], dict):
-            user_table = config["users"]
-            return user_table.get(username) == password
+        if config and "users" in config:
+            user_data = config["users"]
+            if isinstance(user_data, dict):
+                if username in user_data:
+                    return user_data.get(username) == password
+            elif isinstance(user_data, str):
+                cleaned = user_data.lstrip("=").strip()
+                tokens = [t.strip() for t in cleaned.replace(",", " ").split() if t.strip()]
+                parsed = {}
+                for token in tokens:
+                    if ":" in token:
+                        u, p = token.split(":", 1)
+                        parsed[u.strip()] = p.strip()
+                if username in parsed:
+                    return parsed.get(username) == password
             
         return cls.DEFAULT_ACCOUNTS.get(username) == password
 

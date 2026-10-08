@@ -30,6 +30,7 @@ class Folder:
     def __init__(self, name: str = "folder", parent:Folder = None):
 
         self.name = name
+        self.is_hidden = name.startswith(".")
         self.visible = set()
         self.hidden = set()
         self.path = "/"
@@ -53,7 +54,8 @@ class Folder:
         self.all.update(self.visible)
 
     def add(self, item, h=False):
-        if h:
+        item_hidden = h or getattr(item, "is_hidden", False) or (isinstance(getattr(item, "hidden", False), bool) and item.hidden) or getattr(item, "name", "").startswith(".")
+        if item_hidden:
             self.hidden.add(item)
         else:
             self.visible.add(item)
@@ -63,7 +65,8 @@ class Folder:
     def get_item(self, name):
         for item in self.all:
             if isinstance(item, File):
-                prefix = "." if getattr(item, "hidden", False) and not item.name.startswith(".") else ""
+                is_hid = getattr(item, "is_hidden", False) or (isinstance(getattr(item, "hidden", False), bool) and item.hidden)
+                prefix = "." if is_hid and not item.name.startswith(".") else ""
                 iname = prefix + item.name + (f".{item.ext}" if item.ext else "")
                 if iname == name: return item
             elif getattr(item, "name", "") == name:
@@ -73,7 +76,7 @@ class Folder:
     def disp(self, h=False):
         if h:
             for item in self.all:
-                ext = f'.{item.ext}' if isinstance(item, File) else ""
+                ext = f'.{item.ext}' if (isinstance(item, File) and item.ext) else ""
                 fol_slash = "/" if isinstance(item, Folder) else ""
                 
                 if item is self:
@@ -84,12 +87,13 @@ class Folder:
                     hid = ""
                 else:
                     name_to_print = item.name
-                    hid = '.' if item.hidden else ""
+                    is_hid = getattr(item, "is_hidden", False) or (isinstance(getattr(item, "hidden", False), bool) and item.hidden)
+                    hid = '.' if is_hid and not item.name.startswith(".") else ""
                     
                 print(f"{item.perms}\t{item.owner}\t{item.group}\t {hid+name_to_print+ext+fol_slash}")
         else:
             for item in self.visible:
-                ext = f'.{item.ext}' if isinstance(item, File) else ""
+                ext = f'.{item.ext}' if (isinstance(item, File) and item.ext) else ""
                 fol_slash = "/" if isinstance(item, Folder) else ""
                 
                 if item is self:
@@ -122,7 +126,7 @@ class Folder:
                         prefix + ("    " if last else "│   ")
                     )
                 else:
-                    lines.append(f"{prefix}{branch}{item.name}{f'.{item.ext}' if isinstance(item, File) else ""}")
+                    lines.append(f"{prefix}{branch}{item.name}{f'.{item.ext}' if (isinstance(item, File) and item.ext) else ''}")
     
         build_tree(self)
     
@@ -130,10 +134,17 @@ class Folder:
 
 
 class Drive(Folder):
-    def __init__(self, name: str = "C:"):
+    def __init__(self, name: str = "C:", hidden: bool = False, owner: str = "root", group: str = "root", perms: str = "rwxr-xr-x"):
         super().__init__(name, parent=None)
-        self.path = f"/{name}"
+        if name in ("C:", "C", "/"):
+            self.path = "/"
+        else:
+            self.path = f"/mnt/{name}" if not name.startswith("/") else name
         self.is_drive = True
+        self.is_hidden = hidden or name.startswith(".")
+        self.owner = owner
+        self.group = group
+        self.perms = "rwx------" if self.is_hidden else perms
 
 
 
@@ -278,9 +289,32 @@ class FileSystem:
         return None
 
     def jmp_into(self, folder):
+        if folder == "/" or folder == "~":
+            self.curr_fol = self.tree
+            return
 
-        fol = self.get_item(folder)
-        #print(isinstance(fol, Folder), fol is not None)
+        if folder.startswith("/"):
+            fol = self.path_to_tree(folder)
+        else:
+            fol = self.get_item(folder)
+            if fol is None and "/" in folder:
+                cur = self.curr_fol
+                for seg in folder.split("/"):
+                    if not seg or seg == ".":
+                        continue
+                    elif seg == "..":
+                        cur = cur.parent if cur.parent else cur
+                    else:
+                        sub = None
+                        for itm in cur.all:
+                            if itm.name == seg:
+                                sub = itm
+                                break
+                        cur = sub
+                        if cur is None:
+                            break
+                fol = cur
+
         if (fol is not None) and isinstance(fol, Folder):
             self.curr_fol = fol
         else:
@@ -301,7 +335,8 @@ class FileSystem:
             for item in current.all:
 
                 if isinstance(item, File):
-                    prefix = "." if item.hidden and not item.name.startswith(".") else ""
+                    is_hid = getattr(item, "is_hidden", False) or (isinstance(getattr(item, "hidden", False), bool) and item.hidden)
+                    prefix = "." if is_hid and not item.name.startswith(".") else ""
                     iname = prefix + item.name + (f".{item.ext}" if item.ext else "")
 
                     if iname == part:
