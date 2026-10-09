@@ -15,6 +15,7 @@ class NetworkInterface:
     status: str = "up"
     rx_buffer: list = field(default_factory=list)
     pcap_buffer: list = field(default_factory=list)
+    active_pcap_file: Any | None = None
     
     # Telemetry
     tx_bytes: int = 0
@@ -35,6 +36,13 @@ class NetworkInterface:
         if len(self.pcap_buffer) >= 2000:
             self.pcap_buffer.pop(0)
         self.pcap_buffer.append((time.time(), frame))
+
+        active_file = getattr(self, "active_pcap_file", None)
+        if active_file is not None and hasattr(active_file, "contents"):
+            try:
+                active_file.contents = self.get_pcap_bytes()
+            except Exception:
+                pass
 
     def get_pcap_bytes(self) -> bytes:
         from ..network.pcap import PCAPWriter

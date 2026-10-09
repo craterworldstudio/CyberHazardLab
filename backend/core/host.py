@@ -23,6 +23,81 @@ class Host(Node):
         ))
         
         self._generate_system_files()
+
+    @property
+    def ip_forwarding(self):
+        return getattr(self, "forwarding_enabled", False)
+
+    @ip_forwarding.setter
+    def ip_forwarding(self, val):
+        self.forwarding_enabled = bool(val)
+        self._sync_ip_forward_proc()
+
+    def _sync_ip_forward_proc(self):
+        vfs = getattr(self, "vfs", None)
+        if not vfs:
+            return
+        f = vfs.path_to_tree("/proc/sys/net/ipv4/ip_forward")
+        val = "1\n" if getattr(self, "forwarding_enabled", False) else "0\n"
+        if f:
+            f.contents = val
+        else:
+            self._ensure_proc_ip_forward()
+
+    def _ensure_proc_ip_forward(self):
+        vfs = getattr(self, "vfs", None)
+        if not vfs:
+            return
+        from backend.database.fs import Folder, File
+        proc = vfs.get_item("proc") or vfs.path_to_tree("/proc")
+        if not proc:
+            proc = Folder("proc", parent=vfs.tree)
+            proc.path = "/proc"
+            vfs.tree.add(proc)
+        
+        sys_fol = None
+        for itm in proc.all:
+            if itm.name == "sys":
+                sys_fol = itm
+                break
+        if not sys_fol:
+            sys_fol = Folder("sys", parent=proc)
+            sys_fol.path = "/proc/sys"
+            proc.add(sys_fol)
+
+        net_fol = None
+        for itm in sys_fol.all:
+            if itm.name == "net":
+                net_fol = itm
+                break
+        if not net_fol:
+            net_fol = Folder("net", parent=sys_fol)
+            net_fol.path = "/proc/sys/net"
+            sys_fol.add(net_fol)
+
+        ipv4_fol = None
+        for itm in net_fol.all:
+            if itm.name == "ipv4":
+                ipv4_fol = itm
+                break
+        if not ipv4_fol:
+            ipv4_fol = Folder("ipv4", parent=net_fol)
+            ipv4_fol.path = "/proc/sys/net/ipv4"
+            net_fol.add(ipv4_fol)
+
+        ip_fwd_file = None
+        for itm in ipv4_fol.all:
+            if itm.name == "ip_forward":
+                ip_fwd_file = itm
+                break
+        if not ip_fwd_file:
+            ip_fwd_file = File("ip_forward")
+            ip_fwd_file.perms = "rw-rw-rw-"
+            ip_fwd_file.set_path(ipv4_fol.path)
+            ipv4_fol.add(ip_fwd_file)
+        else:
+            ip_fwd_file.perms = "rw-rw-rw-"
+        ip_fwd_file.contents = "1\n" if getattr(self, "forwarding_enabled", False) else "0\n"
         
     def _generate_system_files(self):
         vfs = self.vfs
@@ -301,6 +376,8 @@ class Host(Node):
                 user_fol.parent = home
                 user_fol.path = f"/home/{username}"
                 home.add(user_fol)
+        
+        self._ensure_proc_ip_forward()
         
         if orig_fol:
             vfs.curr_fol = orig_fol

@@ -315,10 +315,13 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (backendDevice.status !== localDevice.status) {
                         localDevice.updateStatus(backendDevice.status);
                     }
-                    if (backendDevice.coverage_radius !== undefined && localDevice.coverageRadius !== backendDevice.coverage_radius) {
-                        localDevice.coverageRadius = backendDevice.coverage_radius;
-                        if (localDevice.type && localDevice.type.toUpperCase() === "ACCESSPOINT") {
-                            renderAPCoverageCircle(localDevice);
+                    if (backendDevice.coverage_radius !== undefined) {
+                        const isRecentlyUpdated = localDevice._lastRadiusUpdateTime && (Date.now() - localDevice._lastRadiusUpdateTime < 3500);
+                        if (!isRecentlyUpdated && localDevice.coverageRadius !== backendDevice.coverage_radius) {
+                            localDevice.coverageRadius = backendDevice.coverage_radius;
+                            if (localDevice.type && localDevice.type.toUpperCase() === "ACCESSPOINT") {
+                                renderAPCoverageCircle(localDevice);
+                            }
                         }
                     }
                 }
@@ -1642,8 +1645,20 @@ document.addEventListener("DOMContentLoaded", () => {
         const dev = devices.find(d => d.id === deviceId);
         if (dev) {
             dev.coverageRadius = Number(newRadius);
+            dev._lastRadiusUpdateTime = Date.now();
             renderAPCoverageCircle(dev);
             evaluateWirelessAssociations();
+
+            if (dev._saveRadiusTimeout) clearTimeout(dev._saveRadiusTimeout);
+            dev._saveRadiusTimeout = setTimeout(() => {
+                fetch(`/api/ncm/devices/${encodeURIComponent(deviceId)}/config`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ coverage_radius: Number(newRadius) })
+                }).then(() => {
+                    dev._lastRadiusUpdateTime = Date.now();
+                }).catch(() => {});
+            }, 100);
         }
     };
 

@@ -111,20 +111,24 @@ class TerminalCommandHandler:
 
         if redirect_file and getattr(device, "vfs", None):
             vfs = device.vfs
-            from backend.database.fs import File
-            f = vfs.get_item(redirect_file)
+            self._heal_stray_vfs_items(vfs)
+            from backend.database.fs import File, Folder
+            f = vfs.path_to_tree(redirect_file) if redirect_file.startswith("/") else vfs.get_item(redirect_file)
             
             if f:
                 if not check_permission(f, getattr(device, "current_user", "root"), 'w'):
                     return f"bash: {redirect_file}: Permission denied"
             else:
-                if not check_permission(vfs.curr_fol, getattr(device, "current_user", "root"), 'w'):
+                target_fol, target_name = self._resolve_target_dir_and_name(
+                    vfs, redirect_file, create_dirs=True, user=getattr(device, "current_user", "root")
+                )
+                if not target_fol or not check_permission(target_fol, getattr(device, "current_user", "root"), 'w'):
                     return f"bash: {redirect_file}: Permission denied"
-                f = File(redirect_file)
+                f = File(target_name)
                 f.owner = getattr(device, "current_user", "root")
                 f.group = getattr(device, "current_user", "root")
-                f.set_path(vfs.curr_fol.path)
-                vfs.curr_fol.add(f)
+                f.set_path(target_fol.path)
+                target_fol.add(f)
             
             if append_mode:
                 if isinstance(f.contents, list):
@@ -133,6 +137,16 @@ class TerminalCommandHandler:
                     f.contents = str(f.contents) + ("\n" + out if f.contents else out)
             else:
                 f.contents = out
+
+            if redirect_file.endswith("ip_forward") or getattr(f, "name", "") == "ip_forward":
+                c_str = "".join(f.contents) if isinstance(f.contents, list) else str(f.contents)
+                val = "1" in c_str
+                if hasattr(device, "ip_forwarding"):
+                    device.ip_forwarding = val
+                else:
+                    device.forwarding_enabled = val
+                if self.state_manager:
+                    self.state_manager.save()
             return ""
             
         return out
@@ -384,6 +398,10 @@ class TerminalCommandHandler:
             return self._handle_arp(device, parts)
         elif cmd == "arpspoof":
             return self._handle_arpspoof(device, parts)
+        elif cmd == "sysctl":
+            return self._handle_sysctl(device, parts)
+        elif cmd == "tcpdump":
+            return self._handle_tcpdump(device, parts)
         elif cmd == "nmap":
             return self._handle_nmap(device, parts)
         elif cmd == "nc":
@@ -470,6 +488,8 @@ class TerminalCommandHandler:
             output += "  nmap       - Network exploration tool and port scanner\n"
             output += "  nc         - Arbitrary TCP/UDP connections, listeners and reverse shells\n"
             output += "  arpspoof   - Intercept packets on a switched LAN using ARP poisoning\n"
+            output += "  sysctl     - Configure kernel parameters at runtime (e.g. net.ipv4.ip_forward)\n"
+            output += "  tcpdump    - Packet analyzer to capture and inspect live or saved network traffic\n"
             output += "  ifconfig   - Configure a network interface\n"
             output += "  ip         - Show / manipulate routing, devices, policy routing and tunnels\n"
             output += "  arp        - Display or manipulate the local ARP cache\n"
@@ -799,13 +819,37 @@ Options:
         elif topic == "arpspoof":
             return """arpspoof - intercept packets on a switched LAN using ARP poisoning
 Usage:
-  arpspoof [-i interface] -t target_ip host_to_spoof
-  arpspoof target_ip host_to_spoof
+  arpspoof [-i interface] [-r] -t target_ip host_to_spoof
+  arpspoof [-r] target_ip host_to_spoof
 
 Options:
-  -i interface   Specify interface to use (default: eth0)
-  -t target_ip   Specify target host whose ARP cache will be poisoned
-  host_to_spoof  The IP address to spoof (e.g. Default Gateway)"""
+  -i interface  Specify interface to use (default: eth0)
+  -r            Poison both target and host bidirectionally to intercept two-way traffic
+  -t target_ip  Specify target host whose ARP cache will be poisoned
+  host_to_spoof The IP address to spoof (e.g. Default Gateway)"""
+        elif topic == "sysctl":
+            return """sysctl - configure kernel parameters at runtime
+Usage:
+  sysctl <variable>
+  sysctl -w <variable>=<value>
+  sysctl -a
+
+Examples:
+  sysctl net.ipv4.ip_forward
+  sysctl -w net.ipv4.ip_forward=1
+  sysctl -w net.ipv4.ip_forward=0"""
+        elif topic == "tcpdump":
+            return """tcpdump - dump traffic on a network
+Usage:
+  tcpdump [-i interface] [-c count] [-w file.pcap] [-r file.pcap] [-v] [expression]
+
+Options:
+  -i interface  Listen on specified interface (default: eth0)
+  -c count      Exit after receiving count packets
+  -w file       Write captured raw packets to file in PCAP format
+  -r file       Read and analyze packets from a saved PCAP file
+  -v            Verbose output (shows TTL, flags, headers, packet length)
+  expression    Optional protocol/host filter (e.g. icmp, tcp, udp, arp, host <ip>)"""
         elif topic == "arp":
             return """arp - manipulate the system ARP cache
 Usage:
@@ -821,6 +865,65 @@ Usage:
         else:
             return f"No manual entry for {topic}"
 
+    def _resolve_target_dir_and_name(self, vfs, file_path, create_dirs=True, user="root"):
+        if not file_path:
+            return vfs.curr_fol, ""
+        
+        file_path = file_path.strip()
+        if "/" not in file_path:
+            return vfs.curr_fol, file_path
+
+        parent_path, base_name = file_path.rsplit("/", 1)
+        base_name = base_name.strip()
+
+        if file_path.startswith("/"):
+            cur = vfs.tree
+            segments = [s for s in parent_path.split("/") if s]
+        else:
+            cur = vfs.curr_fol
+            segments = [s for s in parent_path.split("/") if s]
+
+        from backend.database.fs import Folder
+        for seg in segments:
+            if not seg or seg == ".":
+                continue
+            elif seg == "..":
+                cur = cur.parent if cur.parent else cur
+            else:
+                sub = None
+                for itm in cur.all:
+                    if isinstance(itm, Folder) and itm.name == seg:
+                        sub = itm
+                        break
+                if not sub:
+                    if create_dirs:
+                        sub = Folder(seg, parent=cur)
+                        sub.owner = user
+                        sub.group = user
+                        sub.perms = "rwxr-xr-x"
+                        sub.path = f"{cur.path.rstrip('/')}/{seg}"
+                        cur.add(sub)
+                    else:
+                        return None, base_name
+                cur = sub
+
+        return cur, base_name
+
+    def _heal_stray_vfs_items(self, vfs):
+        if not vfs or not hasattr(vfs, "tree"):
+            return
+        from backend.database.fs import File
+        strays = [item for item in list(vfs.tree.all) if isinstance(item, File) and "/" in item.name]
+        for item in strays:
+            old_name = item.name
+            target_fol, clean_name = self._resolve_target_dir_and_name(vfs, old_name, create_dirs=True, user=getattr(item, "owner", "root"))
+            if target_fol is not None:
+                vfs.tree.all.discard(item)
+                vfs.tree.visible.discard(item)
+                vfs.tree.hidden.discard(item)
+                item.name = clean_name
+                item.set_path(target_fol.path)
+                target_fol.add(item)
 
     # VFS Command Handlers
     def _handle_vfs_command(self, device, parts):
@@ -828,6 +931,8 @@ Usage:
         vfs = getattr(device, "vfs", None)
         if not vfs:
             return f"bash: {cmd}: File system not available on this device"
+            
+        self._heal_stray_vfs_items(vfs)
             
         # Provide help for VFS commands
         if len(parts) > 1 and parts[1] in ("--help", "-h"):
@@ -980,6 +1085,11 @@ Usage:
             if item.contents:
                 if isinstance(item.contents, list):
                     out += "\n".join(item.contents)
+                elif isinstance(item.contents, (bytes, bytearray)):
+                    try:
+                        out += item.contents.decode('utf-8')
+                    except Exception:
+                        out += f"[Binary data: {len(item.contents)} bytes. Use 'tcpdump -r {name}' to view packet capture.]\n"
                 else:
                     out += str(item.contents)
             return out
@@ -1471,52 +1581,132 @@ Usage:
         if len(parts) < 3 or (len(parts) > 1 and parts[1] in ("--help", "-h")):
             return """arpspoof - intercept packets on a switched LAN using ARP poisoning
 Usage:
-  arpspoof [-i interface] -t target_ip host_to_spoof
-  arpspoof target_ip host_to_spoof
+  arpspoof [-i interface] [-r] -t target_ip host_to_spoof
+  arpspoof [-r] target_ip host_to_spoof
 
 Options:
-  -i interface   Specify interface to use (default: eth0)
-  -t target_ip   Specify target host whose ARP cache will be poisoned
-  host_to_spoof  The IP address to spoof (e.g. Default Gateway)"""
+  -i interface  Specify interface to use (default: eth0)
+  -r            Poison both target and host bidirectionally to intercept two-way traffic
+  -t target_ip  Specify target host whose ARP cache will be poisoned
+  host_to_spoof The IP address to spoof (e.g. Default Gateway)"""
 
-        args = parts[1:]
+        args = [p for p in parts[1:]]
+        bidirectional = False
+        if "-r" in args:
+            bidirectional = True
+            args.remove("-r")
+        elif "--bidirectional" in args:
+            bidirectional = True
+            args.remove("--bidirectional")
+
+        specified_intf = None
+        if "-i" in args:
+            idx = args.index("-i")
+            if idx + 1 < len(args):
+                specified_intf = args[idx + 1]
+                args.pop(idx + 1)
+            args.pop(idx)
+
         target_ip = None
         host_to_spoof = None
         if "-t" in args:
             idx = args.index("-t")
             if idx + 1 < len(args):
                 target_ip = args[idx + 1]
-            rem = [a for i, a in enumerate(args) if i != idx and i != idx + 1 and not a.startswith("-i")]
-            if rem:
-                host_to_spoof = rem[0]
+                args.pop(idx + 1)
+            args.pop(idx)
+            if args:
+                host_to_spoof = args[0]
         elif len(args) >= 2:
             target_ip = args[0]
             host_to_spoof = args[1]
 
         if not target_ip or not host_to_spoof:
-            return "Usage: arpspoof [-i interface] -t target_ip host_to_spoof"
+            return "Usage: arpspoof [-i interface] [-r] -t target_ip host_to_spoof"
 
-        src_intf = device.interfaces[0] if getattr(device, "interfaces", None) else None
+        src_intf = None
+        if specified_intf:
+            for intf in getattr(device, "interfaces", []):
+                if intf.name == specified_intf:
+                    src_intf = intf
+                    break
+        if not src_intf:
+            src_intf = device.interfaces[0] if getattr(device, "interfaces", None) else None
+
         if not src_intf:
             return "arpspoof: No active interface found on this device."
 
+        if getattr(src_intf, "link", None) is None:
+            return f"arpspoof: {src_intf.name}: Network is down (no carrier/link). Move device into Access Point range or connect network cable."
+
         target_dev = None
         target_intf = None
+        spoof_dev = None
+        spoof_intf = None
         all_devices = list(getattr(self.sim, "hosts", {}).values()) + list(getattr(self.sim, "routers", {}).values())
         for dev in all_devices:
             for intf in getattr(dev, "interfaces", []):
                 if getattr(intf, "ip", "") == target_ip:
                     target_dev = dev
                     target_intf = intf
-                    break
-            if target_dev:
-                break
+                if getattr(intf, "ip", "") == host_to_spoof:
+                    spoof_dev = dev
+                    spoof_intf = intf
 
         if not target_dev or not target_intf:
             return f"arpspoof: Target host {target_ip} not found on the network."
 
+        # Cache legitimate MACs on attacker so hairpin forwarding succeeds immediately
+        if hasattr(device, "arp") and device.arp:
+            device.arp.cache[target_ip] = target_intf.mac
+            if spoof_intf:
+                device.arp.cache[host_to_spoof] = spoof_intf.mac
+
+        # Poison target host ARP cache
         if hasattr(target_intf, "arp") and target_intf.arp:
             target_intf.arp.cache[host_to_spoof] = src_intf.mac
+        if hasattr(target_dev, "arp") and target_dev.arp:
+            target_dev.arp.cache[host_to_spoof] = src_intf.mac
+
+        # If bidirectional, also poison spoofed host (e.g. Gateway)
+        if bidirectional and spoof_dev:
+            if spoof_intf and hasattr(spoof_intf, "arp") and spoof_intf.arp:
+                spoof_intf.arp.cache[target_ip] = src_intf.mac
+            if hasattr(spoof_dev, "arp") and spoof_dev.arp:
+                spoof_dev.arp.cache[target_ip] = src_intf.mac
+
+        # Transmit real ARP reply frames over the physical link so intermediate switches update their MAC tables
+        if src_intf.link is not None:
+            from backend.network.frame import EthernetFrame
+            from backend.network.packet import ARPPacket
+            arp1 = ARPPacket(
+                operation="REPLY",
+                sender_ip=host_to_spoof,
+                sender_mac=src_intf.mac,
+                target_ip=target_ip,
+                target_mac=target_intf.mac
+            )
+            frame1 = EthernetFrame(
+                source_mac=src_intf.mac,
+                destination_mac=target_intf.mac,
+                payload=arp1
+            )
+            src_intf.send(frame1)
+
+            if bidirectional and spoof_intf:
+                arp2 = ARPPacket(
+                    operation="REPLY",
+                    sender_ip=target_ip,
+                    sender_mac=src_intf.mac,
+                    target_ip=host_to_spoof,
+                    target_mac=spoof_intf.mac
+                )
+                frame2 = EthernetFrame(
+                    source_mac=src_intf.mac,
+                    destination_mac=spoof_intf.mac,
+                    payload=arp2
+                )
+                src_intf.send(frame2)
 
         if getattr(device, "network", None):
             from backend.core.event import Event
@@ -1531,11 +1721,430 @@ Options:
                     "attacker_mac": src_intf.mac,
                     "target_ip": target_ip,
                     "target_host": target_dev.name,
-                    "poisoned_ip": host_to_spoof
+                    "poisoned_ip": host_to_spoof,
+                    "bidirectional": bidirectional
                 }
             ))
 
-        return f"[+] Sent ARP reply: {host_to_spoof} is-at {src_intf.mac} to {target_ip}\n[+] ARP cache poisoned on {target_dev.name} ({target_ip}). Packets for {host_to_spoof} now route to {device.name}."
+        output = f"[+] Sent ARP reply: {host_to_spoof} is-at {src_intf.mac} to {target_ip}\n"
+        output += f"[+] ARP cache poisoned on {target_dev.name} ({target_ip}). Packets for {host_to_spoof} now route to {device.name}.\n"
+        if bidirectional:
+            sp_name = spoof_dev.name if spoof_dev else host_to_spoof
+            output += f"[+] Sent ARP reply: {target_ip} is-at {src_intf.mac} to {host_to_spoof}\n"
+            output += f"[+] Bidirectional poisoning active: ARP cache poisoned on {sp_name} ({host_to_spoof}).\n"
+
+        is_fwd = getattr(device, "ip_forwarding", False) or getattr(device, "forwarding_enabled", False)
+        if is_fwd:
+            output += f"[+] IP forwarding is ENABLED. Intercepted traffic will be forwarded transparently.\n"
+            output += f"[*] Tip: Use 'tcpdump -i {src_intf.name}' to monitor or save intercepted packets."
+        else:
+            output += f"[!] WARNING: IP forwarding is DISABLED. Intercepted packets will be dropped!\n"
+            output += f"[*] Enable IP forwarding to relay traffic: sysctl -w net.ipv4.ip_forward=1"
+
+        return output
+
+    def _handle_sysctl(self, device, parts):
+        if len(parts) > 1 and parts[1] in ("--help", "-h"):
+            return """sysctl - configure kernel parameters at runtime
+Usage:
+  sysctl <variable>
+  sysctl -w <variable>=<value>
+  sysctl -a
+
+Examples:
+  sysctl net.ipv4.ip_forward
+  sysctl -w net.ipv4.ip_forward=1
+  sysctl -w net.ipv4.ip_forward=0"""
+
+        if len(parts) == 1 or (len(parts) == 2 and parts[1] in ("-a", "-A")):
+            val = "1" if getattr(device, "ip_forwarding", False) or getattr(device, "forwarding_enabled", False) else "0"
+            return f"net.ipv4.ip_forward = {val}"
+
+        args = parts[1:]
+        is_write = False
+        target_pair = None
+        if args[0] == "-w":
+            is_write = True
+            if len(args) > 1:
+                target_pair = args[1]
+        elif "=" in args[0]:
+            is_write = True
+            target_pair = args[0]
+        else:
+            target_pair = args[0]
+
+        if is_write and target_pair:
+            if "=" in target_pair:
+                k, v = target_pair.split("=", 1)
+                k = k.strip()
+                v = v.strip()
+                if k == "net.ipv4.ip_forward":
+                    enabled = (v == "1" or v.lower() in ("true", "yes", "on"))
+                    if hasattr(device, "ip_forwarding"):
+                        device.ip_forwarding = enabled
+                    else:
+                        device.forwarding_enabled = enabled
+                    if self.state_manager:
+                        self.state_manager.save()
+                    return f"net.ipv4.ip_forward = {'1' if enabled else '0'}"
+                else:
+                    return f"error: \"{k}\" is an unknown key"
+            else:
+                return "sysctl: syntax error in assignment"
+        else:
+            k = target_pair.strip() if target_pair else ""
+            if k == "net.ipv4.ip_forward":
+                val = "1" if getattr(device, "ip_forwarding", False) or getattr(device, "forwarding_enabled", False) else "0"
+                return f"net.ipv4.ip_forward = {val}"
+            else:
+                return f"sysctl: cannot stat /proc/sys/{k.replace('.', '/')}: No such file or directory"
+
+    def _handle_tcpdump(self, device, parts):
+        if len(parts) > 1 and parts[1] in ("--help", "-h"):
+            return """tcpdump - dump traffic on a network
+Usage:
+  tcpdump [-i interface] [-c count] [-w file.pcap] [-r file.pcap] [-v] [expression]
+  tcpdump [-i interface] --stop
+
+Options:
+  -i interface  Listen on specified interface (default: first active interface)
+  -c count      Exit after receiving count packets
+  -w file       Write raw packets to file in PCAP format (enables continuous live background capture)
+  -r file       Read and analyze packets from a saved PCAP file
+  -v            Verbose output (shows IP headers, TTL, flags, packet length)
+  --stop        Stop continuous background file capture
+  expression    Protocol or host filter (e.g. icmp, tcp, udp, arp, host <ip>)"""
+
+        if "--stop" in parts or "stop" in parts:
+            intf_target = None
+            if "-i" in parts:
+                idx = parts.index("-i")
+                if idx + 1 < len(parts):
+                    intf_target = parts[idx + 1]
+            stopped = []
+            for i_obj in getattr(device, "interfaces", []):
+                if intf_target and i_obj.name != intf_target:
+                    continue
+                if getattr(i_obj, "active_pcap_file", None) is not None:
+                    i_obj.active_pcap_file = None
+                    stopped.append(i_obj.name)
+            if stopped:
+                return f"tcpdump: stopped continuous capture on {', '.join(stopped)}."
+            return "tcpdump: no active background capture running on this device."
+
+        intf_name = None
+        count = None
+        write_file = None
+        read_file = None
+        verbose = False
+        filter_tokens = []
+
+        i = 1
+        while i < len(parts):
+            p = parts[i]
+            if p == "-i" and i + 1 < len(parts):
+                intf_name = parts[i+1]
+                i += 2
+            elif p == "-c" and i + 1 < len(parts):
+                try:
+                    count = int(parts[i+1])
+                except ValueError:
+                    pass
+                i += 2
+            elif p == "-w" and i + 1 < len(parts):
+                write_file = parts[i+1]
+                i += 2
+            elif p == "-r" and i + 1 < len(parts):
+                read_file = parts[i+1]
+                i += 2
+            elif p == "-v":
+                verbose = True
+                i += 1
+            else:
+                filter_tokens.append(p.lower())
+                i += 1
+
+        vfs = getattr(device, "vfs", None)
+
+        def matches_filter(ts, frame, tokens):
+            if not tokens:
+                return True
+            payload = getattr(frame, "payload", None)
+            p_class = payload.__class__.__name__ if payload else ""
+            proto = str(getattr(payload, "protocol", "")).lower()
+            src_ip = str(getattr(payload, "source_ip", "")).lower()
+            dst_ip = str(getattr(payload, "destination_ip", "")).lower()
+
+            for idx, token in enumerate(tokens):
+                if token in ("icmp", "tcp", "udp", "arp"):
+                    if token == "arp":
+                        if p_class != "ARPPacket":
+                            return False
+                    elif proto != token and token not in p_class.lower():
+                        return False
+                elif token == "host" and idx + 1 < len(tokens):
+                    target_h = tokens[idx + 1]
+                    if target_h not in (src_ip, dst_ip):
+                        return False
+                elif token.isdigit():
+                    l4 = getattr(payload, "payload", None)
+                    sp = str(getattr(l4, "source_port", ""))
+                    dp = str(getattr(l4, "destination_port", ""))
+                    if token not in (sp, dp):
+                        return False
+            return True
+
+        def format_packet_str(ts, frame, is_verbose=False):
+            import time
+            ts_sec = int(ts)
+            ts_usec = int((ts - ts_sec) * 1_000_000)
+            t_str = time.strftime("%H:%M:%S", time.localtime(ts_sec)) + f".{ts_usec:06d}"
+            payload = getattr(frame, "payload", None)
+            if not payload:
+                return f"{t_str} {getattr(frame, 'source_mac', '')} > {getattr(frame, 'destination_mac', '')}: Ethernet"
+
+            p_class = payload.__class__.__name__
+            if p_class == "ARPPacket":
+                op = str(getattr(payload, "operation", "REQUEST")).upper()
+                s_ip = getattr(payload, "sender_ip", "0.0.0.0")
+                s_mac = getattr(payload, "sender_mac", "00:00:00:00:00:00")
+                t_ip = getattr(payload, "target_ip", "0.0.0.0")
+                if "REQ" in op or op == "1":
+                    return f"{t_str} ARP, Request who-has {t_ip} tell {s_ip}, length 28"
+                else:
+                    return f"{t_str} ARP, Reply {s_ip} is-at {s_mac}, length 28"
+
+            src_ip = getattr(payload, "source_ip", "0.0.0.0")
+            dst_ip = getattr(payload, "destination_ip", "0.0.0.0")
+            proto = str(getattr(payload, "protocol", "IP")).upper()
+            ttl = getattr(payload, "ttl", 64)
+            l4 = getattr(payload, "payload", None)
+
+            if proto == "ICMP" or (l4 and l4.__class__.__name__ == "ICMPPacket"):
+                i_type = str(getattr(l4, "type", "ECHO_REQUEST")).upper()
+                if "REPLY" in i_type:
+                    desc = "ICMP echo reply, id 1, seq 1, length 64"
+                elif "REQUEST" in i_type:
+                    desc = "ICMP echo request, id 1, seq 1, length 64"
+                else:
+                    desc = f"ICMP {i_type}, length 64"
+                if is_verbose:
+                    return f"{t_str} IP (tos 0x0, ttl {ttl}, id 4660, offset 0, flags [DF], proto ICMP (1), length 84)\n    {src_ip} > {dst_ip}: {desc}"
+                return f"{t_str} IP {src_ip} > {dst_ip}: {desc}"
+
+            elif proto == "UDP" or (l4 and l4.__class__.__name__ == "UDPPacket"):
+                sp = getattr(l4, "source_port", 0)
+                dp = getattr(l4, "destination_port", 0)
+                raw = getattr(l4, "payload", "")
+                if sp == 53 or dp == 53:
+                    if dp == 53:
+                        desc = f"5353+ A? {raw} (29)"
+                    else:
+                        desc = f"5353 1/0/0 A {raw} (45)"
+                elif sp in (67, 68) or dp in (67, 68):
+                    mtype = getattr(raw, "message_type", "BOOTP/DHCP")
+                    desc = f"BOOTP/DHCP, {mtype}, length 300"
+                else:
+                    desc = f"UDP, length {len(str(raw))}"
+                if is_verbose:
+                    return f"{t_str} IP (tos 0x0, ttl {ttl}, id 4660, offset 0, proto UDP (17), length {28 + len(str(raw))})\n    {src_ip}.{sp} > {dst_ip}.{dp}: {desc}"
+                return f"{t_str} IP {src_ip}.{sp} > {dst_ip}.{dp}: {desc}"
+
+            elif proto == "TCP" or (l4 and l4.__class__.__name__ == "TCPPacket"):
+                sp = getattr(l4, "source_port", 0)
+                dp = getattr(l4, "destination_port", 0)
+                flags_set = getattr(l4, "flags", set())
+                flag_str = "".join([f[0].upper() for f in sorted(list(flags_set)) if f]) if flags_set else "."
+                seq = getattr(l4, "sequence_number", 0)
+                ack = getattr(l4, "acknowledgement_number", 0)
+                p_len = len(str(getattr(l4, "payload", "")))
+                if is_verbose:
+                    return f"{t_str} IP (tos 0x0, ttl {ttl}, id 4660, offset 0, proto TCP (6), length {40 + p_len})\n    {src_ip}.{sp} > {dst_ip}.{dp}: Flags [{flag_str}], seq {seq}, ack {ack}, win 64240, length {p_len}"
+                return f"{t_str} IP {src_ip}.{sp} > {dst_ip}.{dp}: Flags [{flag_str}], seq {seq}, ack {ack}, win 64240, length {p_len}"
+
+            return f"{t_str} IP {src_ip} > {dst_ip}: {proto}, length {len(str(getattr(payload, 'payload', '')))}"
+
+        # Handle read from file (-r)
+        if read_file:
+            if not vfs:
+                return "tcpdump: File system not available on this device"
+            self._heal_stray_vfs_items(vfs)
+            f_item = vfs.path_to_tree(read_file) if read_file.startswith("/") else vfs.get_item(read_file)
+            if not f_item:
+                return f"tcpdump: {read_file}: No such file or directory"
+            from backend.database.fs import File
+            if not isinstance(f_item, File):
+                return f"tcpdump: {read_file}: Not a regular file"
+            
+            raw_data = f_item.contents
+            if isinstance(raw_data, list):
+                raw_data = "\n".join(raw_data)
+            if isinstance(raw_data, str):
+                raw_data = raw_data.encode('latin1')
+
+            import struct, socket, time
+            if len(raw_data) < 24:
+                return f"tcpdump: {read_file}: truncated pcap file"
+            
+            magic = struct.unpack('<I', raw_data[:4])[0]
+            if magic not in (0xa1b2c3d4, 0xd4c3b2a1):
+                return f"tcpdump: {read_file}: bad dump file format"
+            
+            offset = 24
+            parsed_lines = []
+            while offset + 16 <= len(raw_data):
+                ts_sec, ts_usec, caplen, origlen = struct.unpack('<IIII', raw_data[offset:offset+16])
+                offset += 16
+                if offset + caplen > len(raw_data):
+                    break
+                frame_bytes = raw_data[offset:offset+caplen]
+                offset += caplen
+
+                if len(frame_bytes) < 14:
+                    continue
+                ethertype = struct.unpack('!H', frame_bytes[12:14])[0]
+                time_str = time.strftime("%H:%M:%S", time.localtime(ts_sec)) + f".{ts_usec:06d}"
+
+                if ethertype == 0x0806 and len(frame_bytes) >= 42:
+                    opcode = struct.unpack('!H', frame_bytes[20:22])[0]
+                    s_mac = ":".join(f"{b:02x}" for b in frame_bytes[22:28])
+                    s_ip = socket.inet_ntoa(frame_bytes[28:32])
+                    t_mac = ":".join(f"{b:02x}" for b in frame_bytes[32:38])
+                    t_ip = socket.inet_ntoa(frame_bytes[38:42])
+                    if "arp" in filter_tokens or not filter_tokens:
+                        if opcode == 1:
+                            parsed_lines.append(f"{time_str} ARP, Request who-has {t_ip} tell {s_ip}, length 28")
+                        else:
+                            parsed_lines.append(f"{time_str} ARP, Reply {s_ip} is-at {s_mac}, length 28")
+                elif ethertype == 0x0800 and len(frame_bytes) >= 34:
+                    ip_hdr = frame_bytes[14:34]
+                    proto = ip_hdr[9]
+                    ttl = ip_hdr[8]
+                    src_ip = socket.inet_ntoa(ip_hdr[12:16])
+                    dst_ip = socket.inet_ntoa(ip_hdr[16:20])
+                    l4_bytes = frame_bytes[34:]
+
+                    if filter_tokens:
+                        matched = True
+                        if "icmp" in filter_tokens and proto != 1: matched = False
+                        if "tcp" in filter_tokens and proto != 6: matched = False
+                        if "udp" in filter_tokens and proto != 17: matched = False
+                        if "host" in filter_tokens:
+                            h_idx = filter_tokens.index("host")
+                            if h_idx + 1 < len(filter_tokens) and filter_tokens[h_idx+1] not in (src_ip, dst_ip):
+                                matched = False
+                        if not matched:
+                            continue
+
+                    if proto == 1 and len(l4_bytes) >= 2:
+                        i_type, i_code = l4_bytes[0], l4_bytes[1]
+                        desc = "ICMP echo reply, id 1, seq 1, length 64" if i_type == 0 else "ICMP echo request, id 1, seq 1, length 64"
+                        if verbose:
+                            parsed_lines.append(f"{time_str} IP (tos 0x0, ttl {ttl}, id 4660, offset 0, flags [DF], proto ICMP (1), length 84)\n    {src_ip} > {dst_ip}: {desc}")
+                        else:
+                            parsed_lines.append(f"{time_str} IP {src_ip} > {dst_ip}: {desc}")
+                    elif proto == 17 and len(l4_bytes) >= 4:
+                        sp, dp = struct.unpack('!HH', l4_bytes[:4])
+                        desc = f"UDP, length {len(l4_bytes)-8}"
+                        if verbose:
+                            parsed_lines.append(f"{time_str} IP (tos 0x0, ttl {ttl}, id 4660, offset 0, proto UDP (17), length {len(l4_bytes)})\n    {src_ip}.{sp} > {dst_ip}.{dp}: {desc}")
+                        else:
+                            parsed_lines.append(f"{time_str} IP {src_ip}.{sp} > {dst_ip}.{dp}: {desc}")
+                    elif proto == 6 and len(l4_bytes) >= 14:
+                        sp, dp = struct.unpack('!HH', l4_bytes[:4])
+                        seq, ack = struct.unpack('!II', l4_bytes[4:12])
+                        flags_byte = l4_bytes[13]
+                        f_list = []
+                        if flags_byte & 0x02: f_list.append("S")
+                        if flags_byte & 0x10: f_list.append("A")
+                        if flags_byte & 0x01: f_list.append("F")
+                        if flags_byte & 0x04: f_list.append("R")
+                        f_str = "".join(f_list) or "."
+                        if verbose:
+                            parsed_lines.append(f"{time_str} IP (tos 0x0, ttl {ttl}, id 4660, offset 0, proto TCP (6), length {len(l4_bytes)})\n    {src_ip}.{sp} > {dst_ip}.{dp}: Flags [{f_str}], seq {seq}, ack {ack}, win 64240, length {max(0, len(l4_bytes)-20)}")
+                        else:
+                            parsed_lines.append(f"{time_str} IP {src_ip}.{sp} > {dst_ip}.{dp}: Flags [{f_str}], seq {seq}, ack {ack}, win 64240, length {max(0, len(l4_bytes)-20)}")
+                    else:
+                        parsed_lines.append(f"{time_str} IP {src_ip} > {dst_ip}: proto {proto}")
+
+                if count and len(parsed_lines) >= count:
+                    break
+
+            out = f"reading from file {read_file}, link-type EN10MB (Ethernet)\n"
+            out += "\n".join(parsed_lines)
+            return out
+
+        # Live capture from interface
+        intf = None
+        if intf_name:
+            for i_obj in getattr(device, "interfaces", []):
+                if i_obj.name == intf_name:
+                    intf = i_obj
+                    break
+            if not intf:
+                return f"tcpdump: {intf_name}: No such device exists"
+        else:
+            if getattr(device, "interfaces", []):
+                intf = device.interfaces[0]
+            else:
+                return "tcpdump: No active interface found on this device"
+
+        buf = getattr(intf, "pcap_buffer", []) or []
+        filtered = [item for item in buf if matches_filter(item[0], item[1], filter_tokens)]
+
+        if write_file:
+            if not vfs:
+                return "tcpdump: File system not available on this device"
+            self._heal_stray_vfs_items(vfs)
+            from backend.network.pcap import PCAPWriter
+            from backend.database.fs import File, Folder
+            
+            pcap_bytes = PCAPWriter.build_pcap(filtered)
+            
+            target_fol, target_name = self._resolve_target_dir_and_name(
+                vfs, write_file, create_dirs=True, user=getattr(device, "current_user", "root")
+            )
+            if not target_fol:
+                return f"tcpdump: {write_file}: No such file or directory"
+            
+            f_item = None
+            for itm in target_fol.all:
+                if itm.name == target_name:
+                    f_item = itm
+                    break
+            if not f_item:
+                f_item = File(target_name)
+                f_item.owner = getattr(device, "current_user", "root")
+                f_item.group = getattr(device, "current_user", "root")
+                f_item.set_path(target_fol.path)
+                target_fol.add(f_item)
+            
+            f_item.contents = pcap_bytes
+            intf.active_pcap_file = f_item
+            
+            num_pkts = len(filtered)
+            return (
+                f"tcpdump: listening on {intf.name}, link-type EN10MB (Ethernet), capture size 262144 bytes\n"
+                f"{num_pkts} packets captured\n"
+                f"{num_pkts} packets received by filter\n"
+                f"[*] Background capture active: incoming/outgoing traffic will automatically sync to {write_file}.\n"
+                f"[*] Run 'tcpdump --stop' to stop background logging."
+            )
+
+        num_pkts = len(filtered)
+        if count and num_pkts > count:
+            to_show = filtered[-count:]
+        elif num_pkts > 25:
+            to_show = filtered[-25:]
+        else:
+            to_show = filtered
+
+        header = f"tcpdump: verbose output suppressed, use -v or -vv for full protocol decode\nlistening on {intf.name}, link-type EN10MB (Ethernet), capture size 262144 bytes\n"
+        if not to_show:
+            return header + "0 packets captured"
+
+        lines = [format_packet_str(ts, frame, verbose) for ts, frame in to_show]
+        return header + "\n".join(lines) + f"\n{num_pkts} packets captured\n{num_pkts} packets received by filter"
 
     def _handle_nmap(self, device, parts):
         if len(parts) < 2 or (len(parts) > 1 and parts[1] in ("--help", "-h")):
@@ -2349,12 +2958,18 @@ Options:
 
     def _handle_echo(self, device, parts):
         if len(parts) < 2:
-            return "Usage: echo [-p port] [-t tcp|udp] destination [message]"
+            return ""
+        if len(parts) > 1 and parts[1] in ("--help", "-h"):
+            return """echo - send RFC 862 echo probe to network host or print text
+  Usage:
+    echo [text]
+    echo [-p port] [-t tcp|udp] destination [message]"""
 
         port = 7
         proto = "TCP"
         target_ip = None
         message_parts = []
+        has_network_flag = ("-p" in parts or "-t" in parts)
 
         i = 1
         while i < len(parts):
@@ -2378,19 +2993,25 @@ Options:
             i += 1
 
         if not target_ip:
-            return "Usage: echo [-p port] [-t tcp|udp] destination [message]"
+            return ""
 
         message = " ".join(message_parts) if message_parts else "CyberHazardLab Echo Probe"
 
         if not device or not getattr(device, "interfaces", []):
+            if not has_network_flag:
+                return " ".join(parts[1:]).strip('"\'')
             return "Device has no network interfaces configured."
 
         intf = device.interfaces[0]
         if not intf.ip or intf.ip == "0.0.0.0":
+            if not has_network_flag:
+                return " ".join(parts[1:]).strip('"\'')
             return "Device has no valid IP assigned."
 
         network = getattr(device, "network", None)
         if not network:
+            if not has_network_flag:
+                return " ".join(parts[1:]).strip('"\'')
             return "Device is not connected to a network."
 
         # Resolve destination if hostname given
@@ -2400,6 +3021,8 @@ Options:
             if dest_node and getattr(dest_node, "interfaces", []):
                 target_ip = dest_node.interfaces[0].ip
             else:
+                if not has_network_flag:
+                    return " ".join(parts[1:]).strip('"\'')
                 return f"echo: Could not resolve hostname {target_ip}: Name or service not known"
 
         route, out_intf = network.get_route(device, target_ip)

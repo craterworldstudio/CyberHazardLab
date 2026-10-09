@@ -309,6 +309,16 @@ class Simulation:
         if hasattr(ep_b, "link") and ep_b.link is link:
             ep_b.link = None
         self.network.links.remove(link)
+
+        # Clear MAC table entries for switch ports that lost link
+        for ep in (ep_a, ep_b):
+            switch = getattr(ep, "switch", None)
+            port_num = getattr(ep, "port_number", None)
+            if switch and hasattr(switch, "mac_table") and port_num is not None:
+                for mac, p in list(switch.mac_table.items()):
+                    if p == port_num:
+                        del switch.mac_table[mac]
+
         return link
 
     def get_links(self) -> list[Link]:
@@ -419,12 +429,15 @@ class Simulation:
 
     def _tick_loop(self):
         while self.is_running:
-            for host in list(self.hosts.values()):
-                host.update()
-            for router in list(self.routers.values()):
-                router.update()
-            for switch in list(self.switches.values()):
-                switch.update()
+            try:
+                for host in list(self.hosts.values()):
+                    host.update()
+                for router in list(self.routers.values()):
+                    router.update()
+                for switch in list(self.switches.values()):
+                    switch.update()
+            except Exception:
+                pass
             time.sleep(0.01)
 
     def stop(self):
@@ -473,10 +486,9 @@ class Simulation:
             ttl=ttl
         )
         res = source.send_ip_packet(packet, out_interface=intf)
-        print("SEND_IP_PACKET RETURNED:", res)
-        # Wait up to 200ms for tick-based delivery and ICMP reply
+        # Wait up to 1.5s for tick-based delivery and ICMP reply
         start_wait = time.time()
-        while time.time() - start_wait < 0.5:
+        while time.time() - start_wait < 1.5:
             if source.last_icmp_result is not None:
                 break
             time.sleep(0.01)

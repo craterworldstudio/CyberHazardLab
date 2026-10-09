@@ -173,6 +173,10 @@ class Node:
         except Exception:
             return None
 
+        for intf in getattr(self, "interfaces", []):
+            if getattr(intf, "ip", None) and intf.ip != "0.0.0.0":
+                self._install_connected_route(intf)
+
         matching = [r for r in self.routes if ip_obj in r["destination"]]
         if not matching:
             return None
@@ -348,7 +352,43 @@ class Node:
 
             out_intf = route["interface"]
             if out_intf == interface:
-                return "SAME_INTERFACE"
+                # Same-interface hairpin forwarding: essential for MITM packet relaying on a switched LAN
+                next_hop = route["next_hop"] or packet.destination_ip
+                if getattr(out_intf, "subnet", None):
+                    try:
+                        net = ipaddress.IPv4Network(out_intf.subnet, strict=False)
+                        if ipaddress.IPv4Address(packet.destination_ip) in net:
+                            next_hop = packet.destination_ip
+                    except Exception:
+                        pass
+                if next_hop == packet.source_ip:
+                    return "SAME_INTERFACE"
+                dest_mac = self.arp.resolve(next_hop)
+                if not dest_mac:
+                    self.arp.enqueue(next_hop, packet, out_intf)
+                    self.arp.request(out_intf, next_hop)
+                    return "ARP_PENDING"
+                frame = EthernetFrame(
+                    source_mac=out_intf.mac,
+                    destination_mac=dest_mac,
+                    payload=packet
+                )
+                if self.network:
+                    self.network.add_event(Event(
+                        type="PACKET_RELAYED",
+                        severity="INFO",
+                        source=packet.source_ip,
+                        destination=packet.destination_ip,
+                        protocol=packet.protocol,
+                        metadata={
+                            "relayed_by": self.name,
+                            "in_interface": interface.name,
+                            "out_interface": out_intf.name,
+                            "next_hop": next_hop,
+                            "dest_mac": dest_mac
+                        }
+                    ))
+                return out_intf.send(frame)
 
             if self.network:
                 self.network.add_event(Event(

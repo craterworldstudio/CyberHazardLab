@@ -119,8 +119,11 @@ class Switch:
 
 
         dest_port_num = self.mac_table.get(frame.destination_mac)
+        target_port = self.ports.get(dest_port_num) if dest_port_num is not None else None
 
-        if dest_port_num is None:
+        if target_port is None or target_port.link is None:
+            if dest_port_num is not None and frame.destination_mac in self.mac_table:
+                del self.mac_table[frame.destination_mac]
 
             self.add_event(Event(
                 type="FRAME_FLOODED",
@@ -132,18 +135,17 @@ class Switch:
                     "switch": self.name,
                     "in_port": in_port,
                     "out_ports": out_ports
-                    }
+                }
             ))
 
             for port_num in out_ports:
-                self.ports[port_num].send(frame)
+                if port_num in self.ports and self.ports[port_num].link is not None:
+                    self.ports[port_num].send(frame)
 
             return {
-            "action": "FLOOD",
-            "ports": out_ports
+                "action": "FLOOD",
+                "ports": out_ports
             }
-
-
 
         if dest_port_num == in_port:
             self.add_event(Event(
@@ -156,35 +158,28 @@ class Switch:
                 metadata={
                     "switch": self.name,
                     "reason": "DESTINATION_ON_SOURCE_PORT"
-                    }
+                }
             ))
-
 
             return {
                 "action": "DROP",
                 "reason": "DESTINATION_ON_SOURCE_PORT"
             }
-            #continue
-        #print(dest_port_num)
 
-
-            
-        
         self.add_event(Event(
-                type="FRAME_FORWARDED",
-                severity="INFO",
-                source=frame.source_mac,
-                destination=frame.destination_mac,
-                protocol="ETHERNET",
-                metadata={
-                    "switch": self.name,
-                    "in_port": in_port,
-                    "out_port": dest_port_num
-                    }
-            ))
+            type="FRAME_FORWARDED",
+            severity="INFO",
+            source=frame.source_mac,
+            destination=frame.destination_mac,
+            protocol="ETHERNET",
+            metadata={
+                "switch": self.name,
+                "in_port": in_port,
+                "out_port": dest_port_num
+            }
+        ))
 
-        self.ports[dest_port_num].send(frame)
-        
+        target_port.send(frame)
 
         return {
             "action": "FORWARD",
@@ -257,6 +252,10 @@ class Switch:
                 "port is connected to a link"
             )
     
+        for mac, p in list(self.mac_table.items()):
+            if p == port_number:
+                del self.mac_table[mac]
+
         return self.ports.pop(port_number)
         
 

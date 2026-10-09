@@ -171,6 +171,8 @@ class StateManager:
                 d["default_gateway"] = host.default_gateway
             if getattr(host, "dns_server", None):
                 d["dns_server"] = host.dns_server
+            if getattr(host, "ip_forwarding", False):
+                d["ip_forwarding"] = True
             devices.append(d)
 
 

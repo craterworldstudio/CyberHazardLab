@@ -550,14 +550,35 @@ function renderNCMConfig(win, deviceName, deviceData) {
         const slider = document.getElementById(`ncm-cfg-coverage-slider-${deviceName}`);
         const numInput = document.getElementById(`ncm-cfg-coverage-${deviceName}`);
         if (slider && numInput) {
+            const syncToBackend = (val) => {
+                if (win._lastDeviceData) win._lastDeviceData.coverage_radius = val;
+                fetch(`/api/ncm/devices/${encodeURIComponent(deviceName)}/config`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ coverage_radius: val })
+                }).catch(() => {});
+            };
+
             slider.addEventListener("input", (e) => {
                 const val = parseInt(e.target.value, 10);
                 numInput.value = val;
+                if (win._lastDeviceData) win._lastDeviceData.coverage_radius = val;
+                if (window.updateAPCoverageRadius) window.updateAPCoverageRadius(deviceName, val);
+            });
+            slider.addEventListener("change", (e) => {
+                const val = parseInt(e.target.value, 10);
+                syncToBackend(val);
                 if (window.updateAPCoverageRadius) window.updateAPCoverageRadius(deviceName, val);
             });
             numInput.addEventListener("input", (e) => {
                 const val = parseInt(e.target.value, 10) || 50;
                 slider.value = val;
+                if (win._lastDeviceData) win._lastDeviceData.coverage_radius = val;
+                if (window.updateAPCoverageRadius) window.updateAPCoverageRadius(deviceName, val);
+            });
+            numInput.addEventListener("change", (e) => {
+                const val = parseInt(e.target.value, 10) || 50;
+                syncToBackend(val);
                 if (window.updateAPCoverageRadius) window.updateAPCoverageRadius(deviceName, val);
             });
         }
