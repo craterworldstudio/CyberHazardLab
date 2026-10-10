@@ -113,6 +113,10 @@ class SSHServerDaemon(ServiceDaemon):
                     break
 
             is_valid = SSHUserAuthProtocol.verify(username, password, srv_config)
+            if not is_valid and hasattr(self.host, "user_accounts") and isinstance(self.host.user_accounts, dict):
+                acc = self.host.user_accounts.get(username)
+                if acc and isinstance(acc, dict):
+                    is_valid = acc.get("password") == password
             if not is_valid and hasattr(self.host, "users") and isinstance(self.host.users, dict):
                 is_valid = self.host.users.get(username) == password
 
@@ -293,7 +297,12 @@ class SSHServerDaemon(ServiceDaemon):
             from application.term_coms import TerminalCommandHandler
             sim = getattr(self.host.network, "orchestrator", None)
             handler = TerminalCommandHandler(sim=sim)
-            return handler.execute(self.host, command)
+            prev_user = getattr(self.host, "current_user", "user")
+            self.host.current_user = username or prev_user
+            try:
+                return handler.execute(self.host, command)
+            finally:
+                self.host.current_user = prev_user
         except Exception as e:
             return f"SSH_EXEC_ERROR: {str(e)}"
 

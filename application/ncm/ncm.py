@@ -315,3 +315,40 @@ class NetworkConfigurationManager:
             device,
             service_name
         )
+
+    # ========================================================
+    # USER ACCOUNT HELPERS
+    # ========================================================
+
+    def get_users(self, device):
+        dev = self.get_device(device)
+        if hasattr(dev, "user_accounts"):
+            users_list = []
+            for uname, udata in dev.user_accounts.items():
+                u_copy = dict(udata)
+                u_copy["username"] = uname
+                if "password" in u_copy:
+                    u_copy["password_set"] = bool(u_copy["password"])
+                    del u_copy["password"]
+                users_list.append(u_copy)
+            return users_list
+        return []
+
+    def add_or_update_user(self, device, username, password="password", shell="/bin/bash", groups=None, create_home=True):
+        dev = self.get_device(device)
+        if not hasattr(dev, "add_user"):
+            raise ValueError(f"Device {dev.name} does not support local accounts")
+        if username in getattr(dev, "user_accounts", {}):
+            kwargs = {}
+            if password: kwargs["password"] = password
+            if shell: kwargs["shell"] = shell
+            if groups is not None: kwargs["groups"] = groups
+            return dev.modify_user(username, **kwargs)
+        else:
+            return dev.add_user(username, password=password, shell=shell, groups=groups, create_home=create_home)
+
+    def delete_user(self, device, username, remove_home=False):
+        dev = self.get_device(device)
+        if not hasattr(dev, "delete_user"):
+            raise ValueError(f"Device {dev.name} does not support local accounts")
+        return dev.delete_user(username, remove_home=remove_home)

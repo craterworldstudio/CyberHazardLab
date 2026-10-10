@@ -2,7 +2,7 @@ import ipaddress
 import traceback
 import time
 
-def check_permission(item, user, mode):
+def check_permission(item, user, mode, device=None):
     if user == "root":
         return True
     
@@ -10,8 +10,8 @@ def check_permission(item, user, mode):
     owner = getattr(item, "owner", "root")
     group = getattr(item, "group", "root")
     
-    # mode is 'r', 'w', or 'x'
-    # perms is rw-rwxr-- -> [0:3] owner, [3:6] group, [6:9] other
+    if len(perms) == 10:
+        perms = perms[1:]
     if len(perms) < 9:
         return True
         
@@ -19,8 +19,14 @@ def check_permission(item, user, mode):
     
     if user == owner:
         return perms[idx] != '-'
-    # Basic group check (if user matches group name)
+    
+    user_groups = []
+    if device and hasattr(device, "get_user_groups"):
+        user_groups = device.get_user_groups(user)
     elif user == group:
+        user_groups = [group]
+        
+    if group in user_groups or user == group:
         return perms[3+idx] != '-'
     else:
         return perms[6+idx] != '-'
@@ -52,6 +58,10 @@ class TerminalCommandHandler:
             return f"{curr['user']}@{curr['remote_ip']}'s password: "
         if curr.get("state") == "AWAITING_SU_PASSWORD":
             return "Password: "
+        if curr.get("state") == "AWAITING_PASSWD_NEW":
+            return "New password: "
+        if curr.get("state") == "AWAITING_PASSWD_CONFIRM":
+            return "Retype new password: "
         if curr.get("state") == "AWAITING_SCP_PASSWORD":
             return f"{curr['user']}@{curr['remote_ip']}'s password: "
         if curr.get("state") == "AWAITING_NANO_INPUT":
@@ -170,6 +180,25 @@ class TerminalCommandHandler:
                         device._terminal_sessions.pop()
                         return "su: Authentication failure"
                     return "Password: "
+            if curr.get("state") == "AWAITING_PASSWD_NEW":
+                curr["new_pass"] = command_str.strip()
+                curr["state"] = "AWAITING_PASSWD_CONFIRM"
+                return ""
+            if curr.get("state") == "AWAITING_PASSWD_CONFIRM":
+                confirm_pass = command_str.strip()
+                target_user = curr.get("target_user")
+                if confirm_pass == curr.get("new_pass"):
+                    if hasattr(device, "set_password"):
+                        device.set_password(target_user, confirm_pass)
+                    elif hasattr(device, "users"):
+                        device.users[target_user] = confirm_pass
+                    device._terminal_sessions.pop()
+                    if self.state_manager:
+                        self.state_manager.save()
+                    return "passwd: password updated successfully"
+                else:
+                    device._terminal_sessions.pop()
+                    return "passwd: Passwords do not match\npasswd: authentication token manipulation error"
             if curr.get("state") == "AWAITING_PASSWORD":
                 entered_pass = command_str.strip()
                 from backend.services.ssh import SSHClientDaemon
@@ -185,6 +214,9 @@ class TerminalCommandHandler:
                     curr["state"] = "CONNECTED"
                     curr["password"] = entered_pass
                     remote_dev = curr.get("remote_device")
+                    if remote_dev:
+                        curr["original_ssh_user"] = getattr(remote_dev, "current_user", "user")
+                        remote_dev.current_user = curr["user"]
                     remote_name = curr["remote_device_name"]
                     local_ip = device.interfaces[0].ip if device.interfaces else "127.0.0.1"
                     ssh_svc = next((s for s in getattr(remote_dev, "services", []) if s.name.upper() in ("SSH_SERVER", "SSH")), None) if remote_dev else None
@@ -249,13 +281,23 @@ class TerminalCommandHandler:
                             filename = curr.get("source_filename", "copied_file")
                             existing_file = target_fol.get_item(filename)
                             
+                        # Verify write permission on target destination folder
+                        if not check_permission(target_fol, curr["user"], "w", remote_dev):
+                            device._terminal_sessions.pop()
+                            return f"scp: {dest_path}: Permission denied"
+
                         if existing_file:
+                            if not check_permission(existing_file, curr["user"], "w", remote_dev):
+                                device._terminal_sessions.pop()
+                                return f"scp: {dest_path}: Permission denied"
                             existing_file.contents = source_content
                         else:
                             new_f = File(filename)
                             new_f.contents = source_content
                             new_f.owner = curr["user"]
-                            new_f.group = curr["user"]
+                            user_groups = list(getattr(remote_dev, "user_accounts", {}).get(curr["user"], {}).get("groups", []))
+                            new_f.group = user_groups[0] if user_groups else curr["user"]
+                            new_f.perms = "rw-r--r--"
                             new_f.set_path(target_fol.path)
                             target_fol.add(new_f)
                             
@@ -305,10 +347,12 @@ class TerminalCommandHandler:
                     return res.get("output", "")
 
                 if trimmed in ("exit", "logout"):
-                    orig_user = curr.get("original_ssh_user", curr.get("user"))
-                    if remote_dev and getattr(remote_dev, "current_user", "") != orig_user:
-                        remote_dev.current_user = orig_user
+                    orig_user = curr.get("original_ssh_user", "user")
+                    if remote_dev and getattr(remote_dev, "current_user", "") != curr.get("user") and getattr(remote_dev, "current_user", "") != orig_user:
+                        remote_dev.current_user = curr.get("user")
                         return "exit"
+                    if remote_dev:
+                        remote_dev.current_user = orig_user
                     remote_ip = curr["remote_ip"]
                     device._terminal_sessions.pop()
                     return f"logout\nConnection to {remote_ip} closed."
@@ -434,6 +478,30 @@ class TerminalCommandHandler:
             return self._handle_keygen(device, parts)
         elif cmd == "su":
             return self._handle_su(device, parts)
+        elif cmd in ("useradd", "adduser"):
+            return self._handle_useradd(device, parts)
+        elif cmd == "userdel":
+            return self._handle_userdel(device, parts)
+        elif cmd == "usermod":
+            return self._handle_usermod(device, parts)
+        elif cmd == "passwd":
+            return self._handle_passwd(device, parts)
+        elif cmd == "groupadd":
+            return self._handle_groupadd(device, parts)
+        elif cmd == "groupdel":
+            return self._handle_groupdel(device, parts)
+        elif cmd == "id":
+            return self._handle_id(device, parts)
+        elif cmd == "groups":
+            return self._handle_groups(device, parts)
+        elif cmd == "chmod":
+            return self._handle_chmod(device, parts)
+        elif cmd == "chown":
+            return self._handle_chown(device, parts)
+        elif cmd == "chgrp":
+            return self._handle_chgrp(device, parts)
+        elif cmd == "sudo":
+            return self._handle_sudo(device, parts, command_str)
         elif cmd == "nano":
             if len(parts) > 1 and parts[1] in ("--help", "-h"):
                 return "nano [FILE]\nOpen the nano interactive text editor for FILE.\nType your text, then type ':wq' or 'EOF' on a new line to save and exit."
@@ -513,6 +581,19 @@ class TerminalCommandHandler:
             output += "  rm         - Remove files or directories\n"
             output += "  tree       - List contents of directories in a tree-like format\n"
             output += "  scp        - Secure copy (remote file copy program)\n"
+
+            output += "  useradd    - Create a new local user account (root only)\n"
+            output += "  userdel    - Delete a local user account (root only)\n"
+            output += "  usermod    - Modify a user account and groups (root only)\n"
+            output += "  passwd     - Change user password\n"
+            output += "  groupadd   - Create a new group (root only)\n"
+            output += "  groupdel   - Delete a group (root only)\n"
+            output += "  id         - Print user and group IDs\n"
+            output += "  groups     - Print groups a user is in\n"
+            output += "  chmod      - Change file mode bits / permissions\n"
+            output += "  chown      - Change file owner and group (root only)\n"
+            output += "  chgrp      - Change file group ownership\n"
+            output += "  sudo       - Execute a command as superuser / root\n"
 
             output += "  whoami     - Print effective current username\n"
             output += "  poweroff   - Power down / turn off the device (root only)\n"
@@ -1199,6 +1280,8 @@ Usage:
             source_file = vfs.path_to_tree(source_path)
             if not source_file or not hasattr(source_file, "contents"):
                 return f"scp: {source_path}: No such file"
+            if not check_permission(source_file, getattr(device, "current_user", "root"), "r", device):
+                return f"scp: {source_path}: Permission denied"
                 
             if not hasattr(device, "_terminal_sessions"):
                 device._terminal_sessions = []
@@ -3155,16 +3238,19 @@ Options:
                     port=port
                 )
                 if res.get("success"):
+                    orig_u = getattr(target_device, "current_user", "user")
                     device._terminal_sessions.append({
                         "state": "CONNECTED",
                         "user": username,
                         "remote_ip": remote_ip,
                         "remote_device_name": target_device.name,
                         "remote_device": target_device,
+                        "original_ssh_user": orig_u,
                         "port": port,
                         "password": password,
                         "password_attempts": 0
                     })
+                    target_device.current_user = username
                     local_ip = device.interfaces[0].ip if device.interfaces else "127.0.0.1"
                     ssh_svc = next((s for s in getattr(target_device, "services", []) if s.name.upper() in ("SSH_SERVER", "SSH")), None)
                     custom_motd = (ssh_svc.config.get("motd") or ssh_svc.config.get("banner")) if ssh_svc and getattr(ssh_svc, "config", None) else None
@@ -3560,6 +3646,610 @@ Options:
             "password_attempts": 0
         })
         return "Password: "
+
+    def _handle_useradd(self, device, parts):
+        if len(parts) > 1 and parts[1] in ("--help", "-h"):
+            return "useradd [OPTIONS] LOGIN\nCreate a new user.\nOptions:\n  -m, --create-home  create the user's home directory\n  -s, --shell SHELL  login shell of the new account\n  -g, --gid GROUP    name or number of the primary group\n  -G, --groups GROUPS list of supplementary groups\n  -d, --home-dir DIR home directory of the new account\n  -p, --password PASS user password"
+            
+        cur_user = getattr(device, "current_user", "root")
+        if cur_user != "root":
+            return "useradd: Permission denied. (Must be root)"
+            
+        if len(parts) < 2:
+            return "useradd: missing username"
+            
+        create_home = True
+        shell = "/bin/bash"
+        primary_group = None
+        supp_groups = []
+        home_dir = None
+        password = "password"
+        
+        args = parts[1:]
+        username = None
+        i = 0
+        while i < len(args):
+            arg = args[i]
+            if arg in ("-m", "--create-home"):
+                create_home = True
+            elif arg in ("-M", "--no-create-home"):
+                create_home = False
+            elif arg in ("-s", "--shell") and i + 1 < len(args):
+                shell = args[i+1]
+                i += 1
+            elif arg in ("-g", "--gid") and i + 1 < len(args):
+                primary_group = args[i+1]
+                i += 1
+            elif arg in ("-G", "--groups") and i + 1 < len(args):
+                supp_groups = [g.strip() for g in args[i+1].split(",") if g.strip()]
+                i += 1
+            elif arg in ("-d", "--home-dir") and i + 1 < len(args):
+                home_dir = args[i+1]
+                i += 1
+            elif arg in ("-p", "--password") and i + 1 < len(args):
+                password = args[i+1]
+                i += 1
+            elif not arg.startswith("-"):
+                username = arg
+            i += 1
+            
+        if not username:
+            return "useradd: missing username operand"
+            
+        if not hasattr(device, "add_user"):
+            return "useradd: local accounts not supported on this device"
+            
+        gid = None
+        if primary_group:
+            if primary_group.isdigit():
+                gid = int(primary_group)
+            elif primary_group in getattr(device, "groups", {}):
+                gid = device.groups[primary_group]["gid"]
+            else:
+                return f"useradd: group '{primary_group}' does not exist"
+                
+        try:
+            device.add_user(
+                username=username,
+                password=password,
+                gid=gid,
+                home=home_dir,
+                shell=shell,
+                groups=supp_groups,
+                create_home=create_home
+            )
+            if self.state_manager:
+                self.state_manager.save()
+            return ""
+        except ValueError as e:
+            return f"useradd: {e}"
+
+    def _handle_userdel(self, device, parts):
+        if len(parts) > 1 and parts[1] in ("--help", "-h"):
+            return "userdel [OPTIONS] LOGIN\nDelete a user account and related files.\nOptions:\n  -r, --remove  remove home directory and mail spool\n  -f, --force   force some actions that would fail"
+            
+        cur_user = getattr(device, "current_user", "root")
+        if cur_user != "root":
+            return "userdel: Permission denied. (Must be root)"
+            
+        if len(parts) < 2:
+            return "userdel: missing username"
+            
+        remove_home = False
+        username = None
+        for p in parts[1:]:
+            if p in ("-r", "--remove"):
+                remove_home = True
+            elif not p.startswith("-"):
+                username = p
+                
+        if not username:
+            return "userdel: missing username operand"
+            
+        if username == cur_user:
+            return f"userdel: user {username} is currently logged in"
+            
+        if not hasattr(device, "delete_user"):
+            return "userdel: local accounts not supported on this device"
+            
+        try:
+            device.delete_user(username, remove_home=remove_home)
+            if self.state_manager:
+                self.state_manager.save()
+            return ""
+        except ValueError as e:
+            return f"userdel: {e}"
+
+    def _handle_usermod(self, device, parts):
+        if len(parts) > 1 and parts[1] in ("--help", "-h"):
+            return "usermod [OPTIONS] LOGIN\nModify a user account.\nOptions:\n  -a, --append        append the user to supplementary groups\n  -G, --groups GROUPS new list of supplementary groups\n  -g, --gid GROUP     primary group name or number\n  -s, --shell SHELL   new login shell\n  -d, --home DIR      new home directory\n  -p, --password PASS new password"
+            
+        cur_user = getattr(device, "current_user", "root")
+        if cur_user != "root":
+            return "usermod: Permission denied. (Must be root)"
+            
+        if len(parts) < 2:
+            return "usermod: missing operand"
+            
+        append_mode = False
+        groups = None
+        shell = None
+        home_dir = None
+        password = None
+        primary_group = None
+        username = None
+        
+        args = parts[1:]
+        i = 0
+        while i < len(args):
+            arg = args[i]
+            if arg in ("-a", "--append"):
+                append_mode = True
+            elif arg in ("-aG", "-ag"):
+                append_mode = True
+                if i + 1 < len(args):
+                    groups = [g.strip() for g in args[i+1].split(",") if g.strip()]
+                    i += 1
+            elif arg in ("-G", "--groups") and i + 1 < len(args):
+                groups = [g.strip() for g in args[i+1].split(",") if g.strip()]
+                i += 1
+            elif arg in ("-g", "--gid") and i + 1 < len(args):
+                primary_group = args[i+1]
+                i += 1
+            elif arg in ("-s", "--shell") and i + 1 < len(args):
+                shell = args[i+1]
+                i += 1
+            elif arg in ("-d", "--home") and i + 1 < len(args):
+                home_dir = args[i+1]
+                i += 1
+            elif arg in ("-p", "--password") and i + 1 < len(args):
+                password = args[i+1]
+                i += 1
+            elif not arg.startswith("-"):
+                username = arg
+            i += 1
+            
+        if not username:
+            return "usermod: missing username operand"
+            
+        if not hasattr(device, "modify_user"):
+            return "usermod: local accounts not supported on this device"
+            
+        kwargs = {}
+        if password: kwargs["password"] = password
+        if shell: kwargs["shell"] = shell
+        if home_dir: kwargs["home"] = home_dir
+        if primary_group:
+            if primary_group.isdigit():
+                kwargs["gid"] = int(primary_group)
+            elif primary_group in getattr(device, "groups", {}):
+                kwargs["gid"] = device.groups[primary_group]["gid"]
+            else:
+                return f"usermod: group '{primary_group}' does not exist"
+                
+        if groups is not None:
+            if append_mode:
+                kwargs["append_groups"] = groups
+            else:
+                kwargs["groups"] = groups
+                
+        try:
+            device.modify_user(username, **kwargs)
+            if self.state_manager:
+                self.state_manager.save()
+            return ""
+        except ValueError as e:
+            return f"usermod: {e}"
+
+    def _handle_passwd(self, device, parts):
+        if len(parts) > 1 and parts[1] in ("--help", "-h"):
+            return "passwd [USER]\nChange user password."
+            
+        cur_user = getattr(device, "current_user", "root")
+        target_user = cur_user if len(parts) < 2 else parts[1]
+        
+        if cur_user != "root" and target_user != cur_user:
+            return f"passwd: You may not view or modify password information for {target_user}."
+            
+        if hasattr(device, "user_accounts") and target_user not in device.user_accounts and target_user not in getattr(device, "users", {}):
+            return f"passwd: user '{target_user}' does not exist"
+            
+        if len(parts) >= 3 and cur_user == "root":
+            new_pass = parts[2].strip()
+            if hasattr(device, "set_password"):
+                device.set_password(target_user, new_pass)
+            elif hasattr(device, "users"):
+                device.users[target_user] = new_pass
+            if self.state_manager:
+                self.state_manager.save()
+            return "passwd: password updated successfully"
+            
+        if not hasattr(device, "_terminal_sessions"):
+            device._terminal_sessions = []
+        device._terminal_sessions.append({
+            "state": "AWAITING_PASSWD_NEW",
+            "target_user": target_user
+        })
+        return "New password: "
+
+    def _handle_groupadd(self, device, parts):
+        if len(parts) > 1 and parts[1] in ("--help", "-h"):
+            return "groupadd [OPTIONS] GROUP\nCreate a new group.\nOptions:\n  -g, --gid GID  use GID for the new group"
+        cur_user = getattr(device, "current_user", "root")
+        if cur_user != "root":
+            return "groupadd: Permission denied. (Must be root)"
+        if len(parts) < 2:
+            return "groupadd: missing group name"
+            
+        gid = None
+        group_name = None
+        i = 1
+        while i < len(parts):
+            if parts[i] in ("-g", "--gid") and i + 1 < len(parts):
+                gid = int(parts[i+1])
+                i += 1
+            elif not parts[i].startswith("-"):
+                group_name = parts[i]
+            i += 1
+            
+        if not group_name:
+            return "groupadd: missing group name operand"
+            
+        if not hasattr(device, "add_group"):
+            return "groupadd: groups not supported on this device"
+            
+        try:
+            device.add_group(group_name, gid=gid)
+            if self.state_manager:
+                self.state_manager.save()
+            return ""
+        except ValueError as e:
+            return f"groupadd: {e}"
+
+    def _handle_groupdel(self, device, parts):
+        if len(parts) > 1 and parts[1] in ("--help", "-h"):
+            return "groupdel GROUP\nDelete a group."
+        cur_user = getattr(device, "current_user", "root")
+        if cur_user != "root":
+            return "groupdel: Permission denied. (Must be root)"
+        if len(parts) < 2:
+            return "groupdel: missing group name"
+        group_name = parts[1]
+        if not hasattr(device, "delete_group"):
+            return "groupdel: groups not supported on this device"
+        try:
+            device.delete_group(group_name)
+            if self.state_manager:
+                self.state_manager.save()
+            return ""
+        except ValueError as e:
+            return f"groupdel: {e}"
+
+    def _handle_id(self, device, parts):
+        if len(parts) > 1 and parts[1] in ("--help", "-h"):
+            return "id [USER]\nPrint user and group information for the specified USER, or current user."
+        cur_user = getattr(device, "current_user", "root")
+        target_user = cur_user if len(parts) < 2 else parts[1]
+        
+        user_accounts = getattr(device, "user_accounts", {})
+        if target_user not in user_accounts:
+            if target_user in getattr(device, "users", {}):
+                return f"uid=1000({target_user}) gid=1000({target_user}) groups=1000({target_user})"
+            return f"id: '{target_user}': no such user"
+            
+        acc = user_accounts[target_user]
+        uid = acc.get("uid", 1000)
+        gid = acc.get("gid", 1000)
+        groups_dict = getattr(device, "groups", {})
+        prim_gname = next((gn for gn, gd in groups_dict.items() if gd.get("gid") == gid), target_user)
+        
+        all_user_groups = device.get_user_groups(target_user) if hasattr(device, "get_user_groups") else [prim_gname]
+        g_tokens = []
+        for g in all_user_groups:
+            g_gid = groups_dict.get(g, {}).get("gid", 1000)
+            g_tokens.append(f"{g_gid}({g})")
+            
+        return f"uid={uid}({target_user}) gid={gid}({prim_gname}) groups={','.join(g_tokens)}"
+
+    def _handle_groups(self, device, parts):
+        cur_user = getattr(device, "current_user", "root")
+        target_user = cur_user if len(parts) < 2 else parts[1]
+        if hasattr(device, "get_user_groups"):
+            all_groups = device.get_user_groups(target_user)
+            if all_groups:
+                return f"{target_user} : {' '.join(all_groups)}"
+        if target_user in getattr(device, "users", {}):
+            return f"{target_user} : {target_user}"
+        return f"groups: '{target_user}': no such user"
+
+    def _handle_chmod(self, device, parts):
+        if len(parts) > 1 and parts[1] in ("--help", "-h"):
+            return "chmod [OPTIONS] MODE FILE...\nChange file mode bits (permissions).\nOptions:\n  -R, --recursive  change files and directories recursively"
+        if len(parts) < 3:
+            return "chmod: missing operand"
+            
+        recursive = False
+        mode_arg = None
+        targets = []
+        
+        for p in parts[1:]:
+            if p in ("-R", "-r", "--recursive"):
+                recursive = True
+            elif mode_arg is None:
+                mode_arg = p
+            else:
+                targets.append(p)
+                
+        if not mode_arg or not targets:
+            return "chmod: missing operand"
+            
+        vfs = getattr(device, "vfs", None)
+        if not vfs:
+            return "chmod: file system not available"
+            
+        cur_user = getattr(device, "current_user", "root")
+        
+        def parse_mode(cur_perms, mode_str):
+            if len(cur_perms) == 10:
+                cur_perms = cur_perms[1:]
+            if len(cur_perms) < 9:
+                cur_perms = "rw-rwxr--"
+                
+            if mode_str.isdigit() and len(mode_str) in (3, 4):
+                oct_str = mode_str[-3:]
+                char_map = {
+                    '0': '---', '1': '--x', '2': '-w-', '3': '-wx',
+                    '4': 'r--', '5': 'r-x', '6': 'rw-', '7': 'rwx'
+                }
+                return "".join(char_map.get(c, '---') for c in oct_str)
+                
+            u = list(cur_perms[0:3])
+            g = list(cur_perms[3:6])
+            o = list(cur_perms[6:9])
+            
+            ops = mode_str.split(",")
+            for op in ops:
+                who = ""
+                idx = 0
+                while idx < len(op) and op[idx] in ("u", "g", "o", "a"):
+                    who += op[idx]
+                    idx += 1
+                if not who:
+                    who = "a"
+                action = op[idx] if idx < len(op) else "+"
+                perms_chars = op[idx+1:] if idx < len(op) else ""
+                
+                target_lists = []
+                if "a" in who:
+                    target_lists = [u, g, o]
+                else:
+                    if "u" in who: target_lists.append(u)
+                    if "g" in who: target_lists.append(g)
+                    if "o" in who: target_lists.append(o)
+                    
+                for t in target_lists:
+                    if action == "=":
+                        t[0] = 'r' if 'r' in perms_chars else '-'
+                        t[1] = 'w' if 'w' in perms_chars else '-'
+                        t[2] = 'x' if 'x' in perms_chars else '-'
+                    elif action == "+":
+                        if 'r' in perms_chars: t[0] = 'r'
+                        if 'w' in perms_chars: t[1] = 'w'
+                        if 'x' in perms_chars: t[2] = 'x'
+                    elif action == "-":
+                        if 'r' in perms_chars: t[0] = '-'
+                        if 'w' in perms_chars: t[1] = '-'
+                        if 'x' in perms_chars: t[2] = '-'
+                        
+            return "".join(u) + "".join(g) + "".join(o)
+
+        output = []
+        for target_path in targets:
+            if target_path.startswith("/"):
+                item = vfs.path_to_tree(target_path)
+            else:
+                item = vfs.get_item(target_path)
+                if not item and "/" in target_path:
+                    cur = vfs.curr_fol
+                    for seg in target_path.split("/"):
+                        if not seg or seg == ".": continue
+                        elif seg == "..": cur = cur.parent or cur
+                        else:
+                            sub = None
+                            for itm in cur.all:
+                                iname = (("." if itm.hidden else "") + itm.name + (f".{itm.ext}" if getattr(itm, "ext", "") else "")) if hasattr(itm, "ext") else itm.name
+                                if iname == seg or itm.name == seg:
+                                    sub = itm
+                                    break
+                            cur = sub
+                            if cur is None: break
+                    item = cur
+                    
+            if not item:
+                output.append(f"chmod: cannot access '{target_path}': No such file or directory")
+                continue
+                
+            def apply_chmod(itm):
+                if cur_user != "root" and getattr(itm, "owner", "root") != cur_user:
+                    output.append(f"chmod: changing permissions of '{getattr(itm, 'name', target_path)}': Operation not permitted")
+                    return
+                old_p = getattr(itm, "perms", "rw-rwxr--")
+                new_p = parse_mode(old_p, mode_arg)
+                itm.perms = new_p
+                
+                if recursive and hasattr(itm, "all"):
+                    for child in itm.all:
+                        if child is itm or child is getattr(itm, "parent", None):
+                            continue
+                        apply_chmod(child)
+
+            apply_chmod(item)
+            
+        if self.state_manager:
+            self.state_manager.save()
+        return "\n".join(output) if output else ""
+
+    def _handle_chown(self, device, parts):
+        if len(parts) > 1 and parts[1] in ("--help", "-h"):
+            return "chown [OPTIONS] [OWNER][:[GROUP]] FILE...\nChange file owner and group.\nOptions:\n  -R, --recursive  operate on files and directories recursively"
+        if len(parts) < 3:
+            return "chown: missing operand"
+            
+        cur_user = getattr(device, "current_user", "root")
+        if cur_user != "root":
+            return "chown: changing ownership: Operation not permitted"
+            
+        recursive = False
+        spec_arg = None
+        targets = []
+        for p in parts[1:]:
+            if p in ("-R", "-r", "--recursive"):
+                recursive = True
+            elif spec_arg is None:
+                spec_arg = p
+            else:
+                targets.append(p)
+                
+        if not spec_arg or not targets:
+            return "chown: missing operand"
+            
+        owner = None
+        group = None
+        if ":" in spec_arg:
+            owner, group = spec_arg.split(":", 1)
+        elif "." in spec_arg and not spec_arg.startswith("."):
+            owner, group = spec_arg.split(".", 1)
+        else:
+            owner = spec_arg
+            
+        if owner == "": owner = None
+        if group == "": group = None
+        
+        if owner and hasattr(device, "user_accounts") and owner not in device.user_accounts and owner not in getattr(device, "users", {}):
+            return f"chown: invalid user: '{owner}'"
+        if group and hasattr(device, "groups") and group not in device.groups:
+            return f"chown: invalid group: '{group}'"
+            
+        vfs = getattr(device, "vfs", None)
+        if not vfs:
+            return "chown: file system not available"
+            
+        output = []
+        for target_path in targets:
+            if target_path.startswith("/"):
+                item = vfs.path_to_tree(target_path)
+            else:
+                item = vfs.get_item(target_path)
+            if not item:
+                output.append(f"chown: cannot access '{target_path}': No such file or directory")
+                continue
+                
+            def apply_chown(itm):
+                if owner:
+                    itm.owner = owner
+                if group:
+                    itm.group = group
+                if recursive and hasattr(itm, "all"):
+                    for child in itm.all:
+                        if child is itm or child is getattr(itm, "parent", None):
+                            continue
+                        apply_chown(child)
+                        
+            apply_chown(item)
+            
+        if self.state_manager:
+            self.state_manager.save()
+        return "\n".join(output) if output else ""
+
+    def _handle_chgrp(self, device, parts):
+        if len(parts) > 1 and parts[1] in ("--help", "-h"):
+            return "chgrp [OPTIONS] GROUP FILE...\nChange group ownership of each FILE to GROUP.\nOptions:\n  -R, --recursive  operate on files and directories recursively"
+        if len(parts) < 3:
+            return "chgrp: missing operand"
+            
+        recursive = False
+        group_arg = None
+        targets = []
+        for p in parts[1:]:
+            if p in ("-R", "-r", "--recursive"):
+                recursive = True
+            elif group_arg is None:
+                group_arg = p
+            else:
+                targets.append(p)
+                
+        if not group_arg or not targets:
+            return "chgrp: missing operand"
+            
+        if hasattr(device, "groups") and group_arg not in device.groups:
+            return f"chgrp: invalid group: '{group_arg}'"
+            
+        cur_user = getattr(device, "current_user", "root")
+        user_groups = device.get_user_groups(cur_user) if hasattr(device, "get_user_groups") else []
+        
+        vfs = getattr(device, "vfs", None)
+        if not vfs:
+            return "chgrp: file system not available"
+            
+        output = []
+        for target_path in targets:
+            if target_path.startswith("/"):
+                item = vfs.path_to_tree(target_path)
+            else:
+                item = vfs.get_item(target_path)
+            if not item:
+                output.append(f"chgrp: cannot access '{target_path}': No such file or directory")
+                continue
+                
+            def apply_chgrp(itm):
+                if cur_user != "root" and (getattr(itm, "owner", "root") != cur_user or group_arg not in user_groups):
+                    output.append(f"chgrp: changing group of '{getattr(itm, 'name', target_path)}': Operation not permitted")
+                    return
+                itm.group = group_arg
+                if recursive and hasattr(itm, "all"):
+                    for child in itm.all:
+                        if child is itm or child is getattr(itm, "parent", None):
+                            continue
+                        apply_chgrp(child)
+                        
+            apply_chgrp(item)
+            
+        if self.state_manager:
+            self.state_manager.save()
+        return "\n".join(output) if output else ""
+
+    def _handle_sudo(self, device, parts, command_str):
+        if len(parts) < 2:
+            return "usage: sudo command"
+        current_user = getattr(device, "current_user", "root")
+        if current_user != "root":
+            user_groups = device.get_user_groups(current_user) if hasattr(device, "get_user_groups") else []
+            is_sudoer = any(g in ("sudo", "wheel", "admin") for g in user_groups)
+            if not is_sudoer:
+                from backend.core.event import Event
+                ev = Event(
+                    type="SECURITY_AUTH",
+                    source=current_user,
+                    destination=device.name,
+                    severity="HIGH",
+                    metadata={"action": "sudo_denied", "command": " ".join(parts[1:])}
+                )
+                if hasattr(device, "log_event"):
+                    device.log_event(ev)
+                return f"{current_user} is not in the sudoers file. This incident will be reported."
+                
+        sub_cmd_str = command_str.strip()
+        if sub_cmd_str.startswith("sudo "):
+            sub_cmd_str = sub_cmd_str[5:].strip()
+        else:
+            sub_cmd_str = " ".join(parts[1:])
+            
+        orig_user = device.current_user
+        try:
+            device.current_user = "root"
+            return self.execute(device, sub_cmd_str)
+        finally:
+            device.current_user = orig_user
 
     def _handle_update(self, device, parts):
         if len(parts) > 1 and parts[1] in ("--help", "-h"):

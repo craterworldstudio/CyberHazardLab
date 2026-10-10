@@ -12,6 +12,36 @@ class Host(Node):
         self.log_cache = []
         self.current_user = "user"
         self.users = {"root": "toor", "user": "user"}
+        self.groups = {
+            "root": {"gid": 0, "members": ["root"]},
+            "daemon": {"gid": 1, "members": []},
+            "bin": {"gid": 2, "members": []},
+            "sys": {"gid": 3, "members": []},
+            "adm": {"gid": 4, "members": ["user"]},
+            "sudo": {"gid": 27, "members": ["user"]},
+            "users": {"gid": 100, "members": []},
+            "user": {"gid": 1000, "members": ["user"]}
+        }
+        self.user_accounts = {
+            "root": {
+                "uid": 0,
+                "gid": 0,
+                "gecos": "root",
+                "home": "/root",
+                "shell": "/bin/bash",
+                "password": "toor",
+                "groups": ["root"]
+            },
+            "user": {
+                "uid": 1000,
+                "gid": 1000,
+                "gecos": "Standard User",
+                "home": "/home/user",
+                "shell": "/bin/bash",
+                "password": "user",
+                "groups": ["user", "sudo", "adm"]
+            }
+        }
         
         # Default interface eth0
         self.add_interface(NetworkInterface(
@@ -342,40 +372,8 @@ class Host(Node):
             auth_log.contents = f"systemd-logind[1]: New session created for user root.\n"
             log_fol.add(auth_log)
 
-        # Ensure /home and users exist
-        vfs.curr_fol = vfs.tree
-        home = vfs.get_item("home")
-        if not home:
-            home = Folder("home")
-            home.perms = "rwxr-xr-x"
-            home.parent = vfs.tree
-            home.path = "/home"
-            vfs.tree.add(home)
-        else:
-            home.perms = "rwxr-xr-x"
-            
-        for username in self.users.keys():
-            if username == "root":
-                root_fol = vfs.get_item("root")
-                if not root_fol:
-                    root_fol = Folder("root")
-                    root_fol.owner = "root"
-                    root_fol.group = "root"
-                    root_fol.perms = "rwx------"
-                    root_fol.parent = vfs.tree
-                    root_fol.path = "/root"
-                    vfs.tree.add(root_fol)
-                continue
-                
-            vfs.curr_fol = home
-            user_fol = vfs.get_item(username)
-            if not user_fol:
-                user_fol = Folder(username)
-                user_fol.owner = username
-                user_fol.group = username
-                user_fol.parent = home
-                user_fol.path = f"/home/{username}"
-                home.add(user_fol)
+        # Synchronize local accounts, VFS account files, and home directories
+        self._sync_account_files()
         
         self._ensure_proc_ip_forward()
         
@@ -383,6 +381,312 @@ class Host(Node):
             vfs.curr_fol = orig_fol
         else:
             vfs.curr_fol = vfs.tree
+
+    def _sync_account_files(self):
+        vfs = getattr(self, "vfs", None)
+        if not vfs:
+            return
+        from backend.database.fs import Folder, File
+        orig_fol = getattr(vfs, "curr_fol", None)
+        
+        # Ensure /etc exists
+        etc = vfs.get_item("etc") or vfs.path_to_tree("/etc")
+        if not etc:
+            etc = Folder("etc")
+            etc.perms = "rwxr-xr-x"
+            etc.owner = "root"
+            etc.group = "root"
+            etc.parent = vfs.tree
+            etc.path = "/etc"
+            vfs.tree.add(etc)
+
+        # 1. /etc/passwd
+        passwd_lines = [
+            "root:x:0:0:root:/root:/bin/bash",
+            "daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin",
+            "bin:x:2:2:bin:/bin:/usr/sbin/nologin",
+            "sys:x:3:3:sys:/dev:/usr/sbin/nologin",
+            "sync:x:4:65534:sync:/bin:/bin/sync"
+        ]
+        for uname, udata in getattr(self, "user_accounts", {}).items():
+            if uname == "root":
+                continue
+            uid = udata.get("uid", 1000)
+            gid = udata.get("gid", 1000)
+            gecos = udata.get("gecos", uname)
+            home = udata.get("home", f"/home/{uname}")
+            shell = udata.get("shell", "/bin/bash")
+            passwd_lines.append(f"{uname}:x:{uid}:{gid}:{gecos}:{home}:{shell}")
+        passwd_file = etc.get_item("passwd")
+        if not passwd_file:
+            passwd_file = File("passwd")
+            passwd_file.set_path(etc.path)
+            etc.add(passwd_file)
+        passwd_file.owner = "root"
+        passwd_file.group = "root"
+        passwd_file.perms = "rw-r--r--"
+        passwd_file.contents = "\n".join(passwd_lines) + "\n"
+
+        # 2. /etc/shadow (root-only access, 600)
+        shadow_lines = []
+        for uname, udata in getattr(self, "user_accounts", {}).items():
+            pw = udata.get("password", "")
+            h_str = f"$6$chl${(hash(uname + pw) & 0xffffffff):08x}" if pw else "*"
+            shadow_lines.append(f"{uname}:{h_str}:19700:0:99999:7:::")
+        for sys_u in ("daemon", "bin", "sys", "sync"):
+            shadow_lines.append(f"{sys_u}:*:19700:0:99999:7:::")
+        shadow_file = etc.get_item("shadow")
+        if not shadow_file:
+            shadow_file = File("shadow")
+            shadow_file.set_path(etc.path)
+            etc.add(shadow_file)
+        shadow_file.owner = "root"
+        shadow_file.group = "root"
+        shadow_file.perms = "rw-------"
+        shadow_file.contents = "\n".join(shadow_lines) + "\n"
+
+        # 3. /etc/group
+        group_lines = []
+        for gname, gdata in getattr(self, "groups", {}).items():
+            gid = gdata.get("gid", 1000)
+            members = ",".join(gdata.get("members", []))
+            group_lines.append(f"{gname}:x:{gid}:{members}")
+        group_file = etc.get_item("group")
+        if not group_file:
+            group_file = File("group")
+            group_file.set_path(etc.path)
+            etc.add(group_file)
+        group_file.owner = "root"
+        group_file.group = "root"
+        group_file.perms = "rw-r--r--"
+        group_file.contents = "\n".join(group_lines) + "\n"
+
+        # 4. /etc/sudoers (root-only read, 440)
+        sudoers_file = etc.get_item("sudoers")
+        if not sudoers_file:
+            sudoers_file = File("sudoers")
+            sudoers_file.set_path(etc.path)
+            etc.add(sudoers_file)
+        sudoers_file.owner = "root"
+        sudoers_file.group = "root"
+        sudoers_file.perms = "r--r-----"
+        sudoers_file.contents = (
+            "# /etc/sudoers\n"
+            "Defaults\tenv_reset\n"
+            "Defaults\tmail_badpass\n"
+            "Defaults\tsecure_path=\"/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"\n\n"
+            "root\tALL=(ALL:ALL) ALL\n"
+            "%sudo\tALL=(ALL:ALL) ALL\n"
+        )
+
+        # 5. /home and /root directories
+        home = vfs.get_item("home") or vfs.path_to_tree("/home")
+        if not home:
+            home = Folder("home")
+            home.perms = "rwxr-xr-x"
+            home.owner = "root"
+            home.group = "root"
+            home.parent = vfs.tree
+            home.path = "/home"
+            vfs.tree.add(home)
+
+        root_fol = vfs.get_item("root") or vfs.path_to_tree("/root")
+        if not root_fol:
+            root_fol = Folder("root")
+            root_fol.owner = "root"
+            root_fol.group = "root"
+            root_fol.perms = "rwx------"
+            root_fol.parent = vfs.tree
+            root_fol.path = "/root"
+            vfs.tree.add(root_fol)
+
+        for uname, udata in getattr(self, "user_accounts", {}).items():
+            if uname == "root":
+                continue
+            h_path = udata.get("home", f"/home/{uname}")
+            if h_path.startswith("/home/"):
+                subname = h_path.replace("/home/", "").strip("/")
+                ufol = home.get_item(subname)
+                prim_gid = udata.get("gid", 1000)
+                prim_gname = next((gn for gn, gd in getattr(self, "groups", {}).items() if gd.get("gid") == prim_gid), uname)
+                if not ufol:
+                    ufol = Folder(subname)
+                    ufol.owner = uname
+                    ufol.group = prim_gname
+                    ufol.perms = "rwxr-xr-x"
+                    ufol.parent = home
+                    ufol.path = f"/home/{subname}"
+                    home.add(ufol)
+                else:
+                    ufol.owner = uname
+                    ufol.group = prim_gname
+
+        if orig_fol:
+            vfs.curr_fol = orig_fol
+
+    def add_user(self, username, password="password", uid=None, gid=None, gecos=None, home=None, shell="/bin/bash", groups=None, create_home=True):
+        if username in self.user_accounts:
+            raise ValueError(f"User '{username}' already exists")
+        
+        # Determine UID
+        if uid is None:
+            max_uid = max([u.get("uid", 1000) for u in self.user_accounts.values()] or [999])
+            uid = max(1000, max_uid + 1)
+            
+        # Primary group
+        if gid is None:
+            if username not in self.groups:
+                self.groups[username] = {"gid": uid, "members": [username]}
+                gid = uid
+            else:
+                gid = self.groups[username]["gid"]
+        else:
+            gname = next((gn for gn, gd in self.groups.items() if gd.get("gid") == gid), None)
+            if not gname:
+                self.groups[username] = {"gid": gid, "members": [username]}
+            elif username not in self.groups[gname]["members"]:
+                self.groups[gname]["members"].append(username)
+                
+        supp_groups = list(groups or [])
+        for sg in supp_groups:
+            if sg in self.groups:
+                if username not in self.groups[sg]["members"]:
+                    self.groups[sg]["members"].append(username)
+            else:
+                max_gid = max([g.get("gid", 1000) for g in self.groups.values()] or [999])
+                self.groups[sg] = {"gid": max(1000, max_gid + 1), "members": [username]}
+                
+        user_groups_list = [next((gn for gn, gd in self.groups.items() if gd.get("gid") == gid), username)]
+        for sg in supp_groups:
+            if sg not in user_groups_list:
+                user_groups_list.append(sg)
+                
+        self.user_accounts[username] = {
+            "uid": uid,
+            "gid": gid,
+            "gecos": gecos or username,
+            "home": home or f"/home/{username}",
+            "shell": shell,
+            "password": password,
+            "groups": user_groups_list
+        }
+        self.users[username] = password
+        self._sync_account_files()
+        return self.user_accounts[username]
+
+    def delete_user(self, username, remove_home=False):
+        if username not in self.user_accounts:
+            raise ValueError(f"User '{username}' does not exist")
+        if username == "root":
+            raise ValueError("Cannot delete root user")
+            
+        u_info = self.user_accounts.pop(username)
+        if username in self.users:
+            del self.users[username]
+            
+        for gname, gdata in self.groups.items():
+            if username in gdata.get("members", []):
+                gdata["members"].remove(username)
+                
+        if username in self.groups and not self.groups[username].get("members"):
+            del self.groups[username]
+            
+        if remove_home and self.vfs:
+            h_path = u_info.get("home", f"/home/{username}")
+            h_item = self.vfs.path_to_tree(h_path)
+            if h_item and getattr(h_item, "parent", None):
+                h_item.parent.remove(h_item)
+                
+        self._sync_account_files()
+        return True
+
+    def modify_user(self, username, **kwargs):
+        if username not in self.user_accounts:
+            raise ValueError(f"User '{username}' does not exist")
+        acc = self.user_accounts[username]
+        if "password" in kwargs:
+            acc["password"] = kwargs["password"]
+            self.users[username] = kwargs["password"]
+        if "shell" in kwargs:
+            acc["shell"] = kwargs["shell"]
+        if "gecos" in kwargs:
+            acc["gecos"] = kwargs["gecos"]
+        if "home" in kwargs:
+            acc["home"] = kwargs["home"]
+        if "gid" in kwargs:
+            acc["gid"] = int(kwargs["gid"])
+        if "append_groups" in kwargs:
+            for g in kwargs["append_groups"]:
+                if g in self.groups:
+                    if username not in self.groups[g]["members"]:
+                        self.groups[g]["members"].append(username)
+                else:
+                    max_gid = max([gd.get("gid", 1000) for gd in self.groups.values()] or [999])
+                    self.groups[g] = {"gid": max(1000, max_gid + 1), "members": [username]}
+                if g not in acc.get("groups", []):
+                    acc.setdefault("groups", []).append(g)
+        if "groups" in kwargs:
+            new_groups = list(kwargs["groups"])
+            prim_gname = next((gn for gn, gd in self.groups.items() if gd.get("gid") == acc["gid"]), None)
+            for gname, gdata in self.groups.items():
+                if gname != prim_gname and username in gdata.get("members", []):
+                    gdata["members"].remove(username)
+            for g in new_groups:
+                if g in self.groups:
+                    if username not in self.groups[g]["members"]:
+                        self.groups[g]["members"].append(username)
+                else:
+                    max_gid = max([gd.get("gid", 1000) for gd in self.groups.values()] or [999])
+                    self.groups[g] = {"gid": max(1000, max_gid + 1), "members": [username]}
+            acc["groups"] = ([prim_gname] if prim_gname else []) + [g for g in new_groups if g != prim_gname]
+        self._sync_account_files()
+        return acc
+
+    def set_password(self, username, new_password):
+        if username not in self.user_accounts:
+            raise ValueError(f"User '{username}' does not exist")
+        self.user_accounts[username]["password"] = new_password
+        self.users[username] = new_password
+        self._sync_account_files()
+
+    def add_group(self, group_name, gid=None):
+        if group_name in self.groups:
+            raise ValueError(f"Group '{group_name}' already exists")
+        if gid is None:
+            max_gid = max([g.get("gid", 1000) for g in self.groups.values()] or [999])
+            gid = max(1000, max_gid + 1)
+        self.groups[group_name] = {"gid": gid, "members": []}
+        self._sync_account_files()
+        return self.groups[group_name]
+
+    def delete_group(self, group_name):
+        if group_name not in self.groups:
+            raise ValueError(f"Group '{group_name}' does not exist")
+        if group_name in ("root", "sudo"):
+            raise ValueError(f"Cannot delete system group '{group_name}'")
+        g_gid = self.groups[group_name]["gid"]
+        for uname, udata in self.user_accounts.items():
+            if udata.get("gid") == g_gid:
+                raise ValueError(f"Cannot remove group '{group_name}': it is the primary group of user '{uname}'")
+        del self.groups[group_name]
+        for uname, udata in self.user_accounts.items():
+            if group_name in udata.get("groups", []):
+                udata["groups"].remove(group_name)
+        self._sync_account_files()
+        return True
+
+    def get_user_groups(self, username):
+        if username not in self.user_accounts:
+            return []
+        groups = []
+        for gname, gdata in self.groups.items():
+            if username in gdata.get("members", []):
+                groups.append(gname)
+        prim_gid = self.user_accounts[username].get("gid")
+        prim_gname = next((gn for gn, gd in self.groups.items() if gd.get("gid") == prim_gid), None)
+        if prim_gname and prim_gname not in groups:
+            groups.insert(0, prim_gname)
+        return groups
 
     def log_event(self, event):
         """Records an event locally into host log cache and VFS /var/log files."""

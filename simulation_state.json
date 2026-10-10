@@ -7,7 +7,80 @@
                 "type": "server",
                 "status": "ONLINE",
                 "soc_threat_level": "Normal",
-                "default_gateway": "8.8.8.5"
+                "default_gateway": "8.8.8.5",
+                "users": {
+                    "root": "toor",
+                    "user": "user"
+                },
+                "current_user": "user",
+                "groups": {
+                    "root": {
+                        "gid": 0,
+                        "members": [
+                            "root"
+                        ]
+                    },
+                    "daemon": {
+                        "gid": 1,
+                        "members": []
+                    },
+                    "bin": {
+                        "gid": 2,
+                        "members": []
+                    },
+                    "sys": {
+                        "gid": 3,
+                        "members": []
+                    },
+                    "adm": {
+                        "gid": 4,
+                        "members": [
+                            "user"
+                        ]
+                    },
+                    "sudo": {
+                        "gid": 27,
+                        "members": [
+                            "user"
+                        ]
+                    },
+                    "users": {
+                        "gid": 100,
+                        "members": []
+                    },
+                    "user": {
+                        "gid": 1000,
+                        "members": [
+                            "user"
+                        ]
+                    }
+                },
+                "user_accounts": {
+                    "root": {
+                        "uid": 0,
+                        "gid": 0,
+                        "gecos": "root",
+                        "home": "/root",
+                        "shell": "/bin/bash",
+                        "password": "toor",
+                        "groups": [
+                            "root"
+                        ]
+                    },
+                    "user": {
+                        "uid": 1000,
+                        "gid": 1000,
+                        "gecos": "Standard User",
+                        "home": "/home/user",
+                        "shell": "/bin/bash",
+                        "password": "user",
+                        "groups": [
+                            "user",
+                            "sudo",
+                            "adm"
+                        ]
+                    }
+                }
             },
             {
                 "name": "Worker PC 1",
@@ -15,7 +88,80 @@
                 "status": "ONLINE",
                 "soc_threat_level": "Normal",
                 "default_gateway": "8.8.8.5",
-                "dns_server": "8.8.8.8"
+                "dns_server": "8.8.8.8",
+                "users": {
+                    "root": "toor",
+                    "user": "user"
+                },
+                "current_user": "user",
+                "groups": {
+                    "root": {
+                        "gid": 0,
+                        "members": [
+                            "root"
+                        ]
+                    },
+                    "daemon": {
+                        "gid": 1,
+                        "members": []
+                    },
+                    "bin": {
+                        "gid": 2,
+                        "members": []
+                    },
+                    "sys": {
+                        "gid": 3,
+                        "members": []
+                    },
+                    "adm": {
+                        "gid": 4,
+                        "members": [
+                            "user"
+                        ]
+                    },
+                    "sudo": {
+                        "gid": 27,
+                        "members": [
+                            "user"
+                        ]
+                    },
+                    "users": {
+                        "gid": 100,
+                        "members": []
+                    },
+                    "user": {
+                        "gid": 1000,
+                        "members": [
+                            "user"
+                        ]
+                    }
+                },
+                "user_accounts": {
+                    "root": {
+                        "uid": 0,
+                        "gid": 0,
+                        "gecos": "root",
+                        "home": "/root",
+                        "shell": "/bin/bash",
+                        "password": "toor",
+                        "groups": [
+                            "root"
+                        ]
+                    },
+                    "user": {
+                        "uid": 1000,
+                        "gid": 1000,
+                        "gecos": "Standard User",
+                        "home": "/home/user",
+                        "shell": "/bin/bash",
+                        "password": "user",
+                        "groups": [
+                            "user",
+                            "sudo",
+                            "adm"
+                        ]
+                    }
+                }
             },
             {
                 "name": "Worker PC 2",
@@ -23,7 +169,80 @@
                 "status": "ONLINE",
                 "soc_threat_level": "Normal",
                 "default_gateway": "8.8.8.5",
-                "dns_server": "8.8.8.8"
+                "dns_server": "8.8.8.8",
+                "users": {
+                    "root": "toor",
+                    "user": "user"
+                },
+                "current_user": "user",
+                "groups": {
+                    "root": {
+                        "gid": 0,
+                        "members": [
+                            "root"
+                        ]
+                    },
+                    "daemon": {
+                        "gid": 1,
+                        "members": []
+                    },
+                    "bin": {
+                        "gid": 2,
+                        "members": []
+                    },
+                    "sys": {
+                        "gid": 3,
+                        "members": []
+                    },
+                    "adm": {
+                        "gid": 4,
+                        "members": [
+                            "user"
+                        ]
+                    },
+                    "sudo": {
+                        "gid": 27,
+                        "members": [
+                            "user"
+                        ]
+                    },
+                    "users": {
+                        "gid": 100,
+                        "members": []
+                    },
+                    "user": {
+                        "gid": 1000,
+                        "members": [
+                            "user"
+                        ]
+                    }
+                },
+                "user_accounts": {
+                    "root": {
+                        "uid": 0,
+                        "gid": 0,
+                        "gecos": "root",
+                        "home": "/root",
+                        "shell": "/bin/bash",
+                        "password": "toor",
+                        "groups": [
+                            "root"
+                        ]
+                    },
+                    "user": {
+                        "uid": 1000,
+                        "gid": 1000,
+                        "gecos": "Standard User",
+                        "home": "/home/user",
+                        "shell": "/bin/bash",
+                        "password": "user",
+                        "groups": [
+                            "user",
+                            "sudo",
+                            "adm"
+                        ]
+                    }
+                }
             },
             {
                 "name": "Wolf's PC",
@@ -31,7 +250,84 @@
                 "status": "ONLINE",
                 "soc_threat_level": "Normal",
                 "default_gateway": "10.0.0.5",
-                "dns_server": "10.0.0.2"
+                "dns_server": "10.0.0.2",
+                "users": {
+                    "root": "toor",
+                    "user": "user"
+                },
+                "current_user": "root",
+                "groups": {
+                    "root": {
+                        "gid": 0,
+                        "members": [
+                            "root"
+                        ]
+                    },
+                    "daemon": {
+                        "gid": 1,
+                        "members": []
+                    },
+                    "bin": {
+                        "gid": 2,
+                        "members": []
+                    },
+                    "sys": {
+                        "gid": 3,
+                        "members": []
+                    },
+                    "adm": {
+                        "gid": 4,
+                        "members": [
+                            "user"
+                        ]
+                    },
+                    "sudo": {
+                        "gid": 27,
+                        "members": [
+                            "user"
+                        ]
+                    },
+                    "users": {
+                        "gid": 100,
+                        "members": []
+                    },
+                    "user": {
+                        "gid": 1000,
+                        "members": [
+                            "user"
+                        ]
+                    },
+                    "developers": {
+                        "gid": 1002,
+                        "members": []
+                    }
+                },
+                "user_accounts": {
+                    "root": {
+                        "uid": 0,
+                        "gid": 0,
+                        "gecos": "root",
+                        "home": "/root",
+                        "shell": "/bin/bash",
+                        "password": "toor",
+                        "groups": [
+                            "root"
+                        ]
+                    },
+                    "user": {
+                        "uid": 1000,
+                        "gid": 1000,
+                        "gecos": "Standard User",
+                        "home": "/home/user",
+                        "shell": "/bin/bash",
+                        "password": "user",
+                        "groups": [
+                            "user",
+                            "sudo",
+                            "adm"
+                        ]
+                    }
+                }
             },
             {
                 "name": "Friend's PC",
@@ -39,7 +335,80 @@
                 "status": "ONLINE",
                 "soc_threat_level": "Normal",
                 "default_gateway": "10.0.0.5",
-                "dns_server": "10.0.0.2"
+                "dns_server": "10.0.0.2",
+                "users": {
+                    "root": "toor",
+                    "user": "user"
+                },
+                "current_user": "user",
+                "groups": {
+                    "root": {
+                        "gid": 0,
+                        "members": [
+                            "root"
+                        ]
+                    },
+                    "daemon": {
+                        "gid": 1,
+                        "members": []
+                    },
+                    "bin": {
+                        "gid": 2,
+                        "members": []
+                    },
+                    "sys": {
+                        "gid": 3,
+                        "members": []
+                    },
+                    "adm": {
+                        "gid": 4,
+                        "members": [
+                            "user"
+                        ]
+                    },
+                    "sudo": {
+                        "gid": 27,
+                        "members": [
+                            "user"
+                        ]
+                    },
+                    "users": {
+                        "gid": 100,
+                        "members": []
+                    },
+                    "user": {
+                        "gid": 1000,
+                        "members": [
+                            "user"
+                        ]
+                    }
+                },
+                "user_accounts": {
+                    "root": {
+                        "uid": 0,
+                        "gid": 0,
+                        "gecos": "root",
+                        "home": "/root",
+                        "shell": "/bin/bash",
+                        "password": "toor",
+                        "groups": [
+                            "root"
+                        ]
+                    },
+                    "user": {
+                        "uid": 1000,
+                        "gid": 1000,
+                        "gecos": "Standard User",
+                        "home": "/home/user",
+                        "shell": "/bin/bash",
+                        "password": "user",
+                        "groups": [
+                            "user",
+                            "sudo",
+                            "adm"
+                        ]
+                    }
+                }
             },
             {
                 "name": "Wolf's DHCP Server",
@@ -47,7 +416,80 @@
                 "status": "ONLINE",
                 "soc_threat_level": "Normal",
                 "default_gateway": "10.0.0.5",
-                "dns_server": "10.0.0.2"
+                "dns_server": "10.0.0.2",
+                "users": {
+                    "root": "toor",
+                    "user": "user"
+                },
+                "current_user": "user",
+                "groups": {
+                    "root": {
+                        "gid": 0,
+                        "members": [
+                            "root"
+                        ]
+                    },
+                    "daemon": {
+                        "gid": 1,
+                        "members": []
+                    },
+                    "bin": {
+                        "gid": 2,
+                        "members": []
+                    },
+                    "sys": {
+                        "gid": 3,
+                        "members": []
+                    },
+                    "adm": {
+                        "gid": 4,
+                        "members": [
+                            "user"
+                        ]
+                    },
+                    "sudo": {
+                        "gid": 27,
+                        "members": [
+                            "user"
+                        ]
+                    },
+                    "users": {
+                        "gid": 100,
+                        "members": []
+                    },
+                    "user": {
+                        "gid": 1000,
+                        "members": [
+                            "user"
+                        ]
+                    }
+                },
+                "user_accounts": {
+                    "root": {
+                        "uid": 0,
+                        "gid": 0,
+                        "gecos": "root",
+                        "home": "/root",
+                        "shell": "/bin/bash",
+                        "password": "toor",
+                        "groups": [
+                            "root"
+                        ]
+                    },
+                    "user": {
+                        "uid": 1000,
+                        "gid": 1000,
+                        "gecos": "Standard User",
+                        "home": "/home/user",
+                        "shell": "/bin/bash",
+                        "password": "user",
+                        "groups": [
+                            "user",
+                            "sudo",
+                            "adm"
+                        ]
+                    }
+                }
             },
             {
                 "name": "NAS-01",
@@ -55,7 +497,80 @@
                 "status": "ONLINE",
                 "soc_threat_level": "Normal",
                 "default_gateway": "10.0.0.5",
-                "dns_server": "10.0.0.2"
+                "dns_server": "10.0.0.2",
+                "users": {
+                    "root": "toor",
+                    "user": "user"
+                },
+                "current_user": "user",
+                "groups": {
+                    "root": {
+                        "gid": 0,
+                        "members": [
+                            "root"
+                        ]
+                    },
+                    "daemon": {
+                        "gid": 1,
+                        "members": []
+                    },
+                    "bin": {
+                        "gid": 2,
+                        "members": []
+                    },
+                    "sys": {
+                        "gid": 3,
+                        "members": []
+                    },
+                    "adm": {
+                        "gid": 4,
+                        "members": [
+                            "user"
+                        ]
+                    },
+                    "sudo": {
+                        "gid": 27,
+                        "members": [
+                            "user"
+                        ]
+                    },
+                    "users": {
+                        "gid": 100,
+                        "members": []
+                    },
+                    "user": {
+                        "gid": 1000,
+                        "members": [
+                            "user"
+                        ]
+                    }
+                },
+                "user_accounts": {
+                    "root": {
+                        "uid": 0,
+                        "gid": 0,
+                        "gecos": "root",
+                        "home": "/root",
+                        "shell": "/bin/bash",
+                        "password": "toor",
+                        "groups": [
+                            "root"
+                        ]
+                    },
+                    "user": {
+                        "uid": 1000,
+                        "gid": 1000,
+                        "gecos": "Standard User",
+                        "home": "/home/user",
+                        "shell": "/bin/bash",
+                        "password": "user",
+                        "groups": [
+                            "user",
+                            "sudo",
+                            "adm"
+                        ]
+                    }
+                }
             },
             {
                 "name": "LAP-01",
@@ -64,7 +579,80 @@
                 "soc_threat_level": "Normal",
                 "default_gateway": "10.0.0.5",
                 "dns_server": "10.0.0.2",
-                "ip_forwarding": true
+                "ip_forwarding": true,
+                "users": {
+                    "root": "toor",
+                    "user": "user"
+                },
+                "current_user": "root",
+                "groups": {
+                    "root": {
+                        "gid": 0,
+                        "members": [
+                            "root"
+                        ]
+                    },
+                    "daemon": {
+                        "gid": 1,
+                        "members": []
+                    },
+                    "bin": {
+                        "gid": 2,
+                        "members": []
+                    },
+                    "sys": {
+                        "gid": 3,
+                        "members": []
+                    },
+                    "adm": {
+                        "gid": 4,
+                        "members": [
+                            "user"
+                        ]
+                    },
+                    "sudo": {
+                        "gid": 27,
+                        "members": [
+                            "user"
+                        ]
+                    },
+                    "users": {
+                        "gid": 100,
+                        "members": []
+                    },
+                    "user": {
+                        "gid": 1000,
+                        "members": [
+                            "user"
+                        ]
+                    }
+                },
+                "user_accounts": {
+                    "root": {
+                        "uid": 0,
+                        "gid": 0,
+                        "gecos": "root",
+                        "home": "/root",
+                        "shell": "/bin/bash",
+                        "password": "toor",
+                        "groups": [
+                            "root"
+                        ]
+                    },
+                    "user": {
+                        "uid": 1000,
+                        "gid": 1000,
+                        "gecos": "Standard User",
+                        "home": "/home/user",
+                        "shell": "/bin/bash",
+                        "password": "user",
+                        "groups": [
+                            "user",
+                            "sudo",
+                            "adm"
+                        ]
+                    }
+                }
             },
             {
                 "name": "Google's Switch",
@@ -190,7 +778,7 @@
             },
             {
                 "endpoint_a": "LAP-01",
-                "endpoint_b": "AP-02"
+                "endpoint_b": "AP-01"
             }
         ],
         "interfaces": {
@@ -392,7 +980,7 @@
                 "02:9d:b1:d7:79:28": 3,
                 "02:d5:37:bb:85:2c": 4,
                 "02:1b:37:4c:37:ed": 5,
-                "02:b8:c3:7b:29:9c": 7
+                "02:b8:c3:7b:29:9c": 6
             },
             "AP-01": {
                 "02:56:84:20:11:19": 1,
@@ -400,14 +988,14 @@
                 "02:1b:37:4c:37:ed": 1,
                 "02:9d:b1:d7:79:28": 1,
                 "02:d5:37:bb:85:2c": 1,
-                "02:b8:c3:7b:29:9c": 1
+                "02:b8:c3:7b:29:9c": 2
             },
             "AP-02": {
                 "02:9d:b1:d7:79:28": 1,
                 "02:56:84:20:11:19": 1,
                 "02:b4:8b:c2:69:c0": 1,
                 "02:1b:37:4c:37:ed": 1,
-                "02:b8:c3:7b:29:9c": 2
+                "02:b8:c3:7b:29:9c": 1
             }
         },
         "arp_caches": {
@@ -628,6 +1216,13 @@
                         "username": "root",
                         "timeout": 10
                     }
+                },
+                {
+                    "name": "SSH",
+                    "protocol": "TCP",
+                    "port": 22,
+                    "status": "running",
+                    "config": {}
                 }
             ],
             "Friend's PC": [

@@ -178,6 +178,16 @@ class API:
                         dev.coverage_radius = int(d["coverage_radius"])
                     if "soc_threat_level" in d:
                         dev.soc_threat_level = d["soc_threat_level"]
+                    if "users" in d and hasattr(dev, "users"):
+                        dev.users = dict(d["users"])
+                    if "current_user" in d and hasattr(dev, "current_user"):
+                        dev.current_user = d["current_user"]
+                    if "groups" in d and hasattr(dev, "groups"):
+                        dev.groups = dict(d["groups"])
+                    if "user_accounts" in d and hasattr(dev, "user_accounts"):
+                        dev.user_accounts = dict(d["user_accounts"])
+                    if hasattr(dev, "_sync_account_files"):
+                        dev._sync_account_files()
                 
             # Links
             for l in sim_data.get("links", []):
@@ -944,6 +954,34 @@ class API:
                 output = handler.execute(device, command)
                 prompt = handler.get_prompt(device)
                 return {"output": output, "prompt": prompt}
+
+        # GET /api/ncm/devices/<device>/users
+        if method == "GET" and len(resource) == 3 and resource[0] == "devices" and resource[2] == "users":
+            return self.ncm.get_users(resource[1])
+
+        # POST /api/ncm/devices/<device>/users
+        if method == "POST" and len(resource) == 3 and resource[0] == "devices" and resource[2] == "users":
+            username = body.get("username")
+            password = body.get("password", "password")
+            shell = body.get("shell", "/bin/bash")
+            groups = body.get("groups")
+            create_home = body.get("create_home", True)
+            try:
+                res = self.ncm.add_or_update_user(resource[1], username=username, password=password, shell=shell, groups=groups, create_home=create_home)
+                self.state_manager.save()
+                return {"success": True, "user": res}
+            except Exception as e:
+                return {"error": str(e)}, 400
+
+        # DELETE /api/ncm/devices/<device>/users/<username>
+        if method == "DELETE" and len(resource) == 4 and resource[0] == "devices" and resource[2] == "users":
+            remove_home = body.get("remove_home", False) if isinstance(body, dict) else False
+            try:
+                self.ncm.delete_user(resource[1], resource[3], remove_home=remove_home)
+                self.state_manager.save()
+                return {"success": True}
+            except Exception as e:
+                return {"error": str(e)}, 400
 
         # POST /api/ncm/devices/<device>/restart
         if method == "POST" and len(resource) == 3 and resource[0] == "devices" and resource[2] == "restart":

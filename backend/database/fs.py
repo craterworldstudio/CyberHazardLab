@@ -25,6 +25,12 @@ class File:
     def set_owner(self, name):
         self.owner = name
 
+    def set_group(self, group):
+        self.group = group
+
+    def set_perms(self, perms):
+        self.perms = perms
+
 class Folder:
 
     def __init__(self, name: str = "folder", parent:Folder = None):
@@ -107,6 +113,21 @@ class Folder:
 
     def set_owner(self, name):
         self.owner = name
+
+    def set_group(self, group):
+        self.group = group
+
+    def set_perms(self, perms):
+        self.perms = perms
+
+    def remove(self, item):
+        if item in self.visible:
+            self.visible.remove(item)
+        if item in self.hidden:
+            self.hidden.remove(item)
+        if item in self.all:
+            self.all.remove(item)
+        self._upd_content()
 
     def __repr__(self):
         lines = [f"{self.name}/"]

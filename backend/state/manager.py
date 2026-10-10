@@ -173,6 +173,14 @@ class StateManager:
                 d["dns_server"] = host.dns_server
             if getattr(host, "ip_forwarding", False):
                 d["ip_forwarding"] = True
+            if getattr(host, "users", None):
+                d["users"] = host.users
+            if getattr(host, "current_user", None):
+                d["current_user"] = host.current_user
+            if getattr(host, "groups", None):
+                d["groups"] = host.groups
+            if getattr(host, "user_accounts", None):
+                d["user_accounts"] = host.user_accounts
             devices.append(d)
 
 

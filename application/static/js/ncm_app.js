@@ -297,6 +297,7 @@ function setupNCMTabs(window) {
                 );
             });
 
+
         });
 
     });
@@ -2380,3 +2381,6 @@ window.addDhcpScope = function(btn) {
     subInput.value = ""; startInput.value = ""; endInput.value = "";
     gwInput.value = ""; dnsInput.value = ""; domInput.value = "";
 }
+
+
+
