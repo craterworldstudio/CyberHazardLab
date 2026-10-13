@@ -1,4 +1,4 @@
-"""Classification of terminal API responses."""
+"""Classification of terminal responses."""
 
 from dataclasses import dataclass
 from enum import Enum
@@ -21,24 +21,12 @@ class CommandResult:
     prompt: str
     outcome: CommandOutcome
 
-    @property
-    def has_output(self) -> bool:
-        return bool(self.output.strip())
-
 
 def classify_outcome(
     output: str,
     prompt: str,
-    *,
-    api_ok: bool = True,
 ) -> CommandOutcome:
-    """Classify a terminal response without claiming semantic success."""
-
-    if not api_ok:
-        return CommandOutcome.API_ERROR
-
-    output = output or ""
-    prompt = prompt or ""
+    """Classify the response without assuming that output means success."""
 
     lower_output = output.lower()
     lower_prompt = prompt.lower()
@@ -49,15 +37,14 @@ def classify_outcome(
     if output.startswith("__NANO_OPEN__"):
         return CommandOutcome.INTERACTIVE
 
-    if any(
-        marker in lower_output
-        for marker in (
-            "command not found",
-            "command not recognized",
-            "unknown command",
-            "not recognized as an internal",
-        )
-    ):
+    rejection_markers = (
+        "command not found",
+        "command not recognized",
+        "unknown command",
+        "permission denied",
+    )
+
+    if any(marker in lower_output for marker in rejection_markers):
         return CommandOutcome.COMMAND_REJECTED
 
     if not output.strip():
