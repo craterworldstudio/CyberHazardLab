@@ -1,47 +1,57 @@
-"""Penetrator agent foundation."""
+"""Penetrator entry point."""
+
+import argparse
 
 from penetrator.executor import TerminalExecutor
-from penetrator.outcome import CommandResult
 
 
-class PenetratorAgent:
-    """An agent that interacts with CHL through a terminal API."""
+def main() -> None:
+    parser = argparse.ArgumentParser(description="CHL Penetrator")
+    parser.add_argument(
+        "--url",
+        default="http://127.0.0.1:8000",
+        help="Base URL of the running CHL server.",
+    )
+    parser.add_argument(
+        "--device",
+        required=True,
+        help="Name of the Penetrator's assigned device.",
+    )
 
-    def __init__(self, api, device_name: str):
-        self.executor = TerminalExecutor(api, device_name)
-        self.device_name = device_name
-        self.history: list[CommandResult] = []
+    args = parser.parse_args()
 
-    def observe_prompt(self) -> str:
-        """Retrieve the assigned device's current terminal prompt."""
+    executor = TerminalExecutor(
+        base_url=args.url,
+        device_name=args.device,
+    )
 
-        from urllib.parse import quote
+    print(f"Penetrator connected to {args.url}")
+    print(f"Assigned device: {args.device}")
+    print("Interactive testing mode. Type 'exit' to quit.")
 
-        path = (
-            "/api/ncm/devices/"
-            f"{quote(self.device_name, safe='')}/terminal"
-        )
+    while True:
+        try:
+            command = input("penetrator> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
 
-        response = self.executor._api.handle("GET", path, {})
+        if command.lower() in {"exit", "quit"}:
+            break
 
-        if not isinstance(response, dict):
-            raise RuntimeError("The terminal API returned an invalid response.")
+        if not command:
+            continue
 
-        if "prompt" not in response:
-            raise RuntimeError(
-                response.get("output", "Could not retrieve terminal prompt.")
-            )
+        result = executor.execute(command)
 
-        return str(response["prompt"])
+        print(f"[{result.outcome.value}]")
 
-    def execute(self, command: str) -> CommandResult:
-        """Execute a command and record its result."""
+        if result.output:
+            print(result.output)
 
-        result = self.executor.execute(command)
-        self.history.append(result)
-        return result
+        if result.prompt:
+            print(result.prompt)
 
-    def get_history(self) -> tuple[CommandResult, ...]:
-        """Return an immutable view of recorded command results."""
 
-        return tuple(self.history)
+if __name__ == "__main__":
+    main()
