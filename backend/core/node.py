@@ -725,9 +725,15 @@ class Node:
             elif name == "ECHO":
                 from backend.services.echo import EchoServerDaemon
                 self.daemons[service_name] = EchoServerDaemon(self)
-            elif name == "DNS_CLIENT":
+            elif name in ("DNS_CLIENT", "DNS-CLIENT"):
                 from backend.services.dns_client import DNSClientDaemon
                 self.daemons[service_name] = DNSClientDaemon(self)
+            elif name in ("SIEM_AGENT", "SIEM-AGENT"):
+                from backend.services.siem_agent import SIEMAgentDaemon
+                self.daemons[service_name] = SIEMAgentDaemon(self)
+            elif name in ("SIEM_COLLECTOR", "SIEM-COLLECTOR", "SIEM"):
+                from backend.services.siem_collector import SIEMCollectorDaemon
+                self.daemons[service_name] = SIEMCollectorDaemon(self)
             else:
                 from backend.services.base import ServiceDaemon
                 self.daemons[service_name] = ServiceDaemon(self)

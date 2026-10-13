@@ -55,6 +55,20 @@ class StateManager:
         # Remove self-referential entries (A->A)
         saved_renames = {k: v for k, v in saved_renames.items() if k != v}
 
+        active_devs = set()
+        if hasattr(self.simulation, "hosts"):
+            active_devs.update(self.simulation.hosts.keys())
+        if hasattr(self.simulation, "routers"):
+            active_devs.update(self.simulation.routers.keys())
+        if hasattr(self.simulation, "switches"):
+            active_devs.update(self.simulation.switches.keys())
+
+        if active_devs:
+            saved_renames = {
+                k: v for k, v in saved_renames.items()
+                if v in active_devs and k not in active_devs
+            }
+
         if not layout:
             layout = dict(current_layout)
         else:
@@ -75,7 +89,7 @@ class StateManager:
 
         # Update simulation rename_map with all saved renames
         if hasattr(self.simulation, "rename_map"):
-            self.simulation.rename_map.update(saved_renames)
+            self.simulation.rename_map = dict(saved_renames)
 
         state = {
             "version": 1,

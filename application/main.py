@@ -38,6 +38,7 @@ if state_data:
     if sim_data.get("devices") or sim_data.get("subnets"):
         print("[CHL] Restoring simulation state from simulation_state.json...")
         api.handle("POST", "/api/simulation/import", body=state_data)
+        api.handle("POST", "/api/simulation/run")
 else:
     print("[CHL] No existing state found, starting fresh.")
     state_manager.reset()

@@ -1,4 +1,6 @@
 import urllib.parse
+import time
+import uuid
 from application.term_coms import TerminalCommandHandler
 from backend.core.event import Event
 from backend.orchestrator import Simulation
@@ -388,10 +390,16 @@ class API:
         if method == "GET" and resource == ["poll"]:
             events = self.ntm.simulation.network.events
             devices = [self._serialize_device(d) for d in self.all_devices()]
+            dev_names = {d["name"] for d in devices}
+            raw_renames = getattr(self.ntm.simulation, "rename_map", {})
+            valid_renames = {
+                k: v for k, v in raw_renames.items()
+                if v in dev_names and k not in dev_names and k != v
+            } if isinstance(raw_renames, dict) else {}
             return {
                 "status": "running" if self.ntm.simulation.is_running else "stopped",
                 "devices": devices,
-                "renames": getattr(self.ntm.simulation, "rename_map", {}),
+                "renames": valid_renames,
                 "events": [
                     {
                         "type": e.type,
@@ -565,20 +573,185 @@ class API:
 
 
     def _handle_soc(self, method, resource, body):
+        sim = self.ntm.simulation
+        if not hasattr(sim, "soc_state") or not isinstance(sim.soc_state, dict):
+            sim.soc_state = {}
+
+        from backend.services.soc_engine import SOCDetectionEngine
+        if not getattr(sim, "soc_engine", None):
+            sim.soc_engine = SOCDetectionEngine(sim)
+        else:
+            sim.soc_engine.simulation = sim
+
+        sim.soc_state.setdefault("alerts", [])
+        sim.soc_state.setdefault("incidents", [])
+        sim.soc_state.setdefault("ingested_events", [])
+        sim.soc_state.setdefault("total_events_count", len(sim.soc_state["ingested_events"]))
+        sim.soc_state.setdefault("settings", {
+            "collector_port": 514,
+            "transport": "UDP",
+            "retention_hours": 24,
+            "auto_containment": False,
+            "auto_contain_severity": "CRITICAL"
+        })
+
+        # GET /api/soc/state
         if method == "GET" and resource == ["state"]:
-            return getattr(self.ntm.simulation, "soc_state", {})
-            
+            state = dict(sim.soc_state)
+            state["total_events_count"] = sim.soc_state.get("total_events_count", len(sim.soc_state.get("ingested_events", [])))
+            # Find active collector service in network
+            collector_info = {"running": False, "device": None, "ip": None, "port": 514}
+            for dev in list(sim.hosts.values()) + list(sim.routers.values()):
+                for s in getattr(dev, "services", []):
+                    if s.name.upper() in ("SIEM_COLLECTOR", "SIEM-COLLECTOR", "SIEM") and getattr(s, "status", "").upper() == "RUNNING":
+                        collector_info = {
+                            "running": True,
+                            "device": dev.name,
+                            "ip": dev.interfaces[0].ip if dev.interfaces else None,
+                            "port": getattr(s, "config", {}).get("port", 514)
+                        }
+                        break
+            state["collector_status"] = collector_info
+            return state
+
+        # POST /api/soc/state
         if method == "POST" and resource == ["state"]:
-            self.ntm.simulation.soc_state = body
+            if isinstance(body, dict):
+                sim.soc_state.update(body)
             self.state_manager.save()
             return {"status": "success"}
+
+        # GET /api/soc/events
+        if method == "GET" and resource == ["events"]:
+            events = sim.soc_state.get("ingested_events", [])
+            if not events and getattr(sim, "network", None):
+                # Fallback to simulation events formatted for SIEM if collector has not yet ingested packets
+                events = [
+                    {
+                        "id": f"ev-{idx}",
+                        "timestamp": getattr(e, "timestamp", None) or "LIVE",
+                        "host": getattr(e, "source", "SYSTEM"),
+                        "type": getattr(e, "type", "EVENT"),
+                        "severity": getattr(e, "severity", "INFO"),
+                        "source": getattr(e, "source", ""),
+                        "destination": getattr(e, "destination", ""),
+                        "protocol": getattr(e, "protocol", "SYS"),
+                        "metadata": getattr(e, "metadata", {})
+                    }
+                    for idx, e in enumerate(sim.network.events[-100:])
+                ]
+            return events
+
+        # RULES: GET / POST /api/soc/rules, POST /api/soc/rules/validate, DELETE /api/soc/rules/<id>
+        if resource and resource[0] == "rules":
+            if method == "GET" and len(resource) == 1:
+                return sim.soc_state.get("rules", [])
+
+            if method == "POST" and len(resource) == 2 and resource[1] == "validate":
+                raw_yaml = body.get("yaml", "") if isinstance(body, dict) else str(body)
+                try:
+                    parsed = SOCDetectionEngine.parse_yaml_rule(raw_yaml)
+                    return {"valid": True, "rule": parsed}
+                except Exception as e:
+                    return {"valid": False, "error": str(e)}
+
+            if method == "POST" and len(resource) == 1:
+                if isinstance(body, dict) and "yaml" in body:
+                    raw_yaml = body["yaml"]
+                    rule_id = body.get("id")
+                    try:
+                        rule = SOCDetectionEngine.parse_yaml_rule(raw_yaml, existing_id=rule_id)
+                    except Exception as e:
+                        return {"status": "error", "message": str(e)}
+                elif isinstance(body, str):
+                    try:
+                        rule = SOCDetectionEngine.parse_yaml_rule(body)
+                    except Exception as e:
+                        return {"status": "error", "message": str(e)}
+                elif isinstance(body, dict):
+                    rule = body
+                    if not rule.get("id"):
+                        import uuid
+                        rule["id"] = f"rule-{uuid.uuid4().hex[:8]}"
+                    if "yaml" not in rule:
+                        rule["yaml"] = f"id: {rule['id']}\ntitle: \"{rule.get('name', 'Rule')}\"\nseverity: {rule.get('severity', 'HIGH')}\ndescription: \"{rule.get('description', '')}\"\ndetection:\n  selection:\n    type: EVENT\n  condition: selection\n"
+                else:
+                    return {"status": "error", "message": "Invalid rule payload"}
+
+                rules = sim.soc_state.setdefault("rules", [])
+                existing_idx = next((i for i, r in enumerate(rules) if r.get("id") == rule["id"]), None)
+                if existing_idx is not None:
+                    rules[existing_idx] = rule
+                else:
+                    rules.append(rule)
+
+                if sim.soc_engine:
+                    sim.soc_engine.rules = rules
+
+                self.state_manager.save()
+                return {"status": "success", "rule": rule}
+
+            elif method == "DELETE" and len(resource) == 2:
+                rule_id = resource[1]
+                sim.soc_state["rules"] = [r for r in sim.soc_state.get("rules", []) if r.get("id") != rule_id]
+                if sim.soc_engine:
+                    sim.soc_engine.rules = sim.soc_state["rules"]
+                self.state_manager.save()
+                return {"status": "success"}
+
+        # ALERTS: GET /api/soc/alerts, POST /api/soc/alerts/<id>/status, DELETE /api/soc/alerts/<id>
+        if resource and resource[0] == "alerts":
+            if method == "GET" and len(resource) == 1:
+                return sim.soc_state.get("alerts", [])
+            if len(resource) >= 2:
+                alert_id = resource[1]
+                if method == "POST" and len(resource) == 3 and resource[2] == "status":
+                    new_status = body.get("status", "NEW")
+                    for a in sim.soc_state.get("alerts", []):
+                        if a.get("id") == alert_id:
+                            a["status"] = new_status
+                            break
+                    self.state_manager.save()
+                    return {"status": "success"}
+                elif method == "DELETE":
+                    sim.soc_state["alerts"] = [a for a in sim.soc_state.get("alerts", []) if a.get("id") != alert_id]
+                    self.state_manager.save()
+                    return {"status": "success"}
+
+        # INCIDENTS: POST /api/soc/incidents, DELETE /api/soc/incidents/<id>
+        if resource and resource[0] == "incidents":
+            if method == "POST":
+                import uuid
+                incident = dict(body)
+                if not incident.get("id"):
+                    incident["id"] = f"inc-{int(time.time()*1000)}-{uuid.uuid4().hex[:6]}"
+                if not incident.get("timestamp"):
+                    incident["timestamp"] = time.strftime("%Y-%m-%dT%H:%M:%SZ")
+                incident.setdefault("status", "OPEN")
+                incidents = sim.soc_state.setdefault("incidents", [])
+                incidents.insert(0, incident)
+                self.state_manager.save()
+                return {"status": "success", "incident": incident}
+            elif method == "DELETE" and len(resource) == 2:
+                inc_id = resource[1]
+                sim.soc_state["incidents"] = [inc for inc in sim.soc_state.get("incidents", []) if inc.get("id") != inc_id]
+                self.state_manager.save()
+                return {"status": "success"}
+
+        # SETTINGS: GET / POST /api/soc/settings
+        if resource == ["settings"]:
+            if method == "GET":
+                return sim.soc_state.get("settings", {})
+            if method == "POST":
+                sim.soc_state.setdefault("settings", {}).update(body)
+                self.state_manager.save()
+                return {"status": "success", "settings": sim.soc_state["settings"]}
 
         # Containment & Status
         if len(resource) >= 3 and resource[0] == "devices":
             device_name = resource[1]
             action_type = resource[2]
             
-            sim = self.ntm.simulation
             device = sim.hosts.get(device_name) or sim.routers.get(device_name) or sim.switches.get(device_name)
             
             if not device:
@@ -1062,7 +1235,8 @@ class API:
             "name": device.name,
             "type": device_type,
             "status": getattr(device, "status", "OFFLINE"),
-            "soc_threat_level": getattr(device, "soc_threat_level", "Normal")
+            "soc_threat_level": getattr(device, "soc_threat_level", "Normal"),
+            "services": [s.name for s in getattr(device, "services", [])]
         }
 
         # Interfaces

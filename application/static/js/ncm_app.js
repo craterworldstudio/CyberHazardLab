@@ -889,6 +889,32 @@ ${eps[path]}
                 </div>
             </div>
         `;
+    } else if (sName === "SIEM_AGENT") {
+        formHtml = `
+            <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
+                <div>
+                    <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// TARGET COLLECTOR IP</div>
+                    <div style="font-size: 9px; color: #5c6b73; margin-bottom: 4px;">Destination SOC Collector IP to receive RFC 5424 syslog stream over UDP.</div>
+                    <input type="text" class="ncm-cfg-svc-collector-ip" id="ncm-cfg-svc-collector-ip-${deviceName}" value="${cfg.collector_ip || ''}" placeholder="e.g., 10.0.0.10" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
+                </div>
+                <div>
+                    <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// SYSLOG PORT</div>
+                    <input type="number" id="ncm-cfg-svc-port-${deviceName}" value="${svc.port || 514}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
+                </div>
+            </div>
+        `;
+    } else if (sName === "SIEM_COLLECTOR") {
+        formHtml = `
+            <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
+                <div>
+                    <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// INGESTION PORT (UDP)</div>
+                    <input type="number" id="ncm-cfg-svc-port-${deviceName}" value="${svc.port || 514}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
+                </div>
+                <div style="font-size: 10px; color: #5c6b73; border: 1px dashed rgba(0,229,255,0.15); padding: 8px; letter-spacing: 1px;">
+                    // Active Collector Engine listening on UDP/514. Ingests syslog events, evaluates detection rules, and synchronizes SOC State.
+                </div>
+            </div>
+        `;
     } else {
         // Generic service
         formHtml = `
@@ -1118,6 +1144,9 @@ async function saveNCMServiceConfig(deviceName, serviceName, win) {
     } else if (sName === "DNS_CLIENT") {
         const nameserver = getField("ncm-cfg-svc-nameserver", "ncm-cfg-svc-nameserver");
         if (nameserver) config.nameserver = nameserver.value.trim();
+    } else if (sName === "SIEM_AGENT") {
+        const collIp = getField("ncm-cfg-svc-collector-ip", "ncm-cfg-svc-collector-ip");
+        if (collIp) config.collector_ip = collIp.value.trim();
     }
 
     try {
@@ -1555,32 +1584,15 @@ async function handleTerminalInput(event, deviceName) {
                     return; // Stop normal output rendering
                 }
                 
-                // Render multiline response with artificial latency
+                // Render response output immediately without artificial delay loops
                 const lines = response.output.split('\n');
-                
+                let renderedHtml = "";
                 for (let line of lines) {
-                    let delay = 0;
-                    const delayMatch = line.match(/\[DELAY:(\d+)\]/);
-                    if (delayMatch) {
-                        delay = parseInt(delayMatch[1], 10);
-                        line = line.replace(/\[DELAY:\d+\]/, '');
-                    } else {
-                        if (line.includes("Request timed out") || line.includes("Destination Host Unreachable")) {
-                            delay = 2000;
-                        } else if (line.includes(" ms ") || line.includes("icmp_seq=")) {
-                            delay = 600;
-                        } else if (line.includes("Tracing route to")) {
-                            delay = 300;
-                        }
-                    }
-                    
-                    if (delay > 0) {
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                    }
-                    
-                    outputDiv.innerHTML += `<div style="color: #d5ebf2; white-space: pre-wrap; word-break: break-all;">${escapeHtml(line) || ' '}</div>`;
-                    outputDiv.scrollTop = outputDiv.scrollHeight;
+                    const cleanLine = line.replace(/\[DELAY:\d+\]/, '');
+                    renderedHtml += `<div style="color: #d5ebf2; white-space: pre-wrap; word-break: break-all;">${escapeHtml(cleanLine) || ' '}</div>`;
                 }
+                outputDiv.innerHTML += renderedHtml;
+                outputDiv.scrollTop = outputDiv.scrollHeight;
             }
         } catch (error) {
             outputDiv.innerHTML += `<div style="color: #ff3333;">ERROR: ${error.message || "Failed to execute command"}</div>`;
@@ -1920,6 +1932,8 @@ function renderNCMServices(window, deviceName, services) {
         { value: "DNS_CLIENT", label: "DNS CLIENT (UDP/53)"},
         { value: "SSH", label: "SSH SERVER (TCP/22)" },
         { value: "SSH_CLIENT", label: "SSH CLIENT (AGENT)" },
+        { value: "SIEM_AGENT", label: "SIEM AGENT (LOG FORWARDER UDP/514)" },
+        { value: "SIEM_COLLECTOR", label: "SIEM COLLECTOR (SOC LOG SERVER UDP/514)" },
         { value: "ECHO", label: "ECHO SERVER (TCP/7)" }
     ];
     
@@ -1939,7 +1953,7 @@ function renderNCMServices(window, deviceName, services) {
             <div id="add-svc-form-${deviceName}" style="display: none; margin-top: 15px; border: 1px dashed rgba(0, 229, 255, 0.3); background: rgba(0, 0, 0, 0.2); padding: 15px;">
                 <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 10px; font-weight: bold;">// INITIALIZE NEW SERVICE ROUTINE</div>
                 <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
-                    <select id="new-svc-preset-${deviceName}" onchange="document.getElementById('svc-config-wrapper-'+'${safeDev}').style.display = (this.value === 'DHCP_RELAY') ? 'block' : 'none';" style="background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s; cursor: pointer;">
+                    <select id="new-svc-preset-${deviceName}" onchange="const showWrap = (this.value === 'DHCP_RELAY' || this.value === 'SIEM_AGENT'); document.getElementById('svc-config-wrapper-'+'${safeDev}').style.display = showWrap ? 'block' : 'none'; const tip = document.getElementById('svc-target-ip-'+'${safeDev}'); if (tip) tip.placeholder = (this.value === 'SIEM_AGENT') ? 'Collector Server IP (e.g. 10.0.0.10)' : 'Target Server IP (e.g. 10.0.1.254)';" style="background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s; cursor: pointer;">
                         ${optionsHtml}
                     </select>
                     <div id="svc-config-wrapper-${deviceName}" style="display: none;">
@@ -2028,6 +2042,18 @@ async function addNCMService(deviceName, win) {
     else if (preset === "DNS_CLIENT") { proto = "UDP"; port = 53; }
     else if (preset === "SSH" || preset === "SSH_SERVER") { proto = "TCP"; port = 22; }
     else if (preset === "SSH_CLIENT") { proto = "TCP"; port = 0; }
+    else if (preset === "SIEM_AGENT") {
+        proto = "UDP";
+        port = 514;
+        const targetIpInput = document.getElementById(`svc-target-ip-${deviceName}`);
+        config.collector_ip = (targetIpInput && targetIpInput.value) ? targetIpInput.value.trim() : "10.0.0.10";
+        config.port = 514;
+    }
+    else if (preset === "SIEM_COLLECTOR") {
+        proto = "UDP";
+        port = 514;
+        config = {};
+    }
     else if (preset === "ECHO") { proto = "TCP"; port = 7; }
 
     try {
@@ -2205,6 +2231,17 @@ function renderGlobalSettings(win, settings) {
                     <strong style="color: #8a9ba8;">[ MANUAL ]</strong> Unlearned packets are flooded.
                 </div>
                 
+                <!-- WIRING MODE CONFIG -->
+                <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 8px; font-weight: bold;">// TOPOLOGY WIRING STYLE</div>
+                <select id="cfg-wiring-mode" style="width: 100%; margin-bottom: 8px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s; cursor: pointer;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+                    <option value="bend" ${(settings.wiring_mode || localStorage.getItem("CHL_WIRING_MODE") || window.CHL_WIRING_MODE) !== 'straight' ? 'selected' : ''}>BEND (ORTHOGONAL 90°)</option>
+                    <option value="straight" ${(settings.wiring_mode || localStorage.getItem("CHL_WIRING_MODE") || window.CHL_WIRING_MODE) === 'straight' ? 'selected' : ''}>STRAIGHT (DIRECT POINT-TO-POINT)</option>
+                </select>
+                <div style="font-size: 10px; color: #5c6b73; margin-bottom: 20px; line-height: 1.4; border-left: 2px solid rgba(0, 229, 255, 0.2); padding-left: 8px;">
+                    <strong style="color: #8a9ba8;">[ BEND ]</strong> Classic orthogonal cables with right-angle corners.<br>
+                    <strong style="color: #8a9ba8;">[ STRAIGHT ]</strong> Direct point-to-point connections.
+                </div>
+
                 <!-- TTL CONFIG -->
                 <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 8px; font-weight: bold;">// PACKET LIFESPAN (TTL / MAX HOPS)</div>
                 <input type="number" id="cfg-ttl" value="${settings.default_ttl || 64}" style="width: 100%; margin-bottom: 8px; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 8px; font-family: monospace; font-size: 11px; outline: none; transition: border 0.2s;" onfocus="this.style.borderColor='#00e5ff'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
@@ -2220,13 +2257,34 @@ function renderGlobalSettings(win, settings) {
 }
 
 async function saveGlobalSettings(win) {
+    const wiringModeEl = document.getElementById("cfg-wiring-mode");
+    const wiringMode = wiringModeEl ? wiringModeEl.value : (window.CHL_WIRING_MODE || "bend");
+
+    // Save to runtime and local storage
+    window.CHL_WIRING_MODE = wiringMode;
+    localStorage.setItem("CHL_WIRING_MODE", wiringMode);
+    if (window.SimulationState) {
+        if (!window.SimulationState.settings) window.SimulationState.settings = {};
+        window.SimulationState.settings.wiring_mode = wiringMode;
+    }
+
+    // Immediately update all wire paths on canvas
+    if (window.CHL && window.CHL.links) {
+        Object.values(window.CHL.links).forEach(link => {
+            if (typeof link.updatePath === "function") {
+                link.updatePath();
+            }
+        });
+    }
+
     const settings = {
         network_name: document.getElementById("cfg-net-name").value,
         dhcp_mode: document.getElementById("cfg-dhcp-mode").value,
         dns_mode: document.getElementById("cfg-dns-mode").value,
         auto_routes: document.getElementById("cfg-routing-mode").value === "auto",
         auto_mac_learning: document.getElementById("cfg-switching-mode").value === "auto",
-        default_ttl: parseInt(document.getElementById("cfg-ttl").value) || 64
+        default_ttl: parseInt(document.getElementById("cfg-ttl").value) || 64,
+        wiring_mode: wiringMode
     };
     try {
         await apiRequest("POST", "/api/simulation/settings", settings);

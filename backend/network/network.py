@@ -3,6 +3,7 @@ from ..core.event import Event
 from .arp import ARP
 import ipaddress
 from .frame import EthernetFrame
+import time
 
 class Network:
 
@@ -73,13 +74,53 @@ class Network:
 			self.on_event(event)
 
 		# Redirect and collect events into local host files
+		# Do NOT route switch-level frame forwarding or SIEM transport packets into host logs (avoids packet storms)
+		if event.type in ("FRAME_RECEIVED", "FRAME_FORWARDED", "FRAME_SENT") or getattr(event, "port", None) in (514, 51400):
+			return
+
 		if hasattr(self, "hosts") and isinstance(self.hosts, dict):
 			src_dev = self.hosts.get(event.source)
+			if not src_dev and hasattr(self, "get_host_by_ip"):
+				src_ip = str(event.source).split(":")[0] if event.source else ""
+				src_dev = self.get_host_by_ip(src_ip)
 			dst_dev = self.hosts.get(event.destination)
+			if not dst_dev and hasattr(self, "get_host_by_ip"):
+				dst_ip = str(event.destination).split(":")[0] if event.destination else ""
+				dst_dev = self.get_host_by_ip(dst_ip)
 			if src_dev and hasattr(src_dev, "log_event"):
 				src_dev.log_event(event)
 			if dst_dev and hasattr(dst_dev, "log_event") and dst_dev != src_dev:
 				dst_dev.log_event(event)
+
+			# Ensure active SIEM Collector daemon receives security events across network
+			sim = getattr(self, "orchestrator", None)
+			if sim and not getattr(event, "type", "").startswith("FRAME_") and getattr(event, "port", None) not in (514, 51400):
+				collector_daemon = getattr(self, "_soc_collector", None)
+				if not collector_daemon or not getattr(collector_daemon, "is_running", False):
+					collector_daemon = None
+					for h in list(sim.hosts.values()) + list(sim.routers.values()):
+						if hasattr(h, "daemons") and isinstance(h.daemons, dict):
+							for d_name in ("SIEM_COLLECTOR", "SIEM-COLLECTOR", "SIEM"):
+								cd = h.daemons.get(d_name)
+								if cd and getattr(cd, "is_running", False):
+									collector_daemon = cd
+									self._soc_collector = cd
+									break
+						if collector_daemon:
+							break
+				if collector_daemon and hasattr(collector_daemon, "ingest_event"):
+					collector_daemon.ingest_event({
+						"id": f"ev-{event.type.lower()}-{int(time.time()*1000)}",
+						"timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+						"host": getattr(dst_dev, "name", str(event.destination)),
+						"type": event.type,
+						"severity": getattr(event, "severity", "INFO"),
+						"source": str(event.source),
+						"destination": str(event.destination),
+						"protocol": getattr(event, "protocol", "IP"),
+						"port": getattr(event, "port", None),
+						"metadata": getattr(event, "metadata", {}) or {}
+					})
 
 	def connect(self, source:Host, destination:Host, protocol:str, port:int):
 		src_ip = source.get_ip()

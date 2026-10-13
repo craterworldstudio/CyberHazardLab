@@ -62,9 +62,13 @@ class DHCPServerDaemon(ServiceDaemon):
                             # Check if this scope config applies to our target network
                             import ipaddress
                             try:
-                                net = ipaddress.IPv4Network(sc["subnet"], strict=False)
+                                sub_str = str(sc["subnet"]).strip()
+                                if "/" not in sub_str:
+                                    sub_str = f"{sub_str}/24"
+                                net = ipaddress.IPv4Network(sub_str, strict=False)
                                 target_ip_obj = ipaddress.IPv4Address(lookup_target.split('/')[0])
                                 if target_ip_obj in net:
+                                    scope.network = net
                                     if "gateway" in sc and sc["gateway"]:
                                         scope.gateway = str(sc["gateway"]).strip()
                                     if "dns" in sc and sc["dns"]:
@@ -83,6 +87,14 @@ class DHCPServerDaemon(ServiceDaemon):
                                 pass
                 if not applied_from_scopes:
                     # Fallback to single-scope format
+                    if "subnet" in cfg and cfg["subnet"]:
+                        try:
+                            sub_str = str(cfg["subnet"]).strip()
+                            if "/" not in sub_str:
+                                sub_str = f"{sub_str}/24"
+                            scope.network = ipaddress.IPv4Network(sub_str, strict=False)
+                        except Exception:
+                            pass
                     if "gateway" in cfg and cfg["gateway"]:
                         scope.gateway = str(cfg["gateway"]).strip()
                     if "dns" in cfg and cfg["dns"]:

@@ -372,6 +372,27 @@ class Host(Node):
             auth_log.contents = f"systemd-logind[1]: New session created for user root.\n"
             log_fol.add(auth_log)
 
+        kern_log = log_fol.get_item("kern.log")
+        if not kern_log:
+            kern_log = File("kern", "log")
+            kern_log.set_path(log_fol.path)
+            kern_log.contents = f"kernel: Linux version 6.5.0-generic (chl@{self.name.lower()}) #1 SMP PREEMPT_DYNAMIC\n"
+            log_fol.add(kern_log)
+
+        nginx_fol = log_fol.get_item("nginx")
+        if not nginx_fol:
+            nginx_fol = Folder("nginx")
+            nginx_fol.parent = log_fol
+            nginx_fol.path = "/var/log/nginx"
+            log_fol.add(nginx_fol)
+
+        access_log = nginx_fol.get_item("access.log")
+        if not access_log:
+            access_log = File("access", "log")
+            access_log.set_path(nginx_fol.path)
+            access_log.contents = ""
+            nginx_fol.add(access_log)
+
         # Synchronize local accounts, VFS account files, and home directories
         self._sync_account_files()
         
@@ -690,7 +711,23 @@ class Host(Node):
 
     def log_event(self, event):
         """Records an event locally into host log cache and VFS /var/log files."""
+        ev_type = getattr(event, "type", "EVENT")
+        ev_port = getattr(event, "port", None)
+        
+        # Avoid recursion loops: skip frame events and SIEM transport events
+        if ev_type in ("FRAME_RECEIVED", "FRAME_FORWARDED", "FRAME_SENT") or ev_port in (514, 51400):
+            return
+
         self.log_cache.append(event)
+
+        # Stream to SIEM Agent if running on this device
+        if hasattr(self, "daemons") and not ev_type.startswith("SIEM_"):
+            for d_name in ("SIEM_AGENT", "SIEM-AGENT"):
+                agent = self.daemons.get(d_name)
+                if agent and getattr(agent, "is_running", False):
+                    agent.forward_event(event)
+                    break
+
         vfs = getattr(self, "vfs", None)
         if not vfs:
             return
@@ -703,13 +740,34 @@ class Host(Node):
         ev_sev = getattr(event, "severity", "INFO")
         ev_meta = getattr(event, "metadata", {}) or {}
         
+        # 1. Master system log: /var/log/syslog
         line = f"{t_str} {self.name.lower()} chl[{ev_sev}]: [{ev_type}] from={ev_src} to={ev_dst} {ev_meta}\n"
-        
         syslog_file = vfs.path_to_tree("/var/log/syslog")
         if syslog_file and hasattr(syslog_file, "contents"):
             syslog_file.contents = (str(syslog_file.contents) or "") + line
             
-        if any(k in ev_type for k in ("AUTH", "LOGIN", "SSH", "SU", "REVERSE_SHELL", "ARP_SPOOF", "PORT_SCAN")):
+        # 2. Authentication & Identity: /var/log/auth.log
+        if any(k in ev_type for k in ("AUTH", "LOGIN", "SSH", "SU", "PASSWORD", "PASSWD", "USERADD", "USERDEL", "SUDO")):
             auth_file = vfs.path_to_tree("/var/log/auth.log")
             if auth_file and hasattr(auth_file, "contents"):
-                auth_file.contents = (str(auth_file.contents) or "") + line
+                u_str = ev_meta.get("user") or getattr(self, "current_user", "root")
+                auth_line = f"{t_str} {self.name.lower()} auth[{ev_sev}]: {ev_type} user={u_str} from={ev_src} {ev_meta}\n"
+                auth_file.contents = (str(auth_file.contents) or "") + auth_line
+
+        # 3. Kernel / Network Security: /var/log/kern.log
+        if any(k in ev_type for k in ("COMMAND", "ARP", "PORT", "FIREWALL", "IPTABLES", "PACKET", "ICMP", "SYN", "NET", "REVERSE", "SPOOF")):
+            kern_file = vfs.path_to_tree("/var/log/kern.log")
+            if kern_file and hasattr(kern_file, "contents"):
+                kern_line = f"{t_str} {self.name.lower()} kernel: [{ev_sev}] {ev_type} SRC={ev_src} DST={ev_dst} PROTO={getattr(event, 'protocol', 'IP')} {ev_meta}\n"
+                kern_file.contents = (str(kern_file.contents) or "") + kern_line
+
+        # 4. Web Server Access: /var/log/nginx/access.log
+        if any(k in ev_type for k in ("HTTP", "WEB", "NGINX", "CURL")):
+            nginx_file = vfs.path_to_tree("/var/log/nginx/access.log")
+            if nginx_file and hasattr(nginx_file, "contents"):
+                client_ip = str(ev_src).split(":")[0] if ev_src else "127.0.0.1"
+                status_code = ev_meta.get("status_code", 200)
+                method = ev_meta.get("method", "GET")
+                uri = ev_meta.get("uri", "/")
+                web_line = f"{client_ip} - - [{time.strftime('%d/%b/%Y:%H:%M:%S +0000')}] \"{method} {uri} HTTP/1.1\" {status_code} 512 \"-\" \"curl/7.88.1\"\n"
+                nginx_file.contents = (str(nginx_file.contents) or "") + web_line

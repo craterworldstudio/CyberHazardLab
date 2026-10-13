@@ -93,15 +93,21 @@ class ARP:
                 interface.send(frame)
 
         elif packet.operation == "REPLY":
+            prev_mac = self.cache.get(packet.sender_ip)
+            is_conflict = bool(prev_mac and prev_mac != packet.sender_mac)
             self.cache[packet.sender_ip] = packet.sender_mac
             if self.node and self.node.network:
                 self.node.network.add_event(Event(
                     type="ARP_REPLY",
-                    severity="INFO",
+                    severity="WARNING" if is_conflict else "INFO",
                     source=packet.sender_ip,
                     destination=packet.target_ip,
                     protocol="ARP",
-                    metadata={"mac": packet.sender_mac}
+                    metadata={
+                        "mac": packet.sender_mac,
+                        "previous_mac": prev_mac,
+                        "conflict": is_conflict
+                    }
                 ))
 
             # Flush all pending packets waiting for this IP

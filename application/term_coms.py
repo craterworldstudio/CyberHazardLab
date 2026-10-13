@@ -171,13 +171,34 @@ class TerminalCommandHandler:
                 entered_pass = command_str.strip()
                 users = getattr(device, "users", {})
                 if users.get(target_user) == entered_pass:
+                    prev_user = getattr(device, "current_user", "user")
                     device.current_user = target_user
                     device._terminal_sessions.pop()
+                    if hasattr(device, "log_event"):
+                        from backend.core.event import Event
+                        device.log_event(Event(
+                            type="ROOT_LOGIN" if target_user == "root" else "USER_SWITCH",
+                            severity="CRITICAL" if target_user == "root" else "INFO",
+                            source=device.name,
+                            destination=device.name,
+                            protocol="AUTH",
+                            metadata={"user": target_user, "action": "su", "previous_user": prev_user}
+                        ))
                     return ""
                 else:
                     curr["password_attempts"] = curr.get("password_attempts", 0) + 1
                     if curr["password_attempts"] >= 3:
                         device._terminal_sessions.pop()
+                        if hasattr(device, "log_event"):
+                            from backend.core.event import Event
+                            device.log_event(Event(
+                                type="AUTH_FAILED",
+                                severity="WARNING",
+                                source=device.name,
+                                destination=device.name,
+                                protocol="AUTH",
+                                metadata={"user": target_user, "action": "su_failed"}
+                            ))
                         return "su: Authentication failure"
                     return "Password: "
             if curr.get("state") == "AWAITING_PASSWD_NEW":
@@ -380,6 +401,25 @@ class TerminalCommandHandler:
             return ""
             
         cmd = parts[0]
+        cur_user = getattr(device, "current_user", "root")
+
+        # Log process and command audit event
+        if getattr(device, "network", None) and cmd not in ("exit", "logout"):
+            from backend.core.event import Event
+            device.network.add_event(Event(
+                type="COMMAND_EXECUTED",
+                severity="INFO",
+                source=device.name,
+                destination=device.name,
+                protocol="SYS",
+                metadata={
+                    "command": command_str.strip(),
+                    "cmd": cmd,
+                    "args": parts[1:],
+                    "user": cur_user
+                }
+            ))
+
         if cmd in ("exit", "logout"):
             return "logout\n[Process completed - AxiomOS local shell cannot be exited]"
 
@@ -458,6 +498,8 @@ class TerminalCommandHandler:
             return self._handle_legacy_route(device, parts)
         elif cmd == "ping":
             return self._handle_ping(device, parts)
+        elif cmd == "dhclient":
+            return self._handle_dhclient(device, parts)
         elif cmd == "curl":
             return self._handle_curl(device, parts)
         elif cmd in ("tracert", "traceroute"):
@@ -1529,33 +1571,9 @@ Usage:
             if len(parts) >= 4 and parts[2] == "client":
                 action = parts[3]
                 if action == "start":
-                    if self.ncm:
-                        try:
-                            self.ncm.add_service(device.name, "DHCP_CLIENT", "UDP", 68)
-                        except ValueError:
-                            pass # Ignore if it already exists
-                            
-                        try:
-                            self.ncm.start_service(device.name, "DHCP_CLIENT")
-                            if self.state_manager: self.state_manager.save()
-                            return "DHCP Client started. Broadcasting DHCPDISCOVER..."
-                        except Exception as e:
-                            return f"Error starting DHCP client: {str(e)}"
-                    return "DHCP Client start failed (no NCM context)."
+                    return self._handle_dhclient(device, ["dhclient"])
                 elif action == "release":
-                    if self.ncm:
-                        try:
-                            self.ncm.stop_service(device.name, "DHCP_CLIENT")
-                            self.ncm.remove_service(device.name, "DHCP_CLIENT")
-                        except: pass
-                        if getattr(device, "interfaces", []):
-                            intf = device.interfaces[0]
-                            intf.ip = None
-                            intf.subnet = None
-                            if hasattr(device, "routes"):
-                                device.routes = [r for r in device.routes if r.get("destination") != "0.0.0.0/0"]
-                        if self.state_manager: self.state_manager.save()
-                        return "DHCP lease released. IP cleared."
+                    return self._handle_dhclient(device, ["dhclient", "-r"])
                 return "Usage: ip dhcp client {start|release}"
                 
         elif obj == "dhcp-relay":
@@ -1790,24 +1808,6 @@ Options:
                     payload=arp2
                 )
                 src_intf.send(frame2)
-
-        if getattr(device, "network", None):
-            from backend.core.event import Event
-            device.network.add_event(Event(
-                type="ARP_SPOOF_DETECTED",
-                severity="CRITICAL",
-                source=device.name,
-                destination=target_ip,
-                protocol="ARP",
-                metadata={
-                    "attacker_ip": src_intf.ip,
-                    "attacker_mac": src_intf.mac,
-                    "target_ip": target_ip,
-                    "target_host": target_dev.name,
-                    "poisoned_ip": host_to_spoof,
-                    "bidirectional": bidirectional
-                }
-            ))
 
         output = f"[+] Sent ARP reply: {host_to_spoof} is-at {src_intf.mac} to {target_ip}\n"
         output += f"[+] ARP cache poisoned on {target_dev.name} ({target_ip}). Packets for {host_to_spoof} now route to {device.name}.\n"
@@ -2370,17 +2370,6 @@ PORT SPECIFICATION:
 
         output.append(f"\nNmap done: 1 IP address (1 host up) scanned in 0.15 seconds")
 
-        if getattr(device, "network", None):
-            from backend.core.event import Event
-            device.network.add_event(Event(
-                type="PORT_SCAN_DETECTED",
-                severity="HIGH",
-                source=device.name,
-                destination=resolved_ip,
-                protocol="TCP/UDP",
-                metadata={"target": target_dev.name, "ports": [p[0] for p in open_ports]}
-            ))
-
         return "\n".join(output)
 
     def _parse_nmap_ports(self, arg):
@@ -2510,8 +2499,8 @@ Options:
             if net:
                 from backend.core.event import Event
                 net.add_event(Event(
-                    type="REVERSE_SHELL_CONNECTED",
-                    severity="CRITICAL",
+                    type="NETWORK_CONNECTION",
+                    severity="INFO",
                     source=device.name,
                     destination=target_dev.name,
                     protocol="TCP",
@@ -2800,6 +2789,79 @@ Options:
             else:
                 return "Usage:\n  route\n  route add [dest_subnet] via [next_hop_ip]\n  route del [dest_subnet]"
 
+    def _handle_dhclient(self, device, parts):
+        if not device or not getattr(device, "interfaces", []):
+            return "dhclient: no interfaces found"
+        intf = device.interfaces[0]
+
+        # Check for release: dhclient -r
+        if "-r" in parts or "--release" in parts:
+            if self.ncm:
+                try:
+                    self.ncm.stop_service(device.name, "DHCP_CLIENT")
+                    self.ncm.remove_service(device.name, "DHCP_CLIENT")
+                except Exception:
+                    pass
+            intf.ip = None
+            intf.subnet = None
+            if hasattr(device, "routes"):
+                device.routes = [r for r in device.routes if str(r.get("destination")) != "0.0.0.0/0"]
+            if hasattr(device, "_generate_system_files"):
+                device._generate_system_files()
+            if self.state_manager:
+                self.state_manager.save()
+            return f"DHCPRELEASE on {intf.name} to 255.255.255.255 port 67\nKilled old client process"
+
+        # Request new lease
+        if self.ncm:
+            try:
+                self.ncm.add_service(device.name, "DHCP_CLIENT", "UDP", 68)
+            except ValueError:
+                pass
+
+            try:
+                self.ncm.start_service(device.name, "DHCP_CLIENT")
+            except Exception:
+                pass
+
+            daemon = device.get_service_daemon("DHCP_CLIENT") if hasattr(device, "get_service_daemon") else None
+            if daemon and hasattr(daemon, "send_discover"):
+                intf.ip = None
+                intf.subnet = None
+                daemon.send_discover(intf)
+            elif self.sim:
+                self.sim.start_service(device, "DHCP_CLIENT", force=True)
+
+        # Wait up to 1.5s for DHCP lease to arrive
+        t0 = time.time()
+        while time.time() - t0 < 1.5:
+            if intf.ip and intf.ip not in ("0.0.0.0", ""):
+                break
+            time.sleep(0.02)
+
+        if self.state_manager:
+            self.state_manager.save()
+
+        if intf.ip and intf.ip not in ("0.0.0.0", ""):
+            gw = getattr(device, "default_gateway", "") or getattr(intf, "gateway", "")
+            return (
+                f"Listening on LPF/{intf.name}/{intf.mac}\n"
+                f"Sending on   LPF/{intf.name}/{intf.mac}\n"
+                f"DHCPDISCOVER on {intf.name} to 255.255.255.255 port 67 interval 3\n"
+                f"DHCPOFFER of {intf.ip} from {gw or 'DHCP'}\n"
+                f"DHCPREQUEST for {intf.ip} on {intf.name} to 255.255.255.255 port 67\n"
+                f"DHCPACK of {intf.ip} from {gw or 'DHCP'}\n"
+                f"bound to {intf.ip} -- renewal in 43200 seconds."
+            )
+        else:
+            return (
+                f"Listening on LPF/{intf.name}/{intf.mac}\n"
+                f"Sending on   LPF/{intf.name}/{intf.mac}\n"
+                f"DHCPDISCOVER on {intf.name} to 255.255.255.255 port 67 interval 3\n"
+                f"No DHCPOFFERS received.\n"
+                f"No working leases in persistent database - sleeping."
+            )
+
     def _handle_ping(self, device, parts):
         if len(parts) < 2:
             return "Usage: ping [-c count] [-i interval] [-s size] [-t ttl] [-q] [-v] target_ip"
@@ -2849,6 +2911,7 @@ Options:
             return f"ping: {target_ip}: Name or service not known"
             
         output = f"PING {target_ip} ({resolved_ip}) {size}({size+28}) bytes of data.\n" if not quiet else ""
+        count = max(1, count)
         success_count = 0
         
         try:
@@ -2863,22 +2926,22 @@ Options:
                         rsource = result.get("source", "Unknown")
                         rttl = result.get("ttl", ttl)
                         if rtype == "TIME_EXCEEDED":
-                            line = f"[DELAY:{int(interval*1000)}]From {rsource} icmp_seq={j+1} Time to live exceeded\n"
+                            line = f"From {rsource} icmp_seq={j+1} Time to live exceeded\n"
                         elif rtype == "DESTINATION_UNREACHABLE":
-                            line = f"[DELAY:{int(interval*1000)}]From {rsource} icmp_seq={j+1} Destination Host Unreachable\n"
+                            line = f"From {rsource} icmp_seq={j+1} Destination Host Unreachable\n"
                         elif rtype == "TIMEOUT":
-                            line = f"[DELAY:{int(interval*1000)}]From {target_ip} icmp_seq={j+1} Request timed out\n"
+                            line = f"From {target_ip} icmp_seq={j+1} Request timed out\n"
                         else:
-                            line = f"[DELAY:{int(interval*1000)}]{size+8} bytes from {rsource}: icmp_seq={j+1} ttl={rttl} time=1 ms\n"
+                            line = f"{size+8} bytes from {rsource}: icmp_seq={j+1} ttl={rttl} time=1 ms\n"
                             success_count += 1
                             
                         if verbose and rtype:
                             line += f"  > [VERBOSE] Packet Type: {rtype}, Source: {rsource}, Payload Size: {len(result.get('payload', ''))}\n"
                     else:
-                        line = f"[DELAY:{int(interval*1000)}]{size+8} bytes from {target_ip}: icmp_seq={j+1} ttl={ttl} time=1 ms\n"
+                        line = f"{size+8} bytes from {target_ip}: icmp_seq={j+1} ttl={ttl} time=1 ms\n"
                         success_count += 1
                 else:
-                    line = f"[DELAY:{int(interval*1000)}]From {target_ip} icmp_seq={j+1} Request timed out\n"
+                    line = f"From {target_ip} icmp_seq={j+1} Request timed out\n"
                 
                 if not quiet:
                     output += line
@@ -3308,7 +3371,7 @@ Options:
         if len(parts) == 1 or parts[1] == "list":
             if len(parts) > 2 and parts[2] == "-a":
                 output = "AVAILABLE SERVICES:\n"
-                supported = ["ECHO", "HTTP", "SSH_SERVER", "SSH_CLIENT", "DHCP", "DHCP_CLIENT", "DHCP_RELAY", "DNS", "DNS_CLIENT"]
+                supported = ["ECHO", "HTTP", "SSH_SERVER", "SSH_CLIENT", "DHCP", "DHCP_CLIENT", "DHCP_RELAY", "DNS", "DNS_CLIENT", "SIEM_AGENT", "SIEM_COLLECTOR"]
                 running = {s.name.upper() for s in getattr(device, "services", []) if s.status.lower() == "running"}
                 for s in supported:
                     state = " (RUNNING)" if s in running else ""

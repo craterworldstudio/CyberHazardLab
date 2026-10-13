@@ -930,3 +930,185 @@ button {
     }
 
 }
+
+/* ============================================================
+   TRAFFIC & SUB-CHARTS (MAX 2 PER ROW)
+   ============================================================ */
+
+#sub-charts-container {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px !important;
+    padding: 1rem !important;
+    border-top: 1px solid var(--border) !important;
+    box-sizing: border-box !important;
+}
+
+@media (max-width: 900px) {
+    #sub-charts-container {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+.subchart-card {
+    background: #090e17;
+    border: 1px solid #1e293b;
+    border-radius: 4px;
+    padding: 0.8rem;
+    height: 200px;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease;
+}
+
+.subchart-card:hover {
+    border-color: rgba(0, 229, 255, 0.4);
+}
+
+.subchart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.subchart-title {
+    font-weight: 600;
+    color: #38bdf8;
+    font-size: 0.85rem;
+    font-family: var(--font-mono);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.subchart-close-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 1.1rem;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 3px;
+    transition: color 0.15s, background 0.15s;
+}
+
+.subchart-close-btn:hover {
+    color: var(--red);
+    background: rgba(255, 75, 75, 0.1);
+}
+
+/* ============================================================
+   TRAFFIC ADD DEVICE DROPDOWN
+   ============================================================ */
+
+#traffic-dropdown-btn {
+    background: #0d1524;
+    border: 1px solid #1e293b;
+    color: #38bdf8;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.35rem 0.75rem;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+}
+
+#traffic-dropdown-btn:hover {
+    background: #132038;
+    border-color: #38bdf8;
+    color: #ffffff;
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.25);
+}
+
+#traffic-dropdown-list {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    background: #090e17;
+    border: 1px solid #1e293b;
+    border-radius: 6px;
+    z-index: 200;
+    width: 280px;
+    max-height: 280px;
+    overflow-y: auto;
+    padding: 0.4rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.7);
+}
+
+.traffic-dropdown-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.45rem 0.6rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s;
+    user-select: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.traffic-dropdown-item:last-child {
+    border-bottom: none;
+}
+
+.traffic-dropdown-item:hover {
+    background: rgba(56, 189, 248, 0.08);
+}
+
+.traffic-dropdown-item.active {
+    background: rgba(0, 229, 255, 0.12);
+}
+
+.traffic-dropdown-device-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.traffic-dropdown-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 5px var(--green);
+}
+
+.traffic-dropdown-name {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: #e2e8f0;
+}
+
+.traffic-dropdown-badge {
+    font-size: 0.65rem;
+    font-family: var(--font-mono);
+    padding: 2px 5px;
+    border-radius: 3px;
+    background: #17243b;
+    color: #94a3b8;
+    text-transform: uppercase;
+}
+
+.traffic-dropdown-item.active .traffic-dropdown-name {
+    color: #00e5ff;
+    font-weight: 600;
+}
+
+/* Evidence picker pinned styling */
+.evidence-pinned-header {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #38bdf8;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+    padding-bottom: 2px;
+    border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+}

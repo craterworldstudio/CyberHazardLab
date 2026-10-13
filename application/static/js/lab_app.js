@@ -278,9 +278,10 @@ document.addEventListener("DOMContentLoaded", () => {
             window.SimulationState = state;
             
             // 1. Sync Renamed Devices from state.renames
-            if (state.renames && typeof state.renames === "object") {
+            if (state.renames && typeof state.renames === "object" && Array.isArray(state.devices)) {
                 for (const [oldName, newName] of Object.entries(state.renames)) {
                     if (oldName === newName) continue;
+                    if (!state.devices.some(b => b.name === newName)) continue;
                     const localDevice = devices.find(d => d.id === oldName);
                     if (localDevice) {
                         console.log(`[CHL:POLL] Syncing renamed node: ${oldName} -> ${newName}`);
@@ -602,11 +603,10 @@ document.addEventListener("DOMContentLoaded", () => {
             this.updatePath();
         }
 
-        // Calculate orthogonal sequence of points: start -> corner1 -> corner2 -> end
+        // Calculate sequence of points based on wiring mode (bend vs straight)
         getFullOrderedPoints() {
             let start = this.source.getCenter();
-            
-            let end = this.target.getCenter(); //const end = this.cutTargetPos ? this.cutTargetPos : this.target.getCenter();
+            let end = this.target.getCenter();
 
             if (this.isPhysicallyCut && this.cutTargetPos) {
                 if (this.retainedEnd === "target") {
@@ -616,6 +616,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             }
 
+            const wiringMode = window.CHL_WIRING_MODE || (window.SimulationState?.settings?.wiring_mode) || localStorage.getItem("CHL_WIRING_MODE") || "bend";
+
+            if (wiringMode === "straight") {
+                if (this.breakpoints && this.breakpoints.length > 0) {
+                    return [start, ...this.breakpoints, end];
+                }
+                return [start, end];
+            }
+
+            // BEND (Orthogonal Manhattan style - Default)
             let midX = this.middleSegmentOffset !== null ? this.middleSegmentOffset : Math.round((start.x + end.x) / 2);
 
             const basePoints = [
@@ -624,9 +634,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 { x: midX, y: end.y },
                 end
             ];
-        
-            if (this.breakpoints.length === 0) return basePoints;
-        
+
+            if (!this.breakpoints || this.breakpoints.length === 0) return basePoints;
+
             const combined = [start, ...this.breakpoints, end];
             const route = [];
             for (let i = 0; i < combined.length - 1; i++) {
@@ -644,7 +654,12 @@ document.addEventListener("DOMContentLoaded", () => {
         getRenderPoints() {
             const points = this.getFullOrderedPoints();
             if (!this.isPhysicallyCut) return points;
-        
+
+            const wiringMode = window.CHL_WIRING_MODE || (window.SimulationState?.settings?.wiring_mode) || localStorage.getItem("CHL_WIRING_MODE") || "bend";
+            if (wiringMode === "straight") {
+                return points;
+            }
+
             if (this.retainedEnd === "source") {
                 const cutLength = Math.max(2, Math.floor(points.length * (this.cutRatio || 0.5)));
                 return points.slice(0, cutLength);
@@ -788,12 +803,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 const pA = points[i];
                 const pB = points[i + 1];
 
-                const isHorizontal = Math.abs(pA.y - pB.y) < 1;
-                const isVertical = Math.abs(pA.x - pB.x) < 1;
-
                 // Skip zero-length segments
-                if (isHorizontal && Math.abs(pA.x - pB.x) < 2) continue;
-                if (isVertical && Math.abs(pA.y - pB.y) < 2) continue;
+                if (Math.hypot(pA.x - pB.x, pA.y - pB.y) < 2) continue;
 
                 const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
                 line.setAttribute("x1", pA.x);
@@ -801,7 +812,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 line.setAttribute("x2", pB.x);
                 line.setAttribute("y2", pB.y);
 
-                const orientation = isHorizontal ? "horizontal" : "vertical";
+                const isHorizontal = Math.abs(pA.y - pB.y) < 1;
+                const isVertical = Math.abs(pA.x - pB.x) < 1;
+                const orientation = isHorizontal ? "horizontal" : (isVertical ? "vertical" : "straight");
                 line.setAttribute("class", `segment-hitbox ${orientation}`);
                 
                 line.addEventListener("pointerdown", (e) => {
@@ -809,17 +822,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     e.preventDefault();
                     e.stopPropagation();
 
-                    //handleWireSegmentClick(this, i, orientation, e);
                     handleWireInteraction(this, i, orientation, e);
                 });
-
-                /* line.addEventListener("mousedown", (e) => {
-                    if (e.button !== 0) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    handleWireSegmentClick(this, i, orientation, e);
-                }); */
 
                 this.segmentsGroup.appendChild(line);
             }

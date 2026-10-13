@@ -37,7 +37,7 @@ class Simulation:
         self.network.on_event = self._handle_network_event
 
     def _handle_network_event(self, event: Event):
-        if event.severity in ["HIGH", "ERROR"]:
+        if event.type in ["DEVICE_ERROR", "HARDWARE_FAILURE", "CRITICAL_FAILURE"]:
             dev_name = None
             if hasattr(event, "metadata") and event.metadata:
                 dev_name = event.metadata.get("router") or event.metadata.get("host") or event.metadata.get("switch")
@@ -97,6 +97,9 @@ class Simulation:
             device_type = self.get_device_type(device_type)
 
         host = Host(name=name, device_type=device_type, network=self.network)
+        if self.is_running:
+            host.status = "ONLINE"
+            host.boot_time = time.time()
         self.hosts[name] = host
         self.network.add_host(host)
         return host
@@ -116,6 +119,9 @@ class Simulation:
         if name in self.hosts or name in self.routers or name in self.switches:
             raise ValueError(f"Device '{name}' already exists.")
         router = Router(name=name, network=self.network)
+        if self.is_running:
+            router.status = "ONLINE"
+            router.boot_time = time.time()
         self.routers[name] = router
         self.network.add_host(router)
         return router
@@ -134,6 +140,9 @@ class Simulation:
         if name in self.hosts or name in self.routers or name in self.switches:
             raise ValueError(f"Device '{name}' already exists.")
         switch = Switch(name=name, network=self.network)
+        if self.is_running:
+            switch.status = "ONLINE"
+            switch.boot_time = time.time()
         self.switches[name] = switch
         return switch
 
@@ -150,6 +159,9 @@ class Simulation:
         if name in self.hosts or name in self.routers or name in self.switches:
             raise ValueError(f"Device '{name}' already exists.")
         ap = AccessPoint(name=name, network=self.network)
+        if self.is_running:
+            ap.status = "ONLINE"
+            ap.boot_time = time.time()
         self.switches[name] = ap
         return ap
 
@@ -462,6 +474,21 @@ class Simulation:
             host.status = ("ONLINE" if self.is_running else "OFFLINE") if connected else "ERROR"
             if old_status != host.status:
                 updated.append(host.name)
+
+        for router in self.routers.values():
+            connected = any(i.link is not None for i in router.interfaces)
+            old_status = router.status
+            router.status = ("ONLINE" if self.is_running else "OFFLINE") if connected else "ERROR"
+            if old_status != router.status:
+                updated.append(router.name)
+
+        for switch in self.switches.values():
+            connected = any(p.link is not None for p in switch.ports.values()) or getattr(switch, "is_wireless", False)
+            old_status = switch.status
+            switch.status = ("ONLINE" if self.is_running else "OFFLINE") if connected else "ERROR"
+            if old_status != switch.status:
+                updated.append(switch.name)
+
         return updated
 
     # ========================================================
@@ -486,10 +513,10 @@ class Simulation:
             ttl=ttl
         )
         res = source.send_ip_packet(packet, out_interface=intf)
-        # Wait up to 1.5s for tick-based delivery and ICMP reply
+        # Wait up to 1.2s for delivery and ICMP reply (supports multi-hop routing and ARP resolution)
         start_wait = time.time()
-        while time.time() - start_wait < 1.5:
+        while time.time() - start_wait < 1.2:
             if source.last_icmp_result is not None:
                 break
-            time.sleep(0.01)
+            time.sleep(0.005)
         return source.last_icmp_result

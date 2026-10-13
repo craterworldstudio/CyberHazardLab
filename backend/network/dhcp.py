@@ -4,7 +4,10 @@ from typing import Any
 
 class DHCPScope:
     def __init__(self, subnet: str, start_ip: str, end_ip: str, gateway: str, dns: str = "8.8.8.8", lease_time: int = 120, dhcp=None):
-        self.network = ipaddress.ip_network(subnet, strict=False)
+        sub_str = str(subnet).strip()
+        if "/" not in sub_str:
+            sub_str = f"{sub_str}/24"
+        self.network = ipaddress.ip_network(sub_str, strict=False)
         self.start_ip = ipaddress.ip_address(start_ip)
         self.end_ip = ipaddress.ip_address(end_ip)
         self.gateway = gateway
@@ -181,7 +184,10 @@ class DHCP:
 
     def add_scope(self, subnet: str, start_ip: str, end_ip: str, gateway: str, dns: str = "8.8.8.8", lease_time: int = 120) -> DHCPScope:
         # Avoid duplicate scope for same network
-        net = ipaddress.ip_network(subnet, strict=False)
+        sub_str = str(subnet).strip()
+        if "/" not in sub_str:
+            sub_str = f"{sub_str}/24"
+        net = ipaddress.ip_network(sub_str, strict=False)
         for s in self.scopes:
             if s.network == net:
                 s.start_ip = ipaddress.ip_address(start_ip)
@@ -192,14 +198,16 @@ class DHCP:
                 s.dhcp = self
                 return s
 
-        scope = DHCPScope(subnet, start_ip, end_ip, gateway, dns, lease_time, dhcp=self)
+        scope = DHCPScope(sub_str, start_ip, end_ip, gateway, dns, lease_time, dhcp=self)
         self.scopes.append(scope)
         return scope
 
     def get_scope(self, subnet_or_ip: str) -> DHCPScope | None:
+        raw_str = str(subnet_or_ip).strip()
         try:
             # Check direct subnet match
-            target_net = ipaddress.ip_network(subnet_or_ip, strict=False)
+            sub_str = raw_str if "/" in raw_str else f"{raw_str}/24"
+            target_net = ipaddress.ip_network(sub_str, strict=False)
             for s in self.scopes:
                 if s.network == target_net:
                     return s
@@ -208,7 +216,7 @@ class DHCP:
 
         # Check contains IP
         try:
-            target_ip = ipaddress.ip_address(subnet_or_ip)
+            target_ip = ipaddress.ip_address(raw_str.split('/')[0].strip())
             for s in self.scopes:
                 if target_ip in s.network:
                     return s
