@@ -36,14 +36,14 @@ Designed specifically for students and aspiring network/security professionals, 
 | **Phase 2**   | Local Networking                  | `███████████████████` 9/9   | ✅ Done |
 | **Phase 3**   | Transport Layer                   | `███████████████████` 8/8   | ✅ Done |
 | **Phase 4**   | Network Infrastructure            | `███████████████████` 8/8   | ✅ Done |
-| **Phase 4.5** | Network Advanced Infrastructure   | `█████░░░░░░░░░░░░░░` 1/4   | 🟡 In Progress |
+| **Phase 4.5** | Network Advanced Infrastructure   | `████████░░░░░░░░░░░` 2/5   | 🟡 In Progress |
 | **Phase 5**   | Application Layer                 | `███████████████████` 5/5   | ✅ Done |
 | **Phase 6**   | Interactive Lab Frontend          | `███████████████████` 16/16 | ✅ Done |
-| **Phase 7**   | SOC Integration                   | `███░░░░░░░░░░░░░░░░` 1/6   | 🟡 In Progress |
+| **Phase 7**   | SOC Integration & Rule Engine     | `███████████████████` 10/10 | ✅ Done |
 | **Phase 8**   | Penetrator Dashboard              | `░░░░░░░░░░░░░░░░░░░` 0/5   | ❌ Not Started |
 
 *I probably won't implement all of 4.5 soon*
-*Also a good chance that I won't be implementing the Penetrator Dashboard because this project too way too long.*
+*Also a good chance that I won't be implementing the Penetrator Dashboard because this project took way too long.*
 ---
 
 ### 🔍 Detailed Phase Breakdown
@@ -86,6 +86,7 @@ Designed specifically for students and aspiring network/security professionals, 
 - [x] DNS resolution architecture
 Advanced Infrastructure:
 - - [x] NAT (Network Address Translation)
+- - [x] Wireless Access Points (802.11 AP emulation & coverage radius)
 - - [ ] L1 Hub Emulation
 - - [ ] State-based Firewall & ACLs
 - - [ ] IDS/IPS Node Simulation
@@ -95,7 +96,7 @@ Advanced Infrastructure:
 - [x] Core DNS services
 - [x] Secure Shell (SSH) emulation
 - [x] Echo Service Integration
-- [x] Fully integrated DHCP services
+- [x] Fully integrated DHCP services (`dhclient`, `dhclient -r`, auto-provisioning scopes)
 - [x] HTTP/HTTPS protocol support
 
 #### PHASE 6 — Interactive Lab Frontend ✅
@@ -109,7 +110,7 @@ Advanced Infrastructure:
 - [x] Interface & SwitchPort physical assignment API
 - [x] Service spawning and management via UI
 - [x] Device node hardware resets and error state rendering
-- [x] NCM Terminal (Interactive console for devices, e.g. ping, tracert, ipconfig/ifconfig, hostname, netsh, netstat, ss, arp, nslookup, ssh)
+- [x] NCM Terminal (Interactive console for devices, e.g. ping, tracert, ipconfig/ifconfig, hostname, netsh, netstat, ss, arp, nslookup, ssh, dhclient, arpspoof, nmap, nc)
 - [x] Payload Manager (Manual ICMP/TCP/UDP packet forging)
 - [x] Dynamic MAC Learning & Routing Table UI visualization
 - [x] PingSweep and TraceRoute and Curl Integration via Validate
@@ -117,13 +118,17 @@ Advanced Infrastructure:
 - [x] PCAP Export (Download traffic captures for Wireshark)
 
 
-#### PHASE 7 — Application Integration 🟡
-- [x] Network Telemetry generation
-- [ ] Packet & event ingestion engines
-- [ ] Custom detection rule matching
-- [ ] Real-time alerting framework
-- [ ] Security operations monitoring dashboard
-- [ ] Incident investigation workflows
+#### PHASE 7 — SOC Integration & Detection Engine ✅
+- [x] Network Telemetry generation & live interface counters (TX/RX packets, uptime)
+- [x] Endpoint SIEM Agent (`SIEM_AGENT` RFC 5424 / UDP 514 syslog forwarder)
+- [x] SIEM Log Collector daemon (`SIEM_COLLECTOR` high-throughput asynchronous queue)
+- [x] Sigma-compatible YAML detection rule engine (`SOCDetectionEngine`)
+- [x] Interactive YAML rule creator, validator, and live deployment in SOC Lab UI
+- [x] Real-time security alerting framework with cooldown windows & deduplication
+- [x] Security operations monitoring dashboard (live overview, event rates, doughnut charts, host posture grid)
+- [x] Dynamic host threat posture tracking (`Normal` → `Suspicious` → `Compromised`)
+- [x] Incident investigation & alert chaining workflows (MITRE ATT&CK alignment & timeline evidence)
+- [x] Full event stream viewer with multi-attribute filtering and metadata inspection
 
 #### PHASE 8 — Penetrator Dashboard ❌
 - [ ] Active port scanning utilities

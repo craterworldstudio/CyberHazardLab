@@ -711,10 +711,14 @@ class API:
                         if a.get("id") == alert_id:
                             a["status"] = new_status
                             break
+                    from backend.services.soc_engine import SOCDetectionEngine
+                    SOCDetectionEngine.recalculate_threat_levels(sim)
                     self.state_manager.save()
                     return {"status": "success"}
                 elif method == "DELETE":
                     sim.soc_state["alerts"] = [a for a in sim.soc_state.get("alerts", []) if a.get("id") != alert_id]
+                    from backend.services.soc_engine import SOCDetectionEngine
+                    SOCDetectionEngine.recalculate_threat_levels(sim)
                     self.state_manager.save()
                     return {"status": "success"}
 

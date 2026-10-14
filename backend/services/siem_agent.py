@@ -50,9 +50,21 @@ class SIEMAgentDaemon(ServiceDaemon):
         self.collector_port = int(cfg.get("port", 514))
         self.transport = cfg.get("transport", "UDP")
 
-        # Auto-discover collector IP if not specified in config
-        if not self.collector_ip and getattr(self.host, "network", None):
-            self.collector_ip = self._discover_collector_ip()
+        # Auto-discover collector IP if not specified in config or if target lacks a collector
+        discovered = self._discover_collector_ip()
+        if not self.collector_ip and discovered:
+            self.collector_ip = discovered
+        elif self.collector_ip and discovered and self.collector_ip != discovered:
+            network = getattr(self.host, "network", None)
+            sim = getattr(network, "orchestrator", None) if network else None
+            if sim:
+                has_collector = any(
+                    any(s.name.upper() in ("SIEM_COLLECTOR", "SIEM-COLLECTOR", "SIEM") and getattr(s, "status", "").upper() == "RUNNING" for s in getattr(dev, "services", []))
+                    for dev in list(sim.hosts.values()) + list(sim.routers.values())
+                    if dev.interfaces and any(i.ip == self.collector_ip for i in dev.interfaces)
+                )
+                if not has_collector:
+                    self.collector_ip = discovered
 
     def _discover_collector_ip(self):
         """Looks for any host in the network running the SIEM_COLLECTOR service."""

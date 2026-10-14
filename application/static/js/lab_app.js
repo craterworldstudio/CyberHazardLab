@@ -313,8 +313,8 @@ document.addEventListener("DOMContentLoaded", () => {
             for (const backendDevice of state.devices) {
                 const localDevice = devices.find(d => d.id === backendDevice.name);
                 if (localDevice) {
-                    if (backendDevice.status !== localDevice.status) {
-                        localDevice.updateStatus(backendDevice.status);
+                    if (backendDevice.status !== localDevice.status || backendDevice.soc_threat_level !== localDevice.soc_threat_level) {
+                        localDevice.updateStatus(backendDevice.status, backendDevice.soc_threat_level);
                     }
                     if (backendDevice.coverage_radius !== undefined) {
                         const isRecentlyUpdated = localDevice._lastRadiusUpdateTime && (Date.now() - localDevice._lastRadiusUpdateTime < 3500);
@@ -444,10 +444,11 @@ document.addEventListener("DOMContentLoaded", () => {
     // =========================================
 
     class NetworkDevice {
-        constructor(id, type, status, x, y) {
+        constructor(id, type, status, x, y, soc_threat_level = "Normal") {
             this.id = id;
             this.type = type;
             this.status = status || "OFFLINE";
+            this.soc_threat_level = soc_threat_level || "Normal";
             this.position = { x, y };
             if (this.type && this.type.toUpperCase() === "ACCESSPOINT") {
                 this.coverageRadius = 200;
@@ -469,7 +470,7 @@ document.addEventListener("DOMContentLoaded", () => {
             this.element.appendChild(this.label);    
 
             this.updatePosition(x, y);
-            this.updateStatus(this.status);
+            this.updateStatus(this.status, this.soc_threat_level);
 
             // Device dragging
             this.element.addEventListener("pointerdown", (event) => this.onPointerDown(event));
@@ -496,10 +497,15 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
 
-        updateStatus(status) {
+        updateStatus(status, soc_threat_level) {
             this.status = status;
+            if (soc_threat_level !== undefined) {
+                this.soc_threat_level = soc_threat_level;
+            }
             const config = CHL.DEVICE_CONFIG[this.type] || CHL.DEVICE_CONFIG.PC;
-            const iconPath = config.icons ? (config.icons[this.status] || config.icons.OFFLINE) : config.icon;
+            // Compromised machines visually render in their ERROR state while remaining functional
+            const visualKey = (this.soc_threat_level === "Compromised" && this.status !== "OFFLINE") ? "ERROR" : this.status;
+            const iconPath = config.icons ? (config.icons[visualKey] || config.icons[this.status] || config.icons.OFFLINE) : config.icon;
             if (iconPath) {
                 this.img.src = iconPath;
                 this.img.style.display = "";
@@ -515,6 +521,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 } else {
                     this.placeholder.style.display = "flex";
                 }
+            }
+
+            if (this.soc_threat_level === "Compromised") {
+                this.element.classList.add("device-compromised");
+            } else {
+                this.element.classList.remove("device-compromised");
             }
         }
 
@@ -1315,7 +1327,13 @@ document.addEventListener("DOMContentLoaded", () => {
             `[CHL] Backend created ${backendDevice.name} (${backendDevice.type})`
         );
 
-        const device = new NetworkDevice( backendDevice.name, type, backendDevice.status, x, y
+        const device = new NetworkDevice(
+            backendDevice.name,
+            type,
+            backendDevice.status,
+            x,
+            y,
+            backendDevice.soc_threat_level
         );
 
         if (backendDevice.coverage_radius !== undefined) {

@@ -17,7 +17,7 @@ async function loadDevices() {
             const config = CHL.DEVICE_CONFIG[type] || CHL.DEVICE_CONFIG.PC;
             
             const pos = layout[backendDevice.name] || {x: 0, y: 0};
-            const device = new CHL.NetworkDevice( backendDevice.name, type, backendDevice.status, pos.x, pos.y );
+            const device = new CHL.NetworkDevice( backendDevice.name, type, backendDevice.status, pos.x, pos.y, backendDevice.soc_threat_level );
             if (backendDevice.coverage_radius !== undefined) {
                 device.coverageRadius = backendDevice.coverage_radius;
             } else if (type === "ACCESSPOINT") {

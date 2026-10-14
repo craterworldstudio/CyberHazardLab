@@ -380,8 +380,12 @@ window.renderNetworkTopology = function(devices, links, layout) {
     coreDevices.forEach(d => {
         const pt = coords[d.name] || { x: width / 2, y: height / 2 };
         const type = (d.type || "pc").toUpperCase();
-        const threat = d.soc_threat_level || "Normal";
-        const ringColor = threat === "Compromised" ? "var(--red)" : (threat === "Suspicious" ? "var(--orange)" : (d.status === "ONLINE" ? "var(--green)" : "var(--text-muted)"));
+        const isCompromised = (threat === "Compromised");
+        const ringColor = isCompromised ? "var(--red)" : (threat === "Suspicious" ? "var(--orange)" : (d.status === "ONLINE" ? "var(--green)" : "var(--text-muted)"));
+        const fillBg = isCompromised ? "rgba(239, 68, 68, 0.22)" : "#080c10";
+        const strokeW = isCompromised ? "3.5" : "2.8";
+        const glowStyle = isCompromised ? 'style="filter: drop-shadow(0 0 10px rgba(239, 68, 68, 0.9)); cursor: pointer;"' : 'style="cursor: pointer;"';
+        const labelColor = isCompromised ? "var(--red)" : "#00e5ff";
 
         let iconSymbol = "🖥";
         if (type === "ROUTER") iconSymbol = "⬡";
@@ -390,10 +394,10 @@ window.renderNetworkTopology = function(devices, links, layout) {
         else if (type === "SERVER") iconSymbol = "🖳";
 
         svgHtml += `
-            <g class="topology-node" data-device-name="${d.name.replace(/"/g, '&quot;')}" style="cursor: pointer;">
-                <circle cx="${pt.x}" cy="${pt.y}" r="24" fill="#080c10" stroke="${ringColor}" stroke-width="2.8" />
-                <text x="${pt.x}" y="${pt.y + 5}" font-size="15" text-anchor="middle" fill="#d5ebf2" pointer-events="none">${iconSymbol}</text>
-                <text x="${pt.x}" y="${pt.y + 38}" font-size="11" font-family="Courier New, monospace" text-anchor="middle" fill="#00e5ff" font-weight="bold" pointer-events="none">${d.name}</text>
+            <g class="topology-node" data-device-name="${d.name.replace(/"/g, '&quot;')}" ${glowStyle}>
+                <circle cx="${pt.x}" cy="${pt.y}" r="24" fill="${fillBg}" stroke="${ringColor}" stroke-width="${strokeW}" />
+                <text x="${pt.x}" y="${pt.y + 5}" font-size="15" text-anchor="middle" fill="${isCompromised ? '#ff8888' : '#d5ebf2'}" pointer-events="none">${iconSymbol}</text>
+                <text x="${pt.x}" y="${pt.y + 38}" font-size="11" font-family="Courier New, monospace" text-anchor="middle" fill="${labelColor}" font-weight="bold" pointer-events="none">${d.name}</text>
             </g>
         `;
     });

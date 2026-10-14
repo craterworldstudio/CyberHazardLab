@@ -895,7 +895,7 @@ ${eps[path]}
                 <div>
                     <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// TARGET COLLECTOR IP</div>
                     <div style="font-size: 9px; color: #5c6b73; margin-bottom: 4px;">Destination SOC Collector IP to receive RFC 5424 syslog stream over UDP.</div>
-                    <input type="text" class="ncm-cfg-svc-collector-ip" id="ncm-cfg-svc-collector-ip-${deviceName}" value="${cfg.collector_ip || ''}" placeholder="e.g., 10.0.0.10" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
+                    <input type="text" class="ncm-cfg-svc-collector-ip" id="ncm-cfg-svc-collector-ip-${deviceName}" value="${cfg.collector_ip || ''}" placeholder="e.g., 10.0.0.14" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 6px; font-family: monospace; font-size: 11px;">
                 </div>
                 <div>
                     <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// SYSLOG PORT</div>
@@ -1855,9 +1855,11 @@ function renderNCMHealth(window, health) {
     
     const deviceName = window.dataset.device || "";
     
-    const st = (health.status || "UNKNOWN").toUpperCase();
+    const isCompromised = (health.soc_threat_level === "Compromised");
+    const st = isCompromised ? "ERROR (COMPROMISED)" : (health.status || "UNKNOWN").toUpperCase();
     let statusColor = "#9ca3af"; // Default gray
-    if (st === "ONLINE" || st === "ON") statusColor = "#4ade80"; // Green
+    if (isCompromised) statusColor = "#ef4444"; // Red
+    else if (st === "ONLINE" || st === "ON") statusColor = "#4ade80"; // Green
     else if (st === "OFFLINE" || st === "OFF") statusColor = "#ef4444"; // Red
     else if (st === "ERROR" || st === "FAULT" || st === "COMPROMISED") statusColor = "#8b0000"; // Dark Blood Red
 
@@ -2046,7 +2048,7 @@ async function addNCMService(deviceName, win) {
         proto = "UDP";
         port = 514;
         const targetIpInput = document.getElementById(`svc-target-ip-${deviceName}`);
-        config.collector_ip = (targetIpInput && targetIpInput.value) ? targetIpInput.value.trim() : "10.0.0.10";
+        config.collector_ip = (targetIpInput && targetIpInput.value) ? targetIpInput.value.trim() : "10.0.0.14";
         config.port = 514;
     }
     else if (preset === "SIEM_COLLECTOR") {

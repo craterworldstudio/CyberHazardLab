@@ -60,6 +60,7 @@ class NetworkConfigurationManager:
 
         return {
             "status": status,
+            "soc_threat_level": getattr(device, "soc_threat_level", "Normal"),
             "uptime": uptime_str,
             "interfaces_active": up_interfaces,
             "interfaces_total": total_interfaces,

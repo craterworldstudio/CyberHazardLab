@@ -555,7 +555,7 @@ class Node:
             if self.network:
                 self.network.add_event(Event(
                     type="UDP_PORT_UNREACHABLE",
-                    severity="HIGH",
+                    severity="WARNING",
                     source=packet.source_ip,
                     destination=packet.destination_ip,
                     protocol="UDP",

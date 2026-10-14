@@ -1,5 +1,6 @@
 import time
 import uuid
+import re
 try:
     import yaml
 except ImportError:
@@ -529,6 +530,10 @@ detection:
         # 3. Evaluate aggregation if configured
         aggregation = detection.get("aggregation")
         if aggregation:
+            # If a command/tool execution matched directly, allow immediate alert
+            if selection_results.get("selection_tool") or selection_results.get("selection_cmd"):
+                return True
+
             # Pass a selector function that checks if past events also match non-filter selections
             def history_selector(past_ev):
                 for b_name, b_cont in detection.items():
@@ -600,14 +605,62 @@ detection:
             if len(alerts) > self.max_alerts:
                 alerts.pop()
 
-            # Update host threat level
-            src_name = event_data.get("source") or event_data.get("host")
-            target_device = sim.hosts.get(src_name) or sim.routers.get(src_name)
-            if not target_device and getattr(sim, "network", None) and hasattr(sim.network, "get_host_by_ip"):
-                src_ip = str(src_name).split(":")[0] if src_name else ""
-                target_device = sim.network.get_host_by_ip(src_ip)
-            if target_device:
+            # Update host threat level for both target victim and attacking source
+            meta = event_data.get("metadata", {}) or {}
+            src_dev = self.resolve_device(sim, event_data.get("source")) or self.resolve_device(sim, event_data.get("host"))
+            dst_dev = self.resolve_device(sim, meta.get("host")) or self.resolve_device(sim, event_data.get("destination"))
+
+            for target_device in filter(None, {src_dev, dst_dev}):
                 if severity == "CRITICAL":
                     target_device.soc_threat_level = "Compromised"
-                elif severity in ("HIGH", "WARNING") and getattr(target_device, "soc_threat_level", "Normal") != "Compromised":
+                elif severity in ("HIGH", "WARNING", "MEDIUM") and getattr(target_device, "soc_threat_level", "Normal") != "Compromised":
                     target_device.soc_threat_level = "Suspicious"
+
+    @staticmethod
+    def resolve_device(sim, name_or_ip):
+        """Resolves device object from hostname, device id, or IP string."""
+        if not sim or not name_or_ip:
+            return None
+        name_str = str(name_or_ip).split(":")[0].strip()
+        dev = sim.hosts.get(name_str) or sim.routers.get(name_str) or sim.switches.get(name_str)
+        if not dev and getattr(sim, "network", None) and hasattr(sim.network, "get_host_by_ip"):
+            dev = sim.network.get_host_by_ip(name_str)
+        return dev
+
+    @classmethod
+    def recalculate_threat_levels(cls, sim):
+        """Recalculates all device threat levels dynamically based on active unresolved alerts."""
+        if not sim or not hasattr(sim, "soc_state"):
+            return
+
+        active_alerts = [a for a in sim.soc_state.get("alerts", []) if a.get("status") != "RESOLVED"]
+        all_devs = list(sim.hosts.values()) + list(sim.routers.values())
+
+        device_max_sev = {}
+        for alert in active_alerts:
+            sev = (alert.get("severity") or "INFO").upper()
+            ev = alert.get("event", {}) or {}
+            meta = ev.get("metadata", {}) or {}
+
+            associated_devs = {
+                cls.resolve_device(sim, ev.get("source")),
+                cls.resolve_device(sim, ev.get("host")),
+                cls.resolve_device(sim, ev.get("destination")),
+                cls.resolve_device(sim, meta.get("host"))
+            }
+
+            for d in associated_devs:
+                if d:
+                    cur_rank = {"CRITICAL": 3, "HIGH": 2, "WARNING": 2, "MEDIUM": 1, "LOW": 0, "INFO": 0}.get(sev, 0)
+                    prev_rank = device_max_sev.get(d.name, -1)
+                    if cur_rank > prev_rank:
+                        device_max_sev[d.name] = cur_rank
+
+        for dev in all_devs:
+            rank = device_max_sev.get(dev.name, -1)
+            if rank >= 3:
+                dev.soc_threat_level = "Compromised"
+            elif rank >= 1:
+                dev.soc_threat_level = "Suspicious"
+            else:
+                dev.soc_threat_level = "Normal"

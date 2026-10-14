@@ -398,6 +398,34 @@ body {
     color: var(--cyan);
 }
 
+/* --------------------------------------------
+   Compromised / Error State Device
+   -------------------------------------------- */
+
+.device-node.device-compromised {
+    outline: 1.5px solid #ef4444;
+    outline-offset: 4px;
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.45);
+    animation: pulse-compromised 2.2s infinite ease-in-out;
+}
+
+.device-node.device-compromised .device-label {
+    color: #ef4444 !important;
+    font-weight: 900;
+    text-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+}
+
+@keyframes pulse-compromised {
+    0%, 100% {
+        box-shadow: 0 0 8px rgba(239, 68, 68, 0.35);
+        outline-color: rgba(239, 68, 68, 0.7);
+    }
+    50% {
+        box-shadow: 0 0 16px rgba(239, 68, 68, 0.7);
+        outline-color: rgba(239, 68, 68, 1);
+    }
+}
+
 
 
 
