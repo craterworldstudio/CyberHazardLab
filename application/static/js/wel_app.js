@@ -68,7 +68,18 @@ const telemetryLogs = [
 
 document.addEventListener("DOMContentLoaded", () => {
     const streamContainer = document.getElementById("telemetryStream");
-    const maxVisibleLines = 45;
+    
+    function getMaxVisibleLines() {
+        // Line height is ~11px font with 1.4 line-height (15.4px) + 3px gap ≈ 18.4px
+        // Calculate lines required to completely cover viewport depth + buffer
+        const availableHeight = window.innerHeight || document.documentElement.clientHeight || 1080;
+        return Math.max(60, Math.ceil(availableHeight / 17) + 15);
+    }
+
+    let maxVisibleLines = getMaxVisibleLines();
+    window.addEventListener("resize", () => {
+        maxVisibleLines = getMaxVisibleLines();
+    });
 
     // Helper: Generate current real-time HH:MM:SS timestamp
     function getFormattedTime() {
@@ -112,14 +123,33 @@ document.addEventListener("DOMContentLoaded", () => {
 
         streamContainer.appendChild(line);
 
-        // Maintain performance limit
-        if (streamContainer.children.length > maxVisibleLines) {
+        // Maintain performance limit with dynamic line count
+        while (streamContainer.children.length > maxVisibleLines) {
             streamContainer.removeChild(streamContainer.firstChild);
         }
 
         // 4. Trigger next event at a RANDOM time interval (between 30ms and 210ms)
         const randomDelay = Math.floor(Math.random() * 180) + 30;
         setTimeout(addTelemetryLine, randomDelay);
+    }
+
+    // Populate initial batch so zooming or loading immediately displays full screen of logs
+    for (let i = 0; i < maxVisibleLines; i++) {
+        const baseLog = getRandomItem(telemetryLogs);
+        const timestamp = getFormattedTime();
+        let formattedLog = baseLog.replace(/\[\d{2}:\d{2}:\d{2}\]/, `[${timestamp}]`);
+        const line = document.createElement("div");
+        line.className = "telemetry-line";
+        if (formattedLog.includes("UNREACHABLE") || formattedLog.includes("FLOOD") || formattedLog.includes("ALERT") || formattedLog.includes("DROP")) {
+            line.innerHTML = `<span class="event-warn">${formattedLog}</span>`;
+        } else if (formattedLog.includes("ROUTE_TABLE_DUMP") || formattedLog.includes("ARP_TABLE_DUMP")) {
+            line.innerHTML = `<span class="event-cyan">${formattedLog}</span>`;
+        } else if (formattedLog.includes("SERVICE_") || formattedLog.includes("DHCP_") || formattedLog.includes("INTF_STATE")) {
+            line.innerHTML = `<span class="event-info">${formattedLog}</span>`;
+        } else {
+            line.innerHTML = `<span class="event-muted">${formattedLog}</span>`;
+        }
+        streamContainer.appendChild(line);
     }
 
     // Start the recursive random ticker

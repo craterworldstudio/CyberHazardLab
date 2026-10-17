@@ -41,17 +41,22 @@ class HTTPServerDaemon(ServiceDaemon):
                     protocol="HTTP",
                     metadata={"payload": request_line, "host": self.host.name}
                 ))
-            return "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\n\r\nFATAL: SQL Injection Detected! Database connection dropped."
+            return "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html\r\n\r\n<!DOCTYPE html><html><head><title>500 Internal Error</title><style>body{background:#080c10;color:#ff5555;font-family:monospace;padding:40px;margin:0;}h1{color:#ff5555;text-shadow:0 0 10px #ff0055;}a{color:#00e5ff;}</style></head><body><h1>500 // INTERNAL SERVER ERROR</h1><p>FATAL: SQL Injection Detected! Database connection dropped.</p><p><a href=\"/\">&lt; Return to Safety</a></p></body></html>"
             
         parts = request_line.split()
         if len(parts) >= 2 and parts[0] in ("GET", "POST"):
             method = parts[0]
-            path = parts[1]
+            raw_path = parts[1]
+            clean_path = raw_path.split("?")[0] if "?" in raw_path else raw_path
             
-            if path in self.vfs:
-                content = self.vfs[path]
+            if clean_path in self.vfs:
+                content = self.vfs[clean_path]
+                return f"HTTP/1.1 200 OK\r\nContent-Length: {len(content)}\r\nContent-Type: text/html\r\n\r\n{content}"
+            elif raw_path in self.vfs:
+                content = self.vfs[raw_path]
                 return f"HTTP/1.1 200 OK\r\nContent-Length: {len(content)}\r\nContent-Type: text/html\r\n\r\n{content}"
             else:
-                return "HTTP/1.1 404 Not Found\r\n\r\n404 - Page not found."
+                not_found_html = f"<!DOCTYPE html><html><head><title>404 Not Found</title><style>body{{background:#080c10;color:#ff5555;font-family:monospace;padding:40px;margin:0;}}h1{{color:#ff5555;text-shadow:0 0 10px #ff0055;}}a{{color:#00e5ff;}}</style></head><body><h1>404 // OBJECT NOT FOUND</h1><p>The requested endpoint '{clean_path}' does not exist on this server.</p><p><a href=\"/\">&lt; Return to Home</a></p></body></html>"
+                return f"HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\nContent-Length: {len(not_found_html)}\r\n\r\n{not_found_html}"
                 
-        return "HTTP/1.1 400 Bad Request\r\n\r\nInvalid HTTP Request."
+        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n<!DOCTYPE html><html><head><title>400 Bad Request</title><style>body{background:#080c10;color:#ffaa00;font-family:monospace;padding:40px;margin:0;}</style></head><body><h1>400 // BAD REQUEST</h1><p>Invalid HTTP Request.</p></body></html>"

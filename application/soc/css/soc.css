@@ -767,11 +767,13 @@ button {
 
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
 
-    padding: 20px;
+    padding: 16px 20px;
 
     overflow-x: auto;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
 }
 
 
@@ -811,6 +813,17 @@ button {
     flex-shrink: 0;
 
     background: var(--border-bright);
+}
+
+.zone-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--cyan) !important;
+    box-shadow: 0 4px 16px rgba(0, 229, 255, 0.15) !important;
+}
+
+.zone-card button:hover {
+    color: #fff !important;
+    text-shadow: 0 0 8px var(--cyan);
 }
 
 

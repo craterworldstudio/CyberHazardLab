@@ -97,6 +97,9 @@ class API:
         if manager == "soc":
             return self._handle_soc(method, resource, body)
 
+        if manager == "attacker":
+            return self._handle_attacker(method, resource, body)
+
         raise ValueError(
             f"Unknown API manager: {manager}"
         )
@@ -107,19 +110,17 @@ class API:
 
     def _handle_simulation(self, method, resource, body):
         if method == "GET" and resource == ["settings"]:
-            return getattr(self.ntm.simulation, "settings", {
-                "network_name": getattr(self.ntm.simulation, "name", "Cyber Hazard Network"),
-                "dhcp_mode": "manual",
-                "dns_mode": "manual",
-                "default_ttl": 64
-            })
+            settings = dict(getattr(self.ntm.simulation, "settings", {}) or {})
+            settings["network_name"] = getattr(self.ntm.simulation, "name", "Cyber Hazard Network")
+            return settings
             
         if method == "POST" and resource == ["settings"]:
-            if not hasattr(self.ntm.simulation, "settings"):
+            if not hasattr(self.ntm.simulation, "settings") or not isinstance(self.ntm.simulation.settings, dict):
                 self.ntm.simulation.settings = {}
             self.ntm.simulation.settings.update(body)
             if "network_name" in body:
-                self.ntm.simulation.name = body["network_name"]
+                self.ntm.simulation.name = str(body["network_name"]).strip()
+                self.ntm.simulation.settings["network_name"] = self.ntm.simulation.name
             self.state_manager.save()
             return {"status": "success", "settings": self.ntm.simulation.settings}
 
@@ -149,8 +150,16 @@ class API:
             if isinstance(soc_state, dict):
                 self.ntm.simulation.soc_state = dict(soc_state)
             
-            self.ntm.simulation.name = sim_data.get("name", "Cyber Hazard Network")
-            self.ntm.simulation.settings = sim_data.get("settings", {})
+            net_name = sim_data.get("name") or body.get("name")
+            if not net_name and isinstance(body.get("settings"), dict):
+                net_name = body.get("settings", {}).get("network_name")
+            if not net_name and isinstance(sim_data.get("settings"), dict):
+                net_name = sim_data.get("settings", {}).get("network_name")
+            self.ntm.simulation.name = net_name or "Cyber Hazard Network"
+
+            settings = sim_data.get("settings") or body.get("settings") or {}
+            self.ntm.simulation.settings = dict(settings)
+            self.ntm.simulation.settings["network_name"] = self.ntm.simulation.name
             
             # Devices
             for d in sim_data.get("devices", []):
@@ -190,6 +199,13 @@ class API:
                         dev.user_accounts = dict(d["user_accounts"])
                     if hasattr(dev, "_sync_account_files"):
                         dev._sync_account_files()
+                    if "vfs" in d and hasattr(dev, "vfs"):
+                        from backend.database.fs import deserialize_vfs
+                        deserialize_vfs(dev.vfs, d["vfs"])
+                    if "is_attacker" in d:
+                        dev.is_attacker = bool(d["is_attacker"])
+                    if "attacker_motd" in d:
+                        dev.attacker_motd = str(d["attacker_motd"])
                 
             # Links
             for l in sim_data.get("links", []):
@@ -437,6 +453,8 @@ class API:
                 }
                 for e in events
             ]
+        if method == "GET" and resource == ["zones"]:
+            return self._get_dynamic_zones()
             
         raise ValueError("Unknown SIMULATION endpoint")
         
@@ -446,6 +464,204 @@ class API:
             *self.ntm.simulation.switches.values(),
             *self.ntm.simulation.routers.values()
         ]
+
+    def _get_dynamic_zones(self):
+        import ipaddress
+        from collections import defaultdict
+
+        # Attacker laptops are strictly outside the defended perimeter and not tracked in SOC infrastructure zones
+        devices = [self._serialize_device(d) for d in self.all_devices() if not getattr(d, "is_attacker", False)]
+        links = [
+            self._serialize_link(l)
+            for l in getattr(self.ntm.simulation.network, "links", [])
+        ]
+
+        neighbors = defaultdict(set)
+        for l in links:
+            if l.get("endpoint_a") and l.get("endpoint_b"):
+                neighbors[l["endpoint_a"]].add(l["endpoint_b"])
+                neighbors[l["endpoint_b"]].add(l["endpoint_a"])
+
+        dev_map = {d["name"]: d for d in devices}
+        subnets_map = {}
+        device_to_subnets = defaultdict(set)
+
+        for d in devices:
+            d_name = d["name"]
+            d_type = (d.get("type") or "").lower()
+            intfs = d.get("interfaces", [])
+            def_gw = d.get("default_gateway")
+
+            for intf in intfs:
+                ip = intf.get("ip")
+                sub = intf.get("subnet")
+                if not ip or ip in ["0.0.0.0", ""]:
+                    continue
+
+                try:
+                    if "/" in str(ip):
+                        net = ipaddress.IPv4Interface(str(ip)).network
+                    elif sub and "/" in str(sub):
+                        net = ipaddress.IPv4Interface(f"{ip}/{sub.split('/')[-1]}").network
+                    elif sub and sub not in ["0.0.0.0", "0.0.0.0/0", ""]:
+                        net = ipaddress.IPv4Interface(f"{ip}/{sub}").network
+                    else:
+                        net = ipaddress.IPv4Interface(f"{ip}/24").network
+
+                    cidr = str(net)
+                    if cidr not in subnets_map:
+                        subnets_map[cidr] = {
+                            "cidr": cidr,
+                            "network_address": str(net.network_address),
+                            "prefixlen": net.prefixlen,
+                            "gateway": None,
+                            "devices": set(),
+                            "device_types": set(),
+                            "services": set()
+                        }
+
+                    subnets_map[cidr]["devices"].add(d_name)
+                    subnets_map[cidr]["device_types"].add(d_type)
+                    for s in d.get("services", []):
+                        s_name = s.get("name") if isinstance(s, dict) else s
+                        if s_name:
+                            subnets_map[cidr]["services"].add(str(s_name).upper())
+
+                    device_to_subnets[d_name].add(cidr)
+
+                    if d_type == "router":
+                        if not subnets_map[cidr]["gateway"]:
+                            subnets_map[cidr]["gateway"] = ip
+                    elif def_gw:
+                        try:
+                            if ipaddress.IPv4Address(def_gw) in net:
+                                if not subnets_map[cidr]["gateway"]:
+                                    subnets_map[cidr]["gateway"] = def_gw
+                        except Exception:
+                            pass
+
+                except Exception:
+                    continue
+
+        # Trace unnumbered switches and APs to their directly linked subnet interfaces
+        for l in getattr(self.ntm.simulation.network, "links", []):
+            epA = getattr(l, "endpointA", None)
+            epB = getattr(l, "endpointB", None)
+            ipA = getattr(epA, 'ip', None)
+            ipB = getattr(epB, 'ip', None)
+            devA = self._endpoint_name(epA)
+            devB = self._endpoint_name(epB)
+            typeA = (dev_map.get(devA, {}).get("type") or "").lower()
+            typeB = (dev_map.get(devB, {}).get("type") or "").lower()
+
+            # If A has an IP and B is a switch/AP
+            if ipA and ipA != "0.0.0.0" and typeB in ["switch", "accesspoint"]:
+                for cidr, data in subnets_map.items():
+                    if data["prefixlen"] <= 28:
+                        try:
+                            if ipaddress.IPv4Address(ipA) in ipaddress.IPv4Network(cidr):
+                                data["devices"].add(devB)
+                                data["device_types"].add(typeB)
+                        except Exception:
+                            pass
+
+            # If B has an IP and A is a switch/AP
+            if ipB and ipB != "0.0.0.0" and typeA in ["switch", "accesspoint"]:
+                for cidr, data in subnets_map.items():
+                    if data["prefixlen"] <= 28:
+                        try:
+                            if ipaddress.IPv4Address(ipB) in ipaddress.IPv4Network(cidr):
+                                data["devices"].add(devA)
+                                data["device_types"].add(typeA)
+                        except Exception:
+                            pass
+
+        # Also link APs that connect to switches
+        for l in getattr(self.ntm.simulation.network, "links", []):
+            devA = self._endpoint_name(getattr(l, "endpointA", None))
+            devB = self._endpoint_name(getattr(l, "endpointB", None))
+            typeA = (dev_map.get(devA, {}).get("type") or "").lower()
+            typeB = (dev_map.get(devB, {}).get("type") or "").lower()
+            if typeA in ["switch", "accesspoint"] and typeB in ["switch", "accesspoint"]:
+                for cidr, data in subnets_map.items():
+                    if devA in data["devices"] and devB not in data["devices"]:
+                        data["devices"].add(devB)
+                    elif devB in data["devices"] and devA not in data["devices"]:
+                        data["devices"].add(devA)
+
+        custom_subnets = getattr(self.ntm.simulation.network, "subnets", {}) or {}
+        zones = []
+
+        for cidr, data in sorted(subnets_map.items(), key=lambda x: str(x[0])):
+            dev_names = sorted(list(data["devices"]))
+            services = data["services"]
+            types = data["device_types"]
+            gw = data["gateway"] or (custom_subnets.get(cidr, {}).get("gateway")) or "None"
+
+            custom_name = custom_subnets.get(cidr, {}).get("name")
+            name = custom_name
+            icon = "🌐"
+            desc = f"Subnet Segment {cidr}"
+
+            if not name:
+                # Point-to-point transit router links
+                if data["prefixlen"] >= 30 and all((dev_map.get(n, {}).get("type") or "").lower() == "router" for n in dev_names):
+                    name = "WAN Transit Link"
+                    icon = "⚡"
+                    desc = f"Point-to-Point Router Transit ({cidr})"
+                elif any("web" in n.lower() or "dmz" in n.lower() for n in dev_names) or any("HTTP" in s for s in services):
+                    name = "DMZ & Web Services"
+                    icon = "🌐"
+                    desc = f"Public Web & Ingress Segment ({cidr})"
+                elif any("8.8.8." in cidr or "isp" in n.lower() for n in dev_names):
+                    name = "Perimeter & WAN Uplink"
+                    icon = "🌍"
+                    desc = f"External Gateway & WAN Segment ({cidr})"
+                elif any("dc" in n.lower() or "collector" in n.lower() for n in dev_names) or (any(s in ["LDAP", "KERBEROS", "DHCP", "DNS"] for s in services) and any(d_type == "server" for d_type in types)):
+                    name = "Active Directory & Core"
+                    icon = "🏛️"
+                    desc = f"Domain Controller & Identity Services ({cidr})"
+                elif any("nas" in n.lower() or "vault" in n.lower() for n in dev_names) or "nas" in types or any(s in ["SMB", "NFS", "FTP"] for s in services):
+                    name = "Storage & Backup Vault"
+                    icon = "🗄️"
+                    desc = f"Enterprise Storage & NAS Services ({cidr})"
+                elif "pc" in types or "laptop" in types or any("pc" in n.lower() or "lap" in n.lower() or "dev" in n.lower() for n in dev_names):
+                    name = "Corporate LAN & Endpoints"
+                    icon = "💻"
+                    desc = f"Workstations, SecOps & Internal LAN ({cidr})"
+                else:
+                    name = f"Zone {cidr}"
+                    icon = "📡"
+                    desc = f"Subnet {cidr} Infrastructure"
+
+            # Determine posture from devices
+            zone_threat = "Normal"
+            online_count = 0
+            for dn in dev_names:
+                d_obj = dev_map.get(dn, {})
+                if d_obj.get("status") == "ONLINE":
+                    online_count += 1
+                t = d_obj.get("soc_threat_level", "Normal")
+                if t == "Compromised":
+                    zone_threat = "Compromised"
+                elif t == "Suspicious" and zone_threat != "Compromised":
+                    zone_threat = "Suspicious"
+
+            zone_id = cidr.replace(".", "-").replace("/", "_")
+            zones.append({
+                "id": zone_id,
+                "name": name,
+                "cidr": cidr,
+                "gateway": gw,
+                "icon": icon,
+                "description": desc,
+                "devices": dev_names,
+                "online_count": online_count,
+                "threat_level": zone_threat,
+                "services": sorted(list(services))
+            })
+
+        return zones
 
     # ========================================================
     # NTM
@@ -722,9 +938,54 @@ class API:
                     self.state_manager.save()
                     return {"status": "success"}
 
-        # INCIDENTS: POST /api/soc/incidents, DELETE /api/soc/incidents/<id>
+        # INCIDENTS: POST /api/soc/incidents, PUT /api/soc/incidents/<id>, DELETE /api/soc/incidents/<id>, GET /api/soc/incidents/<id>/pdf
         if resource and resource[0] == "incidents":
-            if method == "POST":
+            if method == "GET" and len(resource) == 1:
+                return sim.soc_state.get("incidents", [])
+
+            elif method == "GET" and len(resource) == 3 and resource[2] == "pdf":
+                inc_id = resource[1]
+                inc = next((i for i in sim.soc_state.get("incidents", []) if i.get("id") == inc_id), None)
+                if not inc:
+                    raise ValueError(f"Incident '{inc_id}' not found")
+                from backend.services.incident_pdf import generate_incident_pdf
+                lab_name = getattr(self.ntm.simulation, "name", "Cyber Hazard Lab")
+                pdf_bytes = generate_incident_pdf(inc, lab_name=lab_name)
+                return (pdf_bytes, "application/pdf", f"incident-{inc_id}.pdf")
+
+            elif method == "GET" and len(resource) == 2:
+                inc_id = resource[1]
+                inc = next((i for i in sim.soc_state.get("incidents", []) if i.get("id") == inc_id), None)
+                if not inc:
+                    raise ValueError(f"Incident '{inc_id}' not found")
+                return inc
+
+            elif method in ("PUT", "PATCH") and len(resource) == 2:
+                inc_id = resource[1]
+                incidents = sim.soc_state.get("incidents", [])
+                target = next((i for i in incidents if i.get("id") == inc_id), None)
+                if not target:
+                    raise ValueError(f"Incident '{inc_id}' not found")
+                for key in ["title", "severity", "status", "scope", "notes", "chained_evidence"]:
+                    if key in body:
+                        target[key] = body[key]
+                self.state_manager.save()
+                return {"status": "success", "incident": target}
+
+            elif method == "POST":
+                # Check if updating existing by ID
+                if len(resource) == 2:
+                    inc_id = resource[1]
+                    incidents = sim.soc_state.get("incidents", [])
+                    target = next((i for i in incidents if i.get("id") == inc_id), None)
+                    if not target:
+                        raise ValueError(f"Incident '{inc_id}' not found")
+                    for key in ["title", "severity", "status", "scope", "notes", "chained_evidence"]:
+                        if key in body:
+                            target[key] = body[key]
+                    self.state_manager.save()
+                    return {"status": "success", "incident": target}
+
                 import uuid
                 incident = dict(body)
                 if not incident.get("id"):
@@ -736,6 +997,7 @@ class API:
                 incidents.insert(0, incident)
                 self.state_manager.save()
                 return {"status": "success", "incident": incident}
+
             elif method == "DELETE" and len(resource) == 2:
                 inc_id = resource[1]
                 sim.soc_state["incidents"] = [inc for inc in sim.soc_state.get("incidents", []) if inc.get("id") != inc_id]
@@ -812,6 +1074,36 @@ class API:
                 return {"status": "success", "action": action}
                 
         return {"error": "SOC endpoint not found"}, 404
+
+    def _handle_attacker(self, method, resource, body):
+        # GET /api/attacker/device
+        if method == "GET" and resource == ["device"]:
+            attacker_host = next((h for h in self.ntm.simulation.hosts.values() if getattr(h, "is_attacker", False)), None)
+            if attacker_host:
+                return {
+                    "device": self._serialize_device(attacker_host)
+                }
+            return {"device": None}
+
+        # POST /api/attacker/device - designate an attacker laptop
+        if method == "POST" and resource == ["device"]:
+            dev_name = body.get("device")
+            if not dev_name:
+                raise ValueError("Target device name required")
+            target = self.ntm.simulation.hosts.get(dev_name)
+            if not target:
+                raise ValueError(f"Device '{dev_name}' not found")
+            dev_type = (getattr(getattr(target, "device_type", None), "value", "") or getattr(target, "type", "")).lower()
+            if dev_type != "laptop":
+                raise ValueError(f"Device '{dev_name}' is not a laptop")
+
+            for h in self.ntm.simulation.hosts.values():
+                h.is_attacker = (h.name == dev_name)
+
+            self.state_manager.save()
+            return {"status": "success", "device": self._serialize_device(target)}
+
+        raise ValueError("Unknown attacker endpoint")
 
     def _handle_ncm(self, method, resource, body):
 
@@ -1106,6 +1398,20 @@ class API:
                     device.coverage_radius = max(50, min(1000, int(body["coverage_radius"])))
                 except Exception:
                     pass
+
+            if "is_attacker" in body:
+                is_att = bool(body["is_attacker"])
+                if is_att:
+                    # Enforce that only 1 laptop can be the designated attacker laptop
+                    for h in self.ntm.simulation.hosts.values():
+                        if h != device:
+                            h.is_attacker = False
+                    device.is_attacker = True
+                else:
+                    device.is_attacker = False
+
+            if "attacker_motd" in body:
+                device.attacker_motd = str(body["attacker_motd"])
                 
             self.state_manager.save()
             return {
@@ -1240,6 +1546,8 @@ class API:
             "type": device_type,
             "status": getattr(device, "status", "OFFLINE"),
             "soc_threat_level": getattr(device, "soc_threat_level", "Normal"),
+            "is_attacker": getattr(device, "is_attacker", False),
+            "attacker_motd": getattr(device, "attacker_motd", ""),
             "services": [s.name for s in getattr(device, "services", [])]
         }
 

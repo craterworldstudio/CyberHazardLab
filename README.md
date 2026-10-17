@@ -36,11 +36,11 @@ Designed specifically for students and aspiring network/security professionals, 
 | **Phase 2**   | Local Networking                  | `███████████████████` 9/9   | ✅ Done |
 | **Phase 3**   | Transport Layer                   | `███████████████████` 8/8   | ✅ Done |
 | **Phase 4**   | Network Infrastructure            | `███████████████████` 8/8   | ✅ Done |
-| **Phase 4.5** | Network Advanced Infrastructure   | `████████░░░░░░░░░░░` 2/5   | 🟡 In Progress |
+| **Phase 4.5** | Network Advanced Infrastructure   | `█████░░░░░░░░░░░░░░` 2/8   | 🟡 In Progress |
 | **Phase 5**   | Application Layer                 | `███████████████████` 5/5   | ✅ Done |
 | **Phase 6**   | Interactive Lab Frontend          | `███████████████████` 16/16 | ✅ Done |
 | **Phase 7**   | SOC Integration & Rule Engine     | `███████████████████` 10/10 | ✅ Done |
-| **Phase 8**   | Penetrator Dashboard              | `░░░░░░░░░░░░░░░░░░░` 0/5   | ❌ Not Started |
+| **Phase 8**   | Penetrator Dashboard              | `███░░░░░░░░░░░░░░░░` 1/6   | 🟡 In Progress |
 
 *I probably won't implement all of 4.5 soon*
 *Also a good chance that I won't be implementing the Penetrator Dashboard because this project took way too long.*
@@ -90,6 +90,9 @@ Advanced Infrastructure:
 - - [ ] L1 Hub Emulation
 - - [ ] State-based Firewall & ACLs
 - - [ ] IDS/IPS Node Simulation
+- - [ ] Active Directory
+- - [ ] LDAP Requests and Printers
+- - [ ] Kerberos and SSO
 
 
 #### PHASE 5 — Application Layer ✅
@@ -131,6 +134,7 @@ Advanced Infrastructure:
 - [x] Full event stream viewer with multi-attribute filtering and metadata inspection
 
 #### PHASE 8 — Penetrator Dashboard ❌
+- [x] Dedicated Attacker Endpoint.
 - [ ] Active port scanning utilities
 - [ ] Host discovery engines
 - [ ] Service enumeration
@@ -141,30 +145,54 @@ Advanced Infrastructure:
 
 ---
 
-## 🛠️ Installation & Local Setup
+## 🛠️ Installation, Standalone & Docker Execution
 
 Because the backend utilizes state-centric memory structures to execute live routing topologies, **local execution via loopback (`127.0.0.1`) is the recommended way to experience isolated laboratory environments.**
 
-### Prerequisites
-* **Python 3.10+** (No third-party package dependencies required for core execution)
-* Any modern web browser
+### Option 1: Native Python
+```bash
+python -m pip install -r requirements.txt
+python application/main.py
+```
+Then navigate to: `http://127.0.0.1:8000`
 
-### Setup Instructions
+### Option 2: Docker Container (Docker Compose)
+Run with persistent state storage:
+```bash
+docker-compose up --build -d
+```
+Or with standard Docker:
+```bash
+docker build -t cyberhazardlab .
+docker run -d -p 8000:8000 -p 514:514/udp -v $(pwd)/simulation_state.json:/app/simulation_state.json cyberhazardlab
+```
 
-1. **Clone the repository framework:**
-   ```bash
-   git clone https://github.com
-   cd cyberhazardlab
-   ```
+### Option 3: Standalone Executable (No Python Required)
+Build self-contained, zero-dependency executable distributions:
 
-2. **Initialize the local orchestration server:**
-   ```bash
-   python application/main.py
-   ```
-   *The server dynamically binds to `127.0.0.1:8000` locally. If deployed to cloud runtimes ([CyberHazard Lab](https://cyberhazardlab.onrender.com)), it automatically switches interface bindings to comply with host proxy architecture.*
+* **Linux:**
+  ```bash
+  chmod +x build_linux.sh
+  ./build_linux.sh
+  # Run the binary:
+  ./dist/CyberHazardLab/CyberHazardLab
+  ```
 
-3. **Access the Interface:**
-   Launch your browser and navigate to: `http://127.0.0.1:8000`
+* **Windows:**
+  Double-click `build_windows.bat` or run:
+  ```powershell
+  .\build_windows.ps1
+  # Run the binary:
+  .\dist\CyberHazardLab\CyberHazardLab.exe
+  ```
+
+---
+
+## 🧭 Navigation Endpoints
+* **Welcome Portal:** `http://localhost:8000/` or `/welcome`
+* **Net.Creator (Network Builder & NCM):** `http://localhost:8000/lab`
+* **Net.Observer (Defensive SOC Dashboard):** `http://localhost:8000/soc`
+* **Net.Attacker (Offensive Red Team Terminal):** `http://localhost:8000/attacker`
 ---
 
 ## 🔒 Threat Vector Insulation & Sandboxing

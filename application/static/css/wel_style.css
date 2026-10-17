@@ -100,14 +100,17 @@ body {
 .telemetry-stream {
     position: absolute;
     top: 0;
+    bottom: 0;
     left: 20px;
     right: 20px;
     display: flex;
     flex-direction: column;
+    justify-content: flex-end;
     gap: 3px;
     white-space: pre;
     color: var(--cyan);
     text-shadow: 0 0 4px rgba(0, 229, 255, 0.4);
+    overflow: hidden;
 }
 
 /* Specific Event Color Highlighting */
@@ -336,14 +339,10 @@ h1 span {
     justify-content: center;
     align-items: flex-start;
 
-    gap: 80px;
+    gap: 35px;
 
     margin-top: 45px;
 
-    /*
-       This is the permanent footprint.
-       The actual buttons can grow inside it.
-    */
     height: 110px;
 }
 
@@ -355,10 +354,10 @@ h1 span {
 .button-slot {
     position: relative;
 
-    width: 250px;
+    width: 220px;
     height: 110px;
 
-    flex: 0 0 250px;
+    flex: 0 0 220px;
 }
 
 
@@ -374,10 +373,10 @@ h1 span {
 
     transform: translate(-50%, -50%);
 
-    width: 250px;
+    width: 220px;
     height: 50px;
 
-    padding: 0 28px;
+    padding: 0 20px;
 
     display: flex;
     flex-direction: column;
@@ -588,6 +587,36 @@ h1 span {
     box-shadow:
         0 0 30px rgba(0, 229, 255, 0.7),
         0 0 55px rgba(0, 229, 255, 0.25);
+}
+
+
+/* ================================
+   ATTACKER BUTTON (CRIMSON THEME)
+   ================================ */
+
+.enter-button-attacker {
+    border-color: #ff3366;
+    background: rgba(255, 51, 102, 0.05);
+    color: #ff3366;
+}
+
+.enter-button-attacker .sub-text {
+    color: #a8425d;
+}
+
+.enter-button-attacker:hover,
+.enter-button-attacker.selected {
+    background: #ff3366;
+    color: #06090e;
+    border-color: #ff3366;
+    box-shadow:
+        0 0 25px rgba(255, 51, 102, 0.65),
+        0 0 50px rgba(255, 51, 102, 0.3);
+}
+
+.enter-button-attacker:hover .sub-text,
+.enter-button-attacker.selected .sub-text {
+    color: #06090e;
 }
 
 

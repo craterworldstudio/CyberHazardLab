@@ -21,14 +21,14 @@
         <header class="soc-topbar">
 
             <div class="brand">
-                <span class="brand-title">CYBER HAZARD LAB</span>
+                <span class="brand-title" id="soc-brand-title">CYBER HAZARD LAB</span>
                 <span class="brand-separator">//</span>
                 <span class="brand-module">NET.OBSERVER</span>
             </div>
 
             <div class="soc-session">
 
-                <span class="simulation-name">
+                <span class="simulation-name" id="soc-simulation-name">
                     SIMULATION: <strong>LAB-01</strong>
                 </span>
 
@@ -382,56 +382,33 @@
                     </div>
 
 
-                    <!-- NETWORK SNAPSHOT -->
+                    <!-- INFRASTRUCTURE ZONES & THREAT POSTURE -->
 
-                    <div class="panel network-panel">
+                    <div class="panel network-panel" style="margin-bottom: 1.5rem; min-height: auto;">
 
-                        <div class="panel-header">
+                        <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
 
-                            <span>
-                                NETWORK ACTIVITY
+                            <span style="display: flex; align-items: center; gap: 8px;">
+                                <span style="color: var(--cyan); font-size: 1rem;">🛡</span>
+                                INFRASTRUCTURE ZONES &amp; THREAT POSTURE
                             </span>
 
-                            <button class="panel-action"
-                                    data-view-target="network">
-
-                                OPEN NETWORK →
-
-                            </button>
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <span id="zone-summary-badge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 3px; font-weight: bold; background: rgba(0, 229, 255, 0.1); color: var(--cyan); border: 1px solid rgba(0, 229, 255, 0.3);">
+                                    5 ZONES MONITORED
+                                </span>
+                                <button class="panel-action"
+                                        data-view-target="network" style="cursor: pointer;">
+                                    FULL TOPOLOGY MAP →
+                                </button>
+                            </div>
 
                         </div>
 
-
-                        <div class="network-placeholder">
-
-                            <div class="network-node">
-                                HOST-01
+                        <div id="overview-zones-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; padding: 1.25rem;">
+                            <div style="color: var(--text-muted); font-size: 0.85rem; font-style: italic; padding: 1.5rem; text-align: center; grid-column: 1/-1;">
+                                Analyzing network zones and posture telemetry...
                             </div>
-
-                            <div class="network-link"></div>
-
-                            <div class="network-node suspicious">
-                                HOST-02
-                            </div>
-
-                            <div class="network-link"></div>
-
-                            <div class="network-node">
-                                SWT-01
-                            </div>
-
-                            <div class="network-link"></div>
-
-                            <div class="network-node">
-                                RUT-01
-                            </div>
-
-                            <div class="network-link"></div>
-
-                            <div class="network-node">
-                                SERV-01
-                            </div>
-
                         </div>
 
                     </div>
@@ -704,6 +681,59 @@
 
                             <h4 style="color: var(--cyan); margin-bottom: 0.5rem;">Active & Historical Incident Cases</h4>
                             <div id="incidents-list"></div>
+
+                            <!-- Edit Incident Modal -->
+                            <div id="edit-incident-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.75); z-index: 9999; justify-content: center; align-items: center;">
+                                <div style="background: #0d1520; border: 1px solid var(--border-bright, #00e5ff); border-radius: 6px; width: 90%; max-width: 650px; padding: 1.5rem; box-shadow: 0 10px 30px rgba(0,0,0,0.8);">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+                                        <h3 style="color: var(--cyan); margin: 0; font-size: 1.15rem; display: flex; align-items: center; gap: 8px;">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                            EDIT INCIDENT INVESTIGATION REPORT
+                                        </h3>
+                                        <button onclick="closeEditIncidentModal()" style="background: transparent; border: none; color: var(--text-muted); font-size: 1.2rem; cursor: pointer;">&times;</button>
+                                    </div>
+                                    <input type="hidden" id="edit-incident-id">
+                                    <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
+                                        <div style="flex: 2;">
+                                            <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Incident Title</label>
+                                            <input type="text" id="edit-incident-title" style="width: 100%; padding: 0.5rem; background: var(--bg-main); border: 1px solid var(--border); color: white; border-radius: 3px;">
+                                        </div>
+                                        <div style="flex: 1;">
+                                            <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Severity</label>
+                                            <select id="edit-incident-severity" style="width: 100%; padding: 0.5rem; background: var(--bg-main); border: 1px solid var(--border); color: white; border-radius: 3px;">
+                                                <option value="CRITICAL">CRITICAL</option>
+                                                <option value="HIGH">HIGH</option>
+                                                <option value="MEDIUM">MEDIUM</option>
+                                                <option value="LOW">LOW</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
+                                        <div style="flex: 1;">
+                                            <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Status</label>
+                                            <select id="edit-incident-status" style="width: 100%; padding: 0.5rem; background: var(--bg-main); border: 1px solid var(--border); color: white; border-radius: 3px;">
+                                                <option value="OPEN">OPEN</option>
+                                                <option value="INVESTIGATING">INVESTIGATING</option>
+                                                <option value="CONTAINED">CONTAINED</option>
+                                                <option value="RESOLVED">RESOLVED</option>
+                                                <option value="CLOSED">CLOSED</option>
+                                            </select>
+                                        </div>
+                                        <div style="flex: 2;">
+                                            <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Affected Scope / Hosts</label>
+                                            <input type="text" id="edit-incident-scope" style="width: 100%; padding: 0.5rem; background: var(--bg-main); border: 1px solid var(--border); color: white; border-radius: 3px;">
+                                        </div>
+                                    </div>
+                                    <div style="margin-bottom: 1rem;">
+                                        <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Executive Summary, Root Cause & Remediation Notes</label>
+                                        <textarea id="edit-incident-notes" style="width: 100%; height: 120px; padding: 0.5rem; background: var(--bg-main); border: 1px solid var(--border); color: white; border-radius: 3px; font-family: var(--font-ui);"></textarea>
+                                    </div>
+                                    <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+                                        <button onclick="closeEditIncidentModal()" style="background: transparent; border: 1px solid var(--border); color: var(--text-muted); padding: 0.5rem 1rem; border-radius: 3px; cursor: pointer;">CANCEL</button>
+                                        <button onclick="saveIncidentEdit()" class="panel-action" style="cursor: pointer; padding: 0.5rem 1.25rem;">SAVE CHANGES</button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -882,10 +912,17 @@
                                 <small style="color: var(--text-muted);">Retains raw event buffers and forensic evidence</small>
                             </div>
 
-                            <div style="margin-bottom: 1.5rem;">
+                            <div style="margin-bottom: 1.25rem;">
                                 <label style="display: flex; align-items: center; gap: 0.5rem; color: white; cursor: pointer;">
                                     <input type="checkbox" id="setting-auto-contain">
                                     <span>Automated Containment: Automatically isolate endpoints triggering CRITICAL alerts</span>
+                                </label>
+                            </div>
+
+                            <div style="margin-bottom: 1.5rem;">
+                                <label style="display: flex; align-items: center; gap: 0.5rem; color: #ffaa00; font-weight: bold; cursor: pointer;">
+                                    <input type="checkbox" id="setting-alert-beep" checked>
+                                    <span>Audible Threat Alert Beep: Play warning audio alert when HIGH or CRITICAL threats are detected</span>
                                 </label>
                             </div>
 
@@ -902,6 +939,8 @@
 
     </div>
 
+    <!-- HIGH & CRITICAL ALERT POPUP CONTAINER -->
+    <div id="soc-alert-toasts" style="position: fixed; top: 70px; right: 24px; z-index: 10000; display: flex; flex-direction: column; gap: 12px; pointer-events: none; width: 380px; max-width: 90vw;"></div>
 
     <script src="soc/js/soc.js"></script>
 

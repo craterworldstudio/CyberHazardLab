@@ -73,9 +73,11 @@ class Network:
 		if getattr(self, "on_event", None):
 			self.on_event(event)
 
-		# Redirect and collect events into local host files
-		# Do NOT route switch-level frame forwarding or SIEM transport packets into host logs (avoids packet storms)
-		if event.type in ("FRAME_RECEIVED", "FRAME_FORWARDED", "FRAME_SENT") or getattr(event, "port", None) in (514, 51400):
+		# Do NOT route switch-level frame forwarding or router packet forwarding into host logs (avoids packet storms)
+		if event.type in (
+			"FRAME_RECEIVED", "FRAME_FORWARDED", "FRAME_SENT",
+			"PACKET_RECEIVED", "PACKET_FORWARDED", "PACKET_SENT", "PACKET_ROUTED"
+		) or getattr(event, "port", None) in (514, 51400):
 			return
 
 		if hasattr(self, "hosts") and isinstance(self.hosts, dict):
@@ -95,6 +97,18 @@ class Network:
 			# Ensure active SIEM Collector daemon receives security events across network
 			sim = getattr(self, "orchestrator", None)
 			if sim and not getattr(event, "type", "").startswith("FRAME_") and getattr(event, "port", None) not in (514, 51400):
+				# Host-internal events (commands, process execution, local login) require an active SIEM_AGENT on the source device
+				if event.type in ("COMMAND_EXECUTED", "LOCAL_LOGIN", "PROCESS_CREATED", "PROCESS_STARTED", "ROOT_LOGIN"):
+					has_agent = False
+					if src_dev and hasattr(src_dev, "daemons") and isinstance(src_dev.daemons, dict):
+						for d_name in ("SIEM_AGENT", "SIEM-AGENT"):
+							ag = src_dev.daemons.get(d_name)
+							if ag and getattr(ag, "is_running", False):
+								has_agent = True
+								break
+					if not has_agent:
+						return
+
 				collector_daemon = getattr(self, "_soc_collector", None)
 				if not collector_daemon or not getattr(collector_daemon, "is_running", False):
 					collector_daemon = None

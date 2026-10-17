@@ -1,4 +1,6 @@
 import json
+import sys
+import shutil
 from pathlib import Path
 
 
@@ -7,8 +9,19 @@ class StateManager:
     def __init__(self, simulation, path=None):
         self.simulation = simulation
         if path is None:
-            base_dir = Path(__file__).resolve().parent.parent.parent
-            self.path = base_dir / "simulation_state.json"
+            if getattr(sys, "frozen", False):
+                base_dir = Path(sys.executable).resolve().parent
+                bundle_dir = Path(getattr(sys, "_MEIPASS", base_dir))
+                target = base_dir / "simulation_state.json"
+                if not target.exists() and (bundle_dir / "simulation_state.json").exists():
+                    try:
+                        shutil.copy2(bundle_dir / "simulation_state.json", target)
+                    except Exception:
+                        pass
+                self.path = target
+            else:
+                base_dir = Path(__file__).resolve().parent.parent.parent
+                self.path = base_dir / "simulation_state.json"
         else:
             self.path = Path(path)
 
@@ -91,12 +104,23 @@ class StateManager:
         if hasattr(self.simulation, "rename_map"):
             self.simulation.rename_map = dict(saved_renames)
 
+        raw_soc_state = getattr(self.simulation, "soc_state", {})
+        soc_state = {}
+        if isinstance(raw_soc_state, dict):
+            # Ephemeral streaming telemetry must NEVER be persisted to permanent state
+            soc_state = {k: v for k, v in raw_soc_state.items() if k != "ingested_events"}
+
+        net_name = getattr(self.simulation, "name", "Cyber Hazard Network")
+        net_settings = getattr(self.simulation, "settings", {})
+
         state = {
             "version": 1,
+            "name": net_name,
+            "settings": net_settings,
             "simulation": self.serialize_simulation(),
             "layout": layout,
             "renames": saved_renames,
-            "soc_state": getattr(self.simulation, "soc_state", {})
+            "soc_state": soc_state
         }
 
         self.path.write_text(
@@ -125,10 +149,27 @@ class StateManager:
                 encoding="utf-8"
             )
         )
-        if isinstance(data, dict) and "renames" in data and isinstance(data["renames"], dict):
-            if not hasattr(self.simulation, "rename_map") or self.simulation.rename_map is None:
-                self.simulation.rename_map = {}
-            self.simulation.rename_map.update(data["renames"])
+        if isinstance(data, dict):
+            # Restore simulation name
+            loaded_name = data.get("name") or data.get("simulation", {}).get("name")
+            if not loaded_name and isinstance(data.get("settings"), dict):
+                loaded_name = data.get("settings", {}).get("network_name")
+            if loaded_name:
+                self.simulation.name = loaded_name
+
+            # Restore settings
+            loaded_settings = data.get("settings") or data.get("simulation", {}).get("settings")
+            if isinstance(loaded_settings, dict):
+                if not hasattr(self.simulation, "settings") or not isinstance(self.simulation.settings, dict):
+                    self.simulation.settings = {}
+                self.simulation.settings.update(loaded_settings)
+                if loaded_name:
+                    self.simulation.settings["network_name"] = loaded_name
+
+            if "renames" in data and isinstance(data["renames"], dict):
+                if not hasattr(self.simulation, "rename_map") or self.simulation.rename_map is None:
+                    self.simulation.rename_map = {}
+                self.simulation.rename_map.update(data["renames"])
         return data
 
 
@@ -161,6 +202,8 @@ class StateManager:
 
     def serialize_simulation(self):
         return {
+            "name": getattr(self.simulation, "name", "Cyber Hazard Network"),
+            "settings": getattr(self.simulation, "settings", {}),
             "devices": self.serialize_devices(),
             "links": self.serialize_links(),
             "interfaces": self.serialize_interfaces(),
@@ -179,7 +222,9 @@ class StateManager:
                 "name": host.name,
                 "type": host.device_type.value,
                 "status": getattr(host, "status", "OFFLINE"),
-                "soc_threat_level": getattr(host, "soc_threat_level", "Normal")
+                "soc_threat_level": getattr(host, "soc_threat_level", "Normal"),
+                "is_attacker": getattr(host, "is_attacker", False),
+                "attacker_motd": getattr(host, "attacker_motd", "")
             }
             if getattr(host, "default_gateway", None):
                 d["default_gateway"] = host.default_gateway
@@ -195,6 +240,9 @@ class StateManager:
                 d["groups"] = host.groups
             if getattr(host, "user_accounts", None):
                 d["user_accounts"] = host.user_accounts
+            if getattr(host, "vfs", None):
+                from backend.database.fs import serialize_vfs
+                d["vfs"] = serialize_vfs(host.vfs)
             devices.append(d)
 
 

@@ -376,3 +376,147 @@ class FileSystem:
                 return found
             current = found
         return current
+
+    def to_dict(self):
+        return serialize_vfs(self)
+
+    def from_dict(self, data):
+        return deserialize_vfs(self, data)
+
+
+def serialize_vfs(fs_or_tree):
+    if hasattr(fs_or_tree, "tree"):
+        root = fs_or_tree.tree
+    else:
+        root = fs_or_tree
+
+    folders = []
+    files = []
+
+    def walk(folder):
+        for item in sorted(folder.all, key=lambda x: getattr(x, "name", "")):
+            if item is folder or item is folder.parent:
+                continue
+            if isinstance(item, Folder):
+                folders.append({
+                    "path": item.path,
+                    "owner": getattr(item, "owner", "root"),
+                    "group": getattr(item, "group", "root"),
+                    "perms": getattr(item, "perms", "rwxr-xr-x")
+                })
+                walk(item)
+            elif isinstance(item, File):
+                is_hid = getattr(item, "is_hidden", False) or (isinstance(getattr(item, "hidden", False), bool) and item.hidden)
+                prefix = "." if is_hid and not item.name.startswith(".") else ""
+                ext = f".{item.ext}" if getattr(item, "ext", "") else ""
+                fname = prefix + item.name + ext
+                dir_path = folder.path.rstrip("/")
+                fpath = f"{dir_path}/{fname}" if dir_path else f"/{fname}"
+
+                content = item.contents
+                if isinstance(content, (bytes, bytearray)):
+                    import base64
+                    try:
+                        content = content.decode("utf-8")
+                    except Exception:
+                        content = f"base64:{base64.b64encode(content).decode('ascii')}"
+                elif isinstance(content, list):
+                    content = "\n".join(str(c) for c in content)
+                elif content is None:
+                    content = ""
+                else:
+                    content = str(content)
+
+                files.append({
+                    "path": fpath,
+                    "owner": getattr(item, "owner", "root"),
+                    "group": getattr(item, "group", "root"),
+                    "perms": getattr(item, "perms", "rw-r--r--"),
+                    "contents": content
+                })
+
+    walk(root)
+    return {
+        "folders": folders,
+        "files": files
+    }
+
+
+def deserialize_vfs(fs_or_tree, data):
+    if not data or not isinstance(data, dict):
+        return
+    if hasattr(fs_or_tree, "tree"):
+        root = fs_or_tree.tree
+    else:
+        root = fs_or_tree
+
+    def ensure_dir(path, owner="root", group="root", perms="rwxr-xr-x"):
+        parts = [p for p in path.split("/") if p]
+        curr = root
+        built_path = ""
+        for part in parts:
+            built_path += f"/{part}"
+            target = None
+            for itm in curr.all:
+                if isinstance(itm, Folder) and itm is not curr and itm is not curr.parent and itm.name == part:
+                    target = itm
+                    break
+            if not target:
+                target = Folder(part, parent=curr)
+                target.path = built_path
+                target.owner = owner
+                target.group = group
+                target.perms = perms
+                curr.add(target, h=part.startswith("."))
+            curr = target
+        return curr
+
+    for fld in data.get("folders", []):
+        p = fld.get("path")
+        if not p or p == "/":
+            continue
+        folder_obj = ensure_dir(p, fld.get("owner", "root"), fld.get("group", "root"), fld.get("perms", "rwxr-xr-x"))
+        if "owner" in fld:
+            folder_obj.owner = fld["owner"]
+        if "group" in fld:
+            folder_obj.group = fld["group"]
+        if "perms" in fld:
+            folder_obj.perms = fld["perms"]
+
+    for finfo in data.get("files", []):
+        fpath = finfo.get("path")
+        if not fpath:
+            continue
+        parts = [p for p in fpath.split("/") if p]
+        if not parts:
+            continue
+        fname = parts[-1]
+        dir_parts = parts[:-1]
+        dir_path = "/" + "/".join(dir_parts)
+        folder_obj = ensure_dir(dir_path) if dir_parts else root
+
+        existing = folder_obj.get_item(fname)
+        contents = finfo.get("contents", "")
+        if isinstance(contents, str) and contents.startswith("base64:"):
+            import base64
+            try:
+                contents = base64.b64decode(contents[7:])
+            except Exception:
+                pass
+
+        if existing and isinstance(existing, File):
+            existing.contents = contents
+            if "owner" in finfo:
+                existing.owner = finfo["owner"]
+            if "group" in finfo:
+                existing.group = finfo["group"]
+            if "perms" in finfo:
+                existing.perms = finfo["perms"]
+        else:
+            f_obj = File(fname)
+            f_obj.set_path(folder_obj.path)
+            f_obj.contents = contents
+            f_obj.owner = finfo.get("owner", "root")
+            f_obj.group = finfo.get("group", "root")
+            f_obj.perms = finfo.get("perms", "rw-r--r--")
+            folder_obj.add(f_obj, h=fname.startswith("."))

@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  cyberhazardlab:
+    build: .
+    container_name: cyberhazardlab
+    ports:
+      - "8000:8000"
+      - "514:514/udp"
+    volumes:
+      # Keep your simulation state persistent on your host machine
+      - ./simulation_state.json:/app/simulation_state.json
+    restart: unless-stopped

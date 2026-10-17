@@ -81,6 +81,10 @@ async function saveSOCState() {
 // ========================================================
 
 function updateOverviewMetrics(events, telemetry, devices) {
+    if (!devices || !Array.isArray(devices) || devices.length === 0) {
+        devices = (window.SOC.cache && window.SOC.cache.ntmData) || Object.values(window.SOC.state.hosts || {});
+    }
+
     // 1. Hosts
     let totalHosts = 0;
     let onlineHosts = 0;
@@ -134,7 +138,228 @@ function updateOverviewMetrics(events, telemetry, devices) {
 
     // 5. Overview Alerts Feed (top 4 recent alerts)
     renderOverviewAlerts(activeAlerts.slice(0, 4));
+
+    // 6. Live Infrastructure Zones & Threat Posture Grid
+    if (typeof renderInfrastructureZones === "function") {
+        renderInfrastructureZones(devices, telemetry, activeAlerts);
+    } else if (typeof renderOverviewNetworkActivity === "function") {
+        renderOverviewNetworkActivity(devices, telemetry, activeAlerts);
+    }
 }
+
+window.renderInfrastructureZones = async function(devices, telemetry, alerts) {
+    const grid = document.getElementById("overview-zones-grid");
+    if (!grid) return;
+
+    if (!devices || devices.length === 0) {
+        grid.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; font-style: italic; padding: 1.5rem; text-align: center; grid-column: 1/-1;">Awaiting Network Topology & Host Discovery...</div>';
+        return;
+    }
+
+    // 1. Fetch dynamic zones from backend (or compute dynamic fallback)
+    let zones = [];
+    try {
+        const res = await apiRequest("GET", "/api/simulation/zones");
+        if (Array.isArray(res) && res.length > 0) {
+            zones = res;
+        }
+    } catch (e) {
+        zones = [];
+    }
+
+    // Client-side dynamic subnet grouping fallback if backend zones not returned
+    if (!zones || zones.length === 0) {
+        const subnetsMap = {};
+        devices.forEach(d => {
+            const intfs = d.interfaces || [];
+            intfs.forEach(intf => {
+                const ip = intf.ip;
+                if (!ip || ip === "0.0.0.0") return;
+                const parts = ip.split(".");
+                if (parts.length === 4) {
+                    const cidr = `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+                    if (!subnetsMap[cidr]) {
+                        subnetsMap[cidr] = {
+                            id: cidr.replace(/\./g, "-").replace(/\//g, "_"),
+                            name: `Zone ${cidr}`,
+                            cidr: cidr,
+                            gateway: d.default_gateway || (intf.gateway || `${parts[0]}.${parts[1]}.${parts[2]}.1`),
+                            icon: "🌐",
+                            description: `Subnet ${cidr} Infrastructure`,
+                            devices: []
+                        };
+                    }
+                    if (!subnetsMap[cidr].devices.includes(d.name)) {
+                        subnetsMap[cidr].devices.push(d.name);
+                    }
+                }
+            });
+        });
+        zones = Object.values(subnetsMap);
+    }
+
+    window.SOC.dynamicZones = zones;
+
+    const activeAlerts = (alerts && Array.isArray(alerts)) ? alerts.filter(a => a.status !== "RESOLVED") : [];
+    const devMap = {};
+    devices.forEach(d => { devMap[d.name] = d; });
+
+    let overallElevatedZones = 0;
+    let cardsHtml = "";
+
+    zones.forEach(zone => {
+        const zoneDevices = (zone.devices || []).map(name => devMap[name]).filter(Boolean);
+
+        // Check threats dynamically from actual devices and live alerts
+        const hasCompromised = zoneDevices.some(d => (d.soc_threat_level || "").toLowerCase() === "compromised");
+        const hasSuspicious = zoneDevices.some(d => (d.soc_threat_level || "").toLowerCase() === "suspicious");
+
+        const zoneNamesSet = new Set(zoneDevices.map(d => (d.name || "").toLowerCase()));
+        const zoneIpsSet = new Set(zoneDevices.flatMap(d => (d.interfaces || []).map(i => i.ip)).filter(Boolean));
+
+        const zoneAlerts = activeAlerts.filter(a => {
+            const ev = a.event || {};
+            const src = (ev.source || "").toLowerCase();
+            const dst = (ev.destination || "").toLowerCase();
+            return zoneNamesSet.has(src) || zoneNamesSet.has(dst) || zoneIpsSet.has(ev.source) || zoneIpsSet.has(ev.destination);
+        });
+
+        let posture = "SECURE";
+        let postureColor = "var(--green)";
+        let postureBg = "rgba(57, 217, 138, 0.1)";
+        let postureBorder = "rgba(57, 217, 138, 0.35)";
+        let cardGlow = "none";
+        let cardBorder = "var(--border)";
+
+        if (hasCompromised || zoneAlerts.some(a => a.severity === "CRITICAL" || a.severity === "HIGH")) {
+            posture = "COMPROMISED";
+            postureColor = "var(--red)";
+            postureBg = "rgba(255, 77, 95, 0.15)";
+            postureBorder = "var(--red)";
+            cardGlow = "0 0 16px rgba(255, 77, 95, 0.25)";
+            cardBorder = "rgba(255, 77, 95, 0.5)";
+            overallElevatedZones++;
+        } else if (hasSuspicious || zoneAlerts.length > 0) {
+            posture = "SUSPICIOUS";
+            postureColor = "var(--orange)";
+            postureBg = "rgba(229, 139, 69, 0.15)";
+            postureBorder = "var(--orange)";
+            cardGlow = "0 0 12px rgba(229, 139, 69, 0.2)";
+            cardBorder = "rgba(229, 139, 69, 0.4)";
+            overallElevatedZones++;
+        }
+
+        const onlineCount = zoneDevices.filter(d => d.status === "ONLINE").length;
+
+        // Device pills
+        const pillsHtml = zoneDevices.map(d => {
+            const threat = (d.soc_threat_level || "Normal").toLowerCase();
+            let dotColor = "var(--green)";
+            if (threat === "compromised") dotColor = "var(--red)";
+            else if (threat === "suspicious") dotColor = "var(--orange)";
+            else if (d.status === "OFFLINE") dotColor = "var(--text-muted)";
+
+            const devIp = (d.interfaces && d.interfaces[0] && d.interfaces[0].ip) || "Layer-2";
+
+            return `
+                <div style="display: inline-flex; align-items: center; gap: 5px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 3px; padding: 2px 6px; font-size: 0.68rem;" title="${d.name} (${devIp}) | Status: ${d.status} | Threat: ${d.soc_threat_level || 'Normal'}">
+                    <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: ${dotColor};"></span>
+                    <span style="color: ${threat === 'compromised' ? 'var(--red)' : '#fff'}; font-weight: 500;">${d.name}</span>
+                </div>
+            `;
+        }).join("");
+
+        cardsHtml += `
+            <div class="zone-card" style="background: var(--bg-panel-alt); border: 1px solid ${cardBorder}; border-radius: 4px; padding: 1rem; box-shadow: ${cardGlow}; transition: transform 0.2s, box-shadow 0.2s; display: flex; flex-direction: column; justify-content: space-between; gap: 0.75rem;">
+                <!-- Header -->
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.4rem;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 1.25rem;">${zone.icon || '🌐'}</span>
+                            <div>
+                                <div style="font-weight: bold; color: white; font-size: 0.85rem; letter-spacing: 0.5px;">${zone.name}</div>
+                                <div style="font-size: 0.68rem; color: var(--cyan); font-family: var(--font-mono);">${zone.cidr}</div>
+                            </div>
+                        </div>
+                        <span style="font-size: 0.68rem; font-weight: bold; padding: 2px 7px; border-radius: 3px; background: ${postureBg}; color: ${postureColor}; border: 1px solid ${postureBorder}; white-space: nowrap; letter-spacing: 0.5px;">
+                            ● ${posture}
+                        </span>
+                    </div>
+                    <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+                        ${zone.description} <span style="color: var(--text-dim);">| GW: ${zone.gateway || 'None'}</span>
+                    </div>
+                </div>
+
+                <!-- Metrics & Pills -->
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; font-size: 0.72rem; color: var(--text-muted);">
+                        <span>Monitored Assets: <strong style="color: white;">${zoneDevices.length}</strong> (${onlineCount} Online)</span>
+                        ${zoneAlerts.length > 0 ? `<span style="color: ${postureColor}; font-weight: bold;">${zoneAlerts.length} Active Alert${zoneAlerts.length > 1 ? 's' : ''}</span>` : '<span style="color: var(--green);">0 Active Alerts</span>'}
+                    </div>
+
+                    <div style="display: flex; flex-wrap: wrap; gap: 4px; max-height: 52px; overflow-y: auto; padding: 2px 0;">
+                        ${pillsHtml || '<span style="color: var(--text-muted); font-size: 0.68rem; font-style: italic;">No devices mapped</span>'}
+                    </div>
+                </div>
+
+                <!-- Footer Jump -->
+                <div style="display: flex; justify-content: flex-end; align-items: center; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 0.5rem; margin-top: 0.25rem;">
+                    <button onclick="navigateToTopologyZone('${zone.id}')" style="background: transparent; border: none; color: var(--cyan); font-size: 0.7rem; cursor: pointer; display: flex; align-items: center; gap: 4px; padding: 0; font-family: inherit; font-weight: bold; letter-spacing: 0.5px;">
+                        INSPECT ZONE ON MAP &rarr;
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+
+    grid.innerHTML = cardsHtml;
+
+    // Update the summary badge in the panel header if present
+    const summaryBadge = document.getElementById("zone-summary-badge");
+    if (summaryBadge) {
+        if (overallElevatedZones > 0) {
+            summaryBadge.textContent = `${overallElevatedZones} ZONE${overallElevatedZones > 1 ? 'S' : ''} ELEVATED RISK`;
+            summaryBadge.style.color = "var(--red)";
+            summaryBadge.style.borderColor = "var(--red)";
+            summaryBadge.style.background = "rgba(255, 77, 95, 0.12)";
+        } else {
+            summaryBadge.textContent = `${zones.length} ZONES MONITORED / ALL SECURE`;
+            summaryBadge.style.color = "var(--green)";
+            summaryBadge.style.borderColor = "var(--green)";
+            summaryBadge.style.background = "rgba(57, 217, 138, 0.12)";
+        }
+    }
+};
+
+window.navigateToTopologyZone = function(zoneId) {
+    const nav = document.querySelector('.nav-item[data-view="network"]');
+    if (nav) nav.click();
+
+    if (zoneId) {
+        setTimeout(() => {
+            const dynamicZone = (window.SOC.dynamicZones || []).find(z => z.id === zoneId);
+            const targets = dynamicZone ? (dynamicZone.devices || []) : [];
+            document.querySelectorAll(".topology-node").forEach(node => {
+                const name = node.dataset.deviceName;
+                if (targets.includes(name)) {
+                    node.style.filter = "drop-shadow(0 0 14px var(--cyan))";
+                    const circle = node.querySelector("circle");
+                    if (circle) {
+                        circle.setAttribute("stroke", "var(--cyan)");
+                        circle.setAttribute("stroke-width", "4");
+                    }
+                }
+            });
+        }, 150);
+    }
+};
+
+// Backwards compatibility alias
+window.renderOverviewNetworkActivity = function(devices, telemetry, alerts) {
+    if (typeof window.renderInfrastructureZones === "function") {
+        window.renderInfrastructureZones(devices, telemetry, alerts);
+    }
+};
 
 function renderActivityFeed(recentEvents) {
     const list = document.getElementById("activity-list");
@@ -289,6 +514,162 @@ window.chainAlertToIncident = function(alertId) {
 };
 
 // ========================================================
+// THREAT POPUP & AUDIBLE WARNING ALERT SYSTEM
+// ========================================================
+
+window.SOC._seenAlertIds = window.SOC._seenAlertIds || new Set();
+window.SOC._audioCtx = null;
+
+function playAlertBeep(severity) {
+    try {
+        const storedBeep = localStorage.getItem("SOC_ALERT_BEEP");
+        const settings = (window.SOC.state && window.SOC.state.settings) || {};
+        const isBeepEnabled = storedBeep !== null ? (storedBeep === "true") : (settings.alert_beep !== false);
+        if (!isBeepEnabled) return;
+
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        if (!window.SOC._audioCtx) {
+            window.SOC._audioCtx = new AudioContextClass();
+        }
+        const ctx = window.SOC._audioCtx;
+        if (ctx.state === "suspended") {
+            ctx.resume();
+        }
+
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = severity === "CRITICAL" ? "sawtooth" : "sine";
+        // Frequency sweep from 880Hz (A5) to 440Hz (A4)
+        const startFreq = severity === "CRITICAL" ? 950 : 800;
+        const endFreq = severity === "CRITICAL" ? 440 : 520;
+        osc.frequency.setValueAtTime(startFreq, now);
+        osc.frequency.exponentialRampToValueAtTime(endFreq, now + 0.35);
+
+        gain.gain.setValueAtTime(0.18, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.4);
+
+        if (severity === "CRITICAL") {
+            // Dual pulse for critical severity
+            setTimeout(() => {
+                try {
+                    const ctx2 = window.SOC._audioCtx;
+                    if (!ctx2) return;
+                    const now2 = ctx2.currentTime;
+                    const osc2 = ctx2.createOscillator();
+                    const gain2 = ctx2.createGain();
+                    osc2.type = "sawtooth";
+                    osc2.frequency.setValueAtTime(1050, now2);
+                    osc2.frequency.exponentialRampToValueAtTime(500, now2 + 0.3);
+                    gain2.gain.setValueAtTime(0.2, now2);
+                    gain2.gain.exponentialRampToValueAtTime(0.001, now2 + 0.32);
+                    osc2.connect(gain2);
+                    gain2.connect(ctx2.destination);
+                    osc2.start(now2);
+                    osc2.stop(now2 + 0.35);
+                } catch (e) {}
+            }, 180);
+        }
+    } catch (e) {
+        console.warn("[SOC:AUDIO] Warning beep blocked by browser autoplay policy until user gesture", e);
+    }
+}
+
+function showThreatPopup(alert) {
+    const container = document.getElementById("soc-alert-toasts");
+    if (!container) return;
+
+    const isCrit = alert.severity === "CRITICAL";
+    const color = isCrit ? "var(--red)" : "var(--orange)";
+    const bg = isCrit ? "rgba(18, 5, 8, 0.95)" : "rgba(18, 12, 5, 0.95)";
+    const border = isCrit ? "rgba(255, 77, 95, 0.85)" : "rgba(229, 139, 69, 0.85)";
+    const glow = isCrit ? "0 0 25px rgba(255, 77, 95, 0.45)" : "0 0 18px rgba(229, 139, 69, 0.35)";
+
+    const ev = alert.event || {};
+    const toast = document.createElement("div");
+    toast.style = `
+        background: ${bg};
+        border: 1.5px solid ${border};
+        border-left: 5px solid ${color};
+        box-shadow: ${glow};
+        border-radius: 4px;
+        padding: 12px 14px;
+        color: white;
+        pointer-events: auto;
+        font-family: var(--font-ui);
+        animation: toast-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    `;
+
+    toast.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="background: ${color}; color: #0a0f18; font-weight: 900; font-size: 10px; padding: 2px 6px; border-radius: 3px; letter-spacing: 1px;">${alert.severity}</span>
+                <span style="font-weight: bold; font-size: 13px; color: white;">SECURITY ALERT DETECTED</span>
+            </div>
+            <button onclick="this.closest('div').parentElement.remove()" style="background: transparent; border: none; color: #8a9ba8; cursor: pointer; font-size: 16px; line-height: 1; padding: 2px 4px;">&times;</button>
+        </div>
+        <div style="font-size: 12px; font-weight: bold; color: ${color}; margin-top: 2px;">${alert.rule_name}</div>
+        <div style="font-size: 11px; color: #cbd5e1; font-family: monospace;">
+            Source: <strong style="color: var(--cyan);">${ev.source || "unknown"}</strong> &rarr; Target: <strong style="color: var(--cyan);">${ev.destination || "network"}</strong>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px;">
+            <button onclick="document.querySelector('.nav-item[data-view=\\'alerts\\']').click(); this.closest('div').parentElement.remove();" style="background: rgba(0, 229, 255, 0.15); border: 1px solid var(--cyan); color: var(--cyan); font-family: monospace; font-size: 10px; font-weight: bold; padding: 4px 10px; cursor: pointer; border-radius: 2px;">[ VIEW IN ALERTS ]</button>
+            <button onclick="this.closest('div').parentElement.remove()" style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: #8a9ba8; font-family: monospace; font-size: 10px; padding: 4px 8px; cursor: pointer; border-radius: 2px;">DISMISS</button>
+        </div>
+    `;
+
+    container.appendChild(toast);
+
+    // Auto-dismiss after 9 seconds
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.style.opacity = "0";
+            toast.style.transition = "opacity 0.4s";
+            setTimeout(() => toast.remove(), 400);
+        }
+    }, 9000);
+}
+
+function checkNewThreatAlerts(alerts) {
+    if (!alerts || !Array.isArray(alerts)) return;
+
+    // First run initialize set without ringing historical alerts
+    if (window.SOC._seenAlertIds.size === 0) {
+        alerts.forEach(a => window.SOC._seenAlertIds.add(a.id));
+        return;
+    }
+
+    const newThreats = [];
+    alerts.forEach(a => {
+        if (!window.SOC._seenAlertIds.has(a.id)) {
+            window.SOC._seenAlertIds.add(a.id);
+            if (a.status !== "RESOLVED" && (a.severity === "CRITICAL" || a.severity === "HIGH")) {
+                newThreats.push(a);
+            }
+        }
+    });
+
+    if (newThreats.length > 0) {
+        // Trigger popup & warning beep for the latest threat
+        const topThreat = newThreats[0];
+        playAlertBeep(topThreat.severity);
+        newThreats.slice(0, 3).forEach(showThreatPopup);
+    }
+}
+
+
+// ========================================================
 // NETWORK TOPOLOGY TAB LOGIC (Clean Immutable Core View)
 // ========================================================
 
@@ -380,6 +761,7 @@ window.renderNetworkTopology = function(devices, links, layout) {
     coreDevices.forEach(d => {
         const pt = coords[d.name] || { x: width / 2, y: height / 2 };
         const type = (d.type || "pc").toUpperCase();
+        const threat = d.soc_threat_level || "Normal";
         const isCompromised = (threat === "Compromised");
         const ringColor = isCompromised ? "var(--red)" : (threat === "Suspicious" ? "var(--orange)" : (d.status === "ONLINE" ? "var(--green)" : "var(--text-muted)"));
         const fillBg = isCompromised ? "rgba(239, 68, 68, 0.22)" : "#080c10";
@@ -391,7 +773,7 @@ window.renderNetworkTopology = function(devices, links, layout) {
         if (type === "ROUTER") iconSymbol = "⬡";
         else if (type === "SWITCH") iconSymbol = "⊞";
         else if (type === "ACCESSPOINT") iconSymbol = "📡";
-        else if (type === "SERVER") iconSymbol = "🖳";
+        else if (type === "SERVER" || type === "NAS") iconSymbol = "🖳";
 
         svgHtml += `
             <g class="topology-node" data-device-name="${d.name.replace(/"/g, '&quot;')}" ${glowStyle}>
@@ -690,20 +1072,89 @@ window.renderIncidents = function() {
         }
 
         item.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
                 <div>
                     <strong style="color: white; font-size: 1.1rem;">${inc.title}</strong>
                     <span style="font-size: 0.75rem; padding: 2px 6px; border-radius: 3px; background: rgba(255,255,255,0.08); color: ${color}; border: 1px solid ${color}; margin-left: 0.5rem;">${inc.severity}</span>
                     <span style="font-size: 0.75rem; padding: 2px 6px; border-radius: 3px; background: rgba(0,229,255,0.1); color: var(--cyan); margin-left: 0.35rem;">${inc.status || "OPEN"}</span>
+                    <span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 3px; background: rgba(0,229,255,0.06); color: var(--cyan); border: 1px solid rgba(0,229,255,0.2); margin-left: 0.35rem;">LAB: ${(window.SOC.networkName || "CYBER HAZARD LAB").toUpperCase()}</span>
+                    ${inc.scope ? `<span style="font-size: 0.75rem; padding: 2px 6px; border-radius: 3px; background: rgba(160,174,192,0.15); color: #cbd5e1; margin-left: 0.35rem;">Scope: ${inc.scope}</span>` : ""}
                     <span style="color: var(--text-muted); font-size: 0.8rem; margin-left: 0.5rem;">${new Date(inc.timestamp).toLocaleString()}</span>
                 </div>
-                <button onclick="deleteIncident('${inc.id}')" style="background: transparent; border: 1px solid var(--red); color: var(--red); padding: 0.25rem 0.5rem; font-size: 0.75rem; cursor: pointer; border-radius: 3px;">DELETE</button>
+                <div style="display: flex; gap: 0.4rem; align-items: center;">
+                    <button onclick="downloadIncidentPDF('${inc.id}')" title="Generate Formatted Incident PDF Document" style="background: rgba(0,229,255,0.12); border: 1px solid var(--cyan); color: var(--cyan); padding: 0.25rem 0.6rem; font-size: 0.75rem; cursor: pointer; border-radius: 3px; font-weight: bold; display: flex; align-items: center; gap: 4px; transition: 0.15s;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                        PDF
+                    </button>
+                    <button onclick="openEditIncidentModal('${inc.id}')" title="Edit Incident Details or Fix Typos" style="background: rgba(255,170,0,0.12); border: 1px solid var(--yellow); color: var(--yellow); padding: 0.25rem 0.6rem; font-size: 0.75rem; cursor: pointer; border-radius: 3px; font-weight: bold; display: flex; align-items: center; gap: 4px; transition: 0.15s;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                        EDIT
+                    </button>
+                    <button onclick="deleteIncident('${inc.id}')" title="Delete Incident Case" style="background: transparent; border: 1px solid var(--red); color: var(--red); padding: 0.25rem 0.5rem; font-size: 0.75rem; cursor: pointer; border-radius: 3px;">
+                        DELETE
+                    </button>
+                </div>
             </div>
             <div style="color: #cbd5e1; font-size: 0.85rem; white-space: pre-wrap; margin-top: 0.35rem;">${inc.notes}</div>
             ${timelineHtml}
         `;
         list.appendChild(item);
     });
+};
+
+window.downloadIncidentPDF = function(id) {
+    const url = `/api/soc/incidents/${encodeURIComponent(id)}/pdf`;
+    window.open(url, "_blank");
+};
+
+window.openEditIncidentModal = function(id) {
+    const inc = (window.SOC.state.incidents || []).find(i => i.id === id);
+    if (!inc) return;
+
+    document.getElementById("edit-incident-id").value = inc.id;
+    document.getElementById("edit-incident-title").value = inc.title || "";
+    document.getElementById("edit-incident-severity").value = inc.severity || "MEDIUM";
+    document.getElementById("edit-incident-status").value = inc.status || "OPEN";
+    document.getElementById("edit-incident-scope").value = inc.scope || "";
+    document.getElementById("edit-incident-notes").value = inc.notes || "";
+
+    const modal = document.getElementById("edit-incident-modal");
+    if (modal) modal.style.display = "flex";
+};
+
+window.closeEditIncidentModal = function() {
+    const modal = document.getElementById("edit-incident-modal");
+    if (modal) modal.style.display = "none";
+};
+
+window.saveIncidentEdit = async function() {
+    const id = document.getElementById("edit-incident-id").value;
+    if (!id) return;
+
+    const payload = {
+        title: document.getElementById("edit-incident-title").value.trim(),
+        severity: document.getElementById("edit-incident-severity").value,
+        status: document.getElementById("edit-incident-status").value,
+        scope: document.getElementById("edit-incident-scope").value.trim(),
+        notes: document.getElementById("edit-incident-notes").value.trim()
+    };
+
+    if (!payload.title) {
+        alert("Incident title cannot be empty.");
+        return;
+    }
+
+    const res = await apiRequest("PUT", `/api/soc/incidents/${encodeURIComponent(id)}`, payload);
+    if (res && res.status === "success") {
+        const idx = (window.SOC.state.incidents || []).findIndex(i => i.id === id);
+        if (idx !== -1) {
+            window.SOC.state.incidents[idx] = res.incident;
+        }
+        closeEditIncidentModal();
+        renderIncidents();
+    } else {
+        alert("Failed to update incident: " + (res && res.error ? res.error : "Unknown error"));
+    }
 };
 
 window.deleteIncident = async function(id) {
@@ -1043,11 +1494,16 @@ window.loadSIEMSettings = function() {
     const transEl = document.getElementById("setting-transport");
     const retEl = document.getElementById("setting-retention");
     const autoEl = document.getElementById("setting-auto-contain");
+    const beepEl = document.getElementById("setting-alert-beep");
 
     if (portEl && settings.collector_port) portEl.value = settings.collector_port;
     if (transEl && settings.transport) transEl.value = settings.transport;
     if (retEl && settings.retention_hours) retEl.value = settings.retention_hours;
     if (autoEl && settings.auto_containment !== undefined) autoEl.checked = !!settings.auto_containment;
+    if (beepEl) {
+        const storedBeep = localStorage.getItem("SOC_ALERT_BEEP");
+        beepEl.checked = storedBeep !== null ? (storedBeep === "true") : (settings.alert_beep !== false);
+    }
 };
 
 window.saveSIEMSettings = async function() {
@@ -1055,12 +1511,17 @@ window.saveSIEMSettings = async function() {
     const transEl = document.getElementById("setting-transport");
     const retEl = document.getElementById("setting-retention");
     const autoEl = document.getElementById("setting-auto-contain");
+    const beepEl = document.getElementById("setting-alert-beep");
+
+    const alertBeepVal = beepEl ? beepEl.checked : true;
+    localStorage.setItem("SOC_ALERT_BEEP", alertBeepVal ? "true" : "false");
 
     const payload = {
         collector_port: portEl ? parseInt(portEl.value) : 514,
         transport: transEl ? transEl.value : "UDP",
         retention_hours: retEl ? parseInt(retEl.value) : 24,
-        auto_containment: autoEl ? autoEl.checked : false
+        auto_containment: autoEl ? autoEl.checked : false,
+        alert_beep: alertBeepVal
     };
 
     const res = await apiRequest("POST", "/api/soc/settings", payload);
@@ -1467,27 +1928,47 @@ window.updateAlertsPie = function() {
 // ========================================================
 
 async function pollSOC() {
-    const [events, telemetry, ntmData, links, layout] = await Promise.all([
+    const [events, telemetry, ntmData, links, layout, settings] = await Promise.all([
         apiRequest("GET", "/api/soc/events"),
         apiRequest("GET", "/api/simulation/telemetry"),
         apiRequest("GET", "/api/ntm/devices"),
         apiRequest("GET", "/api/ntm/links"),
-        apiRequest("GET", "/api/ntm/layout")
+        apiRequest("GET", "/api/ntm/layout"),
+        apiRequest("GET", "/api/simulation/settings")
     ]);
+
+    if (settings && settings.network_name) {
+        window.SOC.networkName = settings.network_name;
+        const brandEl = document.getElementById("soc-brand-title");
+        if (brandEl) brandEl.textContent = settings.network_name.toUpperCase();
+        const sessEl = document.getElementById("soc-simulation-name");
+        if (sessEl) sessEl.innerHTML = `LAB: <strong>${settings.network_name.toUpperCase()}</strong>`;
+        document.title = `${settings.network_name} // SOC LAB`;
+    }
 
     await loadSOCState();
 
+    // Attacker laptops are strictly outside the defended perimeter and excluded from SOC monitoring
+    const defendedDevices = (ntmData || []).filter(d => !d.is_attacker);
+
+    window.SOC.cache = {
+        ntmData: defendedDevices,
+        links: links || [],
+        layout: layout || {}
+    };
+
     const currentEvents = (events && Array.isArray(events)) ? events : (window.SOC.state.events || []);
-    updateOverviewMetrics(currentEvents, telemetry || {}, ntmData || []);
+    updateOverviewMetrics(currentEvents, telemetry || {}, defendedDevices);
     
-    if (typeof populateTrafficDropdown === "function") populateTrafficDropdown(ntmData || []);
+    if (typeof populateTrafficDropdown === "function") populateTrafficDropdown(defendedDevices);
     if (typeof updateTrafficView === "function") updateTrafficView(telemetry || {});
-    if (typeof updateHostsView === "function") updateHostsView(ntmData || []);
-    if (typeof renderPcap === "function") renderPcap(ntmData || []);
-    if (typeof renderNetworkTopology === "function") renderNetworkTopology(ntmData || [], links || [], layout || {});
+    if (typeof updateHostsView === "function") updateHostsView(defendedDevices);
+    if (typeof renderPcap === "function") renderPcap(defendedDevices);
+    if (typeof renderNetworkTopology === "function") renderNetworkTopology(defendedDevices, links || [], layout || {});
     if (typeof renderAlerts === "function") renderAlerts();
     if (typeof renderEvidencePicker === "function") renderEvidencePicker();
     if (typeof updateAlertsPie === "function") updateAlertsPie();
+    if (typeof checkNewThreatAlerts === "function") checkNewThreatAlerts(window.SOC.state.alerts || []);
 }
 
 // ========================================================
@@ -1508,6 +1989,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             item.classList.toggle("active", item.dataset.view === viewName);
         });
 
+        if (viewName === "network") {
+            if (window.SOC.cache && window.SOC.cache.ntmData) {
+                renderNetworkTopology(window.SOC.cache.ntmData, window.SOC.cache.links, window.SOC.cache.layout);
+            }
+        }
         if (viewName === "settings") loadSIEMSettings();
         if (viewName === "rules") renderRules();
         if (viewName === "incidents") { renderIncidents(); renderEvidencePicker(); }

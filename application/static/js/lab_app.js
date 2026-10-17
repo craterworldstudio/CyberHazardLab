@@ -313,8 +313,8 @@ document.addEventListener("DOMContentLoaded", () => {
             for (const backendDevice of state.devices) {
                 const localDevice = devices.find(d => d.id === backendDevice.name);
                 if (localDevice) {
-                    if (backendDevice.status !== localDevice.status || backendDevice.soc_threat_level !== localDevice.soc_threat_level) {
-                        localDevice.updateStatus(backendDevice.status, backendDevice.soc_threat_level);
+                    if (backendDevice.status !== localDevice.status || backendDevice.soc_threat_level !== localDevice.soc_threat_level || !!backendDevice.is_attacker !== !!localDevice.is_attacker) {
+                        localDevice.updateStatus(backendDevice.status, backendDevice.soc_threat_level, backendDevice.is_attacker);
                     }
                     if (backendDevice.coverage_radius !== undefined) {
                         const isRecentlyUpdated = localDevice._lastRadiusUpdateTime && (Date.now() - localDevice._lastRadiusUpdateTime < 3500);
@@ -342,6 +342,19 @@ document.addEventListener("DOMContentLoaded", () => {
             // silent catch for background polling
         }
     }
+
+    async function syncNetworkIdentity() {
+        try {
+            const settings = await apiRequest("GET", "/api/simulation/settings");
+            if (settings && settings.network_name) {
+                const el = document.getElementById("lab-brand-title");
+                if (el) el.textContent = settings.network_name.toUpperCase();
+                document.title = `${settings.network_name} // NET.CREATOR`;
+            }
+        } catch (e) {}
+    }
+    syncNetworkIdentity();
+    setInterval(syncNetworkIdentity, 5000);
 
     // Master Poll every 1000ms
     setInterval(pollSimulationState, 1000);
@@ -444,11 +457,12 @@ document.addEventListener("DOMContentLoaded", () => {
     // =========================================
 
     class NetworkDevice {
-        constructor(id, type, status, x, y, soc_threat_level = "Normal") {
+        constructor(id, type, status, x, y, soc_threat_level = "Normal", is_attacker = false) {
             this.id = id;
             this.type = type;
             this.status = status || "OFFLINE";
             this.soc_threat_level = soc_threat_level || "Normal";
+            this.is_attacker = !!is_attacker;
             this.position = { x, y };
             if (this.type && this.type.toUpperCase() === "ACCESSPOINT") {
                 this.coverageRadius = 200;
@@ -470,7 +484,7 @@ document.addEventListener("DOMContentLoaded", () => {
             this.element.appendChild(this.label);    
 
             this.updatePosition(x, y);
-            this.updateStatus(this.status, this.soc_threat_level);
+            this.updateStatus(this.status, this.soc_threat_level, this.is_attacker);
 
             // Device dragging
             this.element.addEventListener("pointerdown", (event) => this.onPointerDown(event));
@@ -497,14 +511,18 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
 
-        updateStatus(status, soc_threat_level) {
+        updateStatus(status, soc_threat_level, is_attacker) {
             this.status = status;
             if (soc_threat_level !== undefined) {
                 this.soc_threat_level = soc_threat_level;
             }
+            if (is_attacker !== undefined) {
+                this.is_attacker = !!is_attacker;
+            }
             const config = CHL.DEVICE_CONFIG[this.type] || CHL.DEVICE_CONFIG.PC;
-            // Compromised machines visually render in their ERROR state while remaining functional
-            const visualKey = (this.soc_threat_level === "Compromised" && this.status !== "OFFLINE") ? "ERROR" : this.status;
+            // Compromised machines or designated Attacker laptops visually render in their ERROR state while remaining functional
+            const isVisualCompromised = this.is_attacker || (this.soc_threat_level === "Compromised" && this.status !== "OFFLINE");
+            const visualKey = isVisualCompromised ? "ERROR" : this.status;
             const iconPath = config.icons ? (config.icons[visualKey] || config.icons[this.status] || config.icons.OFFLINE) : config.icon;
             if (iconPath) {
                 this.img.src = iconPath;
@@ -523,7 +541,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             }
 
-            if (this.soc_threat_level === "Compromised") {
+            if (isVisualCompromised) {
                 this.element.classList.add("device-compromised");
             } else {
                 this.element.classList.remove("device-compromised");
@@ -1333,7 +1351,8 @@ document.addEventListener("DOMContentLoaded", () => {
             backendDevice.status,
             x,
             y,
-            backendDevice.soc_threat_level
+            backendDevice.soc_threat_level,
+            backendDevice.is_attacker
         );
 
         if (backendDevice.coverage_radius !== undefined) {

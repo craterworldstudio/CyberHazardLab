@@ -8,3 +8,10 @@ tests/output.txt
 tests/
 tmp/
 AGENTS.md
+agents/
+build/
+dist/
+*.log
+api_debug.log
+*.backup.json
+*copy.json

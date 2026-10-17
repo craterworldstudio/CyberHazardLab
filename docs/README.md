@@ -14,6 +14,7 @@ Cyber Hazard Lab is a local cybersecurity and network simulation environment des
 - [Frontend](frontend/overview.md)
 - [Development](development/setup.md)
 - [Security](security/isolation.md)
+- [SOC Rule Authoring Guide](security/soc_rule_writing_guide.md)
 
 ## Project philosophy
 

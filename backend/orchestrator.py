@@ -513,9 +513,9 @@ class Simulation:
             ttl=ttl
         )
         res = source.send_ip_packet(packet, out_interface=intf)
-        # Wait up to 1.2s for delivery and ICMP reply (supports multi-hop routing and ARP resolution)
+        # Wait up to 2.5s for delivery and ICMP reply (supports multi-hop routing and cold multi-device ARP resolution)
         start_wait = time.time()
-        while time.time() - start_wait < 1.2:
+        while time.time() - start_wait < 2.5:
             if source.last_icmp_result is not None:
                 break
             time.sleep(0.005)

@@ -2,13 +2,31 @@ import ipaddress
 import time
 from backend.network.packet import UDPPacket, Packet
 
-def resolve_hostname(device, hostname, timeout=0.5):
+def resolve_hostname(device, hostname, timeout=2.0):
     try:
         ipaddress.ip_address(hostname)
         return hostname # already an IP
     except ValueError:
         pass
-        
+
+    # 1. Check local /etc/hosts (standard Linux hosts file resolution)
+    if hasattr(device, "vfs") and device.vfs:
+        try:
+            hosts_file = device.vfs.path_to_tree("/etc/hosts")
+            if hosts_file and hasattr(hosts_file, "contents") and hosts_file.contents:
+                for line in hosts_file.contents.splitlines():
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        ip_candidate = parts[0]
+                        aliases = [p.lower() for p in parts[1:]]
+                        if hostname.lower() in aliases:
+                            return ip_candidate
+        except Exception:
+            pass
+
     dns_ip = None
     if hasattr(device, "services"):
         for s in device.services:

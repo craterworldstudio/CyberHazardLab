@@ -89,8 +89,15 @@ class SIEMAgentDaemon(ServiceDaemon):
         ev_type = getattr(event, "type", "EVENT")
         ev_port = getattr(event, "port", None)
 
-        # Do NOT forward low-level link layer frame events, internal SIEM agent events, or SIEM UDP transport events
-        if ev_type in ("FRAME_RECEIVED", "FRAME_FORWARDED", "FRAME_SENT") or ev_port in (514, 51400) or ev_type.startswith("SIEM_"):
+        # Do NOT forward low-level link layer frame events, packet routing events, internal SIEM agent events, or SIEM UDP transport events
+        if (
+            ev_type in (
+                "FRAME_RECEIVED", "FRAME_FORWARDED", "FRAME_SENT",
+                "PACKET_RECEIVED", "PACKET_FORWARDED", "PACKET_SENT", "PACKET_ROUTED"
+            )
+            or ev_port in (514, 51400)
+            or ev_type.startswith("SIEM_")
+        ):
             return
 
         if not self.collector_ip:
@@ -159,7 +166,7 @@ class SIEMAgentDaemon(ServiceDaemon):
         if self._sending or not self.host.interfaces:
             return
         intf = self.host.interfaces[0]
-        if not intf.ip or getattr(intf, "status", "up") != "up":
+        if not intf.ip or intf.ip in ("0.0.0.0", "") or getattr(intf, "status", "up") != "up":
             return
 
         udp_pkt = UDPPacket(

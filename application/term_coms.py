@@ -46,7 +46,16 @@ class TerminalCommandHandler:
                 return i
         return None
 
-    def get_prompt(self, device):
+    def get_prompt(self, device, visited=None):
+        if visited is None:
+            visited = set()
+        if device in visited:
+            local_user = getattr(device, 'current_user', 'root')
+            vfs = getattr(device, "vfs", None)
+            pwd = vfs.pwd() if vfs else "~"
+            return f"{local_user}@{device.name.lower()}:[{pwd}]$ "
+        visited.add(device)
+
         vfs = getattr(device, "vfs", None)
         pwd = vfs.pwd() if vfs else "~"
         sessions = getattr(device, "_terminal_sessions", None)
@@ -71,13 +80,32 @@ class TerminalCommandHandler:
         if curr.get("state") == "CONNECTED":
             remote_dev = curr.get("remote_device")
             if remote_dev and getattr(remote_dev, "_terminal_sessions", None):
-                return self.get_prompt(remote_dev)
+                return self.get_prompt(remote_dev, visited=visited)
             
             remote_vfs = getattr(remote_dev, "vfs", None) if remote_dev else None
             remote_pwd = remote_vfs.pwd() if remote_vfs else "~"
             return f"{getattr(remote_dev, 'current_user', curr['user'])}@{curr['remote_device_name'].lower()}:[{remote_pwd}]$ "
         return f"{local_user}@{device.name.lower()}:[{pwd}]$ "
-    def execute(self, device, command_str):
+    def execute(self, device, command_str, visited=None):
+        if visited is None:
+            visited = set()
+        if device in visited:
+            if hasattr(device, "_terminal_sessions") and device._terminal_sessions:
+                device._terminal_sessions.pop()
+            return "Connection closed (session recursion loop detected).\n"
+        visited.add(device)
+
+        if command_str == "__RESET_SESSION__":
+            if hasattr(device, "_terminal_sessions"):
+                device._terminal_sessions = []
+            if hasattr(device, "user_accounts") and "user" in device.user_accounts:
+                device.current_user = "user"
+            elif hasattr(device, "user_accounts") and "operator" in device.user_accounts:
+                device.current_user = "operator"
+            else:
+                device.current_user = "root"
+            return ""
+
         sessions = getattr(device, "_terminal_sessions", None)
         if sessions:
             curr = sessions[-1]
@@ -117,7 +145,7 @@ class TerminalCommandHandler:
             redirect_file = parts[1].strip()
             append_mode = False
 
-        out = self._execute_inner(device, command_str)
+        out = self._execute_inner(device, command_str, visited=visited)
 
         if redirect_file and getattr(device, "vfs", None):
             vfs = device.vfs
@@ -161,7 +189,9 @@ class TerminalCommandHandler:
             
         return out
 
-    def _execute_inner(self, device, command_str):
+    def _execute_inner(self, device, command_str, visited=None):
+        if visited is None:
+            visited = set()
         # 1. Handle active remote terminal session (e.g. SSH)
         sessions = getattr(device, "_terminal_sessions", None)
         if sessions:
@@ -238,6 +268,10 @@ class TerminalCommandHandler:
                     if remote_dev:
                         curr["original_ssh_user"] = getattr(remote_dev, "current_user", "user")
                         remote_dev.current_user = curr["user"]
+                        if getattr(device, "is_attacker", False):
+                            remote_dev.soc_threat_level = "Compromised"
+                            if self.state_manager:
+                                self.state_manager.save()
                     remote_name = curr["remote_device_name"]
                     local_ip = device.interfaces[0].ip if device.interfaces else "127.0.0.1"
                     ssh_svc = next((s for s in getattr(remote_dev, "services", []) if s.name.upper() in ("SSH_SERVER", "SSH")), None) if remote_dev else None
@@ -352,10 +386,45 @@ class TerminalCommandHandler:
                         return "logout"
                     if not trimmed:
                         return ""
-                    return self.execute(remote_dev, command_str)
+                    return self.execute(remote_dev, command_str, visited=visited)
 
+                # 1. Handle exit/logout commands cleanly
+                if trimmed in ("exit", "logout"):
+                    # If remote device has its own nested session, forward exit/logout to it
+                    if remote_dev and getattr(remote_dev, "_terminal_sessions", None) and remote_dev not in visited:
+                        from backend.services.ssh import SSHClientDaemon
+                        client_daemon = SSHClientDaemon(device)
+                        res = client_daemon.execute_remote(
+                            remote_ip=curr["remote_ip"],
+                            command=command_str,
+                            username=curr["user"],
+                            password=curr["password"],
+                            port=curr["port"]
+                        )
+                        rem_sess = getattr(remote_dev, "_terminal_sessions", None)
+                        if not rem_sess:
+                            return res.get("output", "") or f"logout\nConnection to {curr.get('remote_device_name', curr['remote_ip'])} closed."
+                        return res.get("output", "")
+
+                    # Otherwise pop this device's own session to remote_dev
+                    orig_user = curr.get("original_ssh_user", "user")
+                    if remote_dev and getattr(remote_dev, "current_user", "") != curr.get("user") and getattr(remote_dev, "current_user", "") != orig_user:
+                        remote_dev.current_user = curr.get("user")
+                        return "exit"
+                    if remote_dev:
+                        remote_dev.current_user = orig_user
+                    remote_name = curr.get("remote_device_name", curr.get("remote_ip", "remote"))
+                    device._terminal_sessions.pop()
+                    return f"logout\nConnection to {remote_name} closed."
+
+                if not trimmed:
+                    return ""
+
+                # 2. Forward active command to remote device
                 if remote_dev and getattr(remote_dev, "_terminal_sessions", None):
-                    # Forward to remote device (which handles its own nested session/exit)
+                    if remote_dev in visited:
+                        device._terminal_sessions.pop()
+                        return "Connection closed (session recursion loop detected).\n"
                     from backend.services.ssh import SSHClientDaemon
                     client_daemon = SSHClientDaemon(device)
                     res = client_daemon.execute_remote(
@@ -367,18 +436,6 @@ class TerminalCommandHandler:
                     )
                     return res.get("output", "")
 
-                if trimmed in ("exit", "logout"):
-                    orig_user = curr.get("original_ssh_user", "user")
-                    if remote_dev and getattr(remote_dev, "current_user", "") != curr.get("user") and getattr(remote_dev, "current_user", "") != orig_user:
-                        remote_dev.current_user = curr.get("user")
-                        return "exit"
-                    if remote_dev:
-                        remote_dev.current_user = orig_user
-                    remote_ip = curr["remote_ip"]
-                    device._terminal_sessions.pop()
-                    return f"logout\nConnection to {remote_ip} closed."
-                if not trimmed:
-                    return ""
                 from backend.services.ssh import SSHClientDaemon
                 client_daemon = SSHClientDaemon(device)
                 res = client_daemon.execute_remote(
@@ -460,6 +517,8 @@ class TerminalCommandHandler:
 
         if cmd == "help":
             return self._handle_help(parts)
+        elif cmd == "clear":
+            return "__CLEAR__"
         elif cmd in ("ls", "pwd", "cat", "mkdir", "touch", "rm", "tree", "cd", "scp"):
             return self._handle_vfs_command(device, parts)
 
@@ -591,6 +650,7 @@ class TerminalCommandHandler:
         if len(parts) == 1:
             output = "AxiomOS TERMINAL COMMANDS:\n"
             output += "  help       - Show this help message (use 'help [command]' for more info)\n"
+            output += "  clear      - Clear the terminal screen\n"
             output += "  ping       - Send ICMP ECHO_REQUEST packets\n"
             output += "  tracert    - Trace route to a remote host\n"
             output += "  netstat    - Print network connections and routing tables\n"
@@ -1346,30 +1406,48 @@ Usage:
         if len(parts) < 2:
             return "Usage: curl [http://]hostname[:port][/path]"
 
-        url = parts[1]
-        
-        # Remove http:// or https:// if present
-        if url.startswith("http://"):
-            url = url[7:]
-        elif url.startswith("https://"):
-            url = url[8:]
-            
-        path = "/"
-        if "/" in url:
-            host_port, path = url.split("/", 1)
-            path = "/" + path
-        else:
-            host_port = url
+        method = "GET"
+        post_data = None
+        raw_url = None
 
-        port = 80
-        if ":" in host_port:
-            host_str, port_str = host_port.split(":", 1)
-            try:
-                port = int(port_str)
-            except:
-                return "curl: Invalid port"
+        idx = 1
+        while idx < len(parts):
+            arg = parts[idx]
+            if arg in ("-X", "--request") and idx + 1 < len(parts):
+                method = parts[idx + 1].upper()
+                idx += 2
+            elif arg in ("-d", "--data", "--data-raw") and idx + 1 < len(parts):
+                post_data = parts[idx + 1]
+                if method == "GET":
+                    method = "POST"
+                idx += 2
+            elif arg in ("-s", "-L", "-v", "-k", "--silent", "--location"):
+                idx += 1
+            elif not raw_url and not arg.startswith("-"):
+                raw_url = arg
+                idx += 1
+            else:
+                idx += 1
+
+        if not raw_url:
+            return "Usage: curl [http://]hostname[:port][/path]"
+
+        url = raw_url.strip("\"'")
+        if "://" not in url:
+            url_to_parse = "http://" + url
         else:
-            host_str = host_port
+            url_to_parse = url
+            
+        import urllib.parse
+        parsed = urllib.parse.urlparse(url_to_parse)
+        host_str = parsed.hostname or ""
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        path = parsed.path or "/"
+        if parsed.query:
+            path += "?" + parsed.query
+
+        if not host_str:
+            return "curl: (6) Could not resolve host: empty hostname"
 
         network = getattr(device, "network", None)
         if not network:
@@ -1383,7 +1461,7 @@ Usage:
             import ipaddress
             ipaddress.ip_address(target_ip)
         except:
-            target_ip = resolve_hostname(device, host_str, timeout=0.5)
+            target_ip = resolve_hostname(device, host_str, timeout=2.0)
 
         if not target_ip:
             return f"curl: (6) Could not resolve host: {host_str}"
@@ -1411,7 +1489,11 @@ Usage:
         if not daemon:
             return f"curl: (7) Failed to connect to {target_ip} port {port}: Service unavailable"
 
-        request = f"GET {path} HTTP/1.1\r\nHost: {host_str}\r\nUser-Agent: curl/7.68.0\r\nAccept: */*\r\n\r\n"
+        if post_data is not None:
+            data_bytes = str(post_data).encode("utf-8")
+            request = f"{method} {path} HTTP/1.1\r\nHost: {host_str}\r\nUser-Agent: curl/7.68.0\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {len(data_bytes)}\r\n\r\n{post_data}"
+        else:
+            request = f"{method} {path} HTTP/1.1\r\nHost: {host_str}\r\nUser-Agent: curl/7.68.0\r\nAccept: */*\r\n\r\n"
         
         mock_packet = type("MockPacket", (), {
             "source_ip": out_intf.ip,
@@ -3268,6 +3350,13 @@ Options:
         remote_ip = remote_host_str
         target_device = network.get_host_by_ip(remote_host_str)
         if not target_device:
+            from application.dns_resolver import resolve_hostname
+            resolved_ip = resolve_hostname(device, remote_host_str, timeout=1.5)
+            if resolved_ip:
+                remote_ip = resolved_ip
+                target_device = network.get_host_by_ip(resolved_ip)
+
+        if not target_device:
             target_device = network.get_host(remote_host_str)
             if target_device and getattr(target_device, "interfaces", []):
                 remote_ip = target_device.interfaces[0].ip
@@ -3314,6 +3403,10 @@ Options:
                         "password_attempts": 0
                     })
                     target_device.current_user = username
+                    if getattr(device, "is_attacker", False):
+                        target_device.soc_threat_level = "Compromised"
+                        if self.state_manager:
+                            self.state_manager.save()
                     local_ip = device.interfaces[0].ip if device.interfaces else "127.0.0.1"
                     ssh_svc = next((s for s in getattr(target_device, "services", []) if s.name.upper() in ("SSH_SERVER", "SSH")), None)
                     custom_motd = (ssh_svc.config.get("motd") or ssh_svc.config.get("banner")) if ssh_svc and getattr(ssh_svc, "config", None) else None
@@ -3361,6 +3454,11 @@ Options:
 
         if not res.get("success"):
             return f"ssh: {res.get('error', 'Unknown error')}"
+
+        if getattr(device, "is_attacker", False):
+            target_device.soc_threat_level = "Compromised"
+            if self.state_manager:
+                self.state_manager.save()
 
         return res.get("output", "")
 

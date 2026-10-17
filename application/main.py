@@ -2,11 +2,14 @@
 import sys
 import os
 
-BASE_DIR = os.path.dirname(
-    os.path.dirname(
-        os.path.abspath(__file__)
+if getattr(sys, "frozen", False):
+    BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
+else:
+    BASE_DIR = os.path.dirname(
+        os.path.dirname(
+            os.path.abspath(__file__)
+        )
     )
-)
 
 sys.path.insert(0, BASE_DIR)
 from http.server import HTTPServer, SimpleHTTPRequestHandler
@@ -44,6 +47,9 @@ else:
     state_manager.reset()
 
 class CustomHandler(SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=BASE_DIR, **kwargs)
+
     def end_headers(self):
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self.send_header("Pragma", "no-cache")
@@ -90,6 +96,9 @@ class CustomHandler(SimpleHTTPRequestHandler):
 
         elif self.path == "/soc":
             self.path = "/application/soc/soc.html"
+
+        elif self.path == "/attacker":
+            self.path = "/application/static/attacker.html"
 
         elif self.path.startswith("/static/") or self.path.startswith("/soc/"):
             self.path = "/application" + self.path

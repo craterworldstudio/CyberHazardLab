@@ -1,5 +1,14 @@
 let ncmWindows = new Map();
 
+function escapeHtml(unsafe) {
+    return (unsafe || "").toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 
 function openNCM(device) {
 
@@ -49,6 +58,13 @@ function closeNCM(deviceName) {
     if (!ncmWin) {
         return;
     }
+
+    // Clean up active terminal session on the backend when window closes
+    try {
+        apiRequest("POST", `/api/ncm/devices/${encodeURIComponent(deviceName)}/terminal`, {
+            command: "__RESET_SESSION__"
+        }).catch(() => {});
+    } catch (e) {}
 
     ncmWin.remove();
     ncmWindows.delete(deviceName);
@@ -127,24 +143,27 @@ function createNCMWindow(deviceName, deviceType) {
             </div>
             <div class="ncm-tab-content" data-content="terminal">
                 <div style="display: flex; flex-direction: column; height: 100%; flex: 1; min-height: 0;">
-                    <div class="ncm-terminal-output" style="flex: 1; background: #06090e; color: #d5ebf2; font-family: monospace; font-size: 12px; padding: 10px; overflow-y: auto; border: 1px solid rgba(0, 229, 255, 0.15); margin-bottom: 10px;">
+                    <div class="ncm-terminal-output" style="flex: 1; background: #06090e; color: #d5ebf2; font-family: monospace; font-size: 12px; padding: 10px; overflow-y: auto; border: 1px solid rgba(0, 229, 255, 0.15); cursor: text;" onclick="const inp = this.querySelector('.ncm-terminal-input'); if (inp) inp.focus();">
                         <div style="color: #00e5ff; font-weight: bold; letter-spacing: 1px;">> AxiomOS (Network Operations Execution)</div>
                         <div style="color: #5c6b73; margin-bottom: 15px;">System version 1.0.0. Type 'help' for available commands.</div>
-                    </div>
-                    <div style="display: flex; align-items: center; border: 1px solid rgba(0, 229, 255, 0.3); background: #06090e; padding: 8px;">
-                        <span class="ncm-terminal-prompt" id="term-prompt-${deviceName}" style="color: #00e5ff; font-family: monospace; font-weight: bold; margin-right: 8px;">user@${deviceName.toLowerCase()}:~$</span>
-                        <input type="text" class="ncm-terminal-input" placeholder="_" style="flex: 1; background: transparent; border: none; color: #d5ebf2; font-family: monospace; font-size: 12px; outline: none;" onkeydown="handleTerminalInput(event, '${safeDev}')">
+                        <div class="ncm-terminal-line-current" style="display: flex; align-items: baseline; margin-top: 4px;">
+                            <span class="ncm-terminal-prompt" id="term-prompt-${deviceName}" style="color: #00e5ff; font-family: monospace; font-weight: bold; margin-right: 8px;">user@${deviceName.toLowerCase()}:~$</span>
+                            <input type="text" class="ncm-terminal-input" placeholder="" style="flex: 1; background: transparent; border: none; color: #d5ebf2; font-family: monospace; font-size: 12px; outline: none; caret-color: #00e5ff;" onkeydown="handleTerminalInput(event, '${safeDev}')">
+                        </div>
                     </div>
                 </div>
             </div>
             <div class="ncm-tab-content" data-content="browser">
                 <div style="display: flex; flex-direction: column; height: 100%; flex: 1; min-height: 0;">
-                    <div style="display: flex; margin-bottom: 10px;">
-                        <input type="text" class="browser-url-input ncm-input" placeholder="http://hostname/path" style="flex: 1; padding: 5px; background: #06090e; color: #fff; border: 1px solid #00e5ff;">
-                        <button class="browser-go-btn ncm-btn" style="margin-left: 5px; padding: 5px 15px;">GO</button>
+                    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+                        <button class="browser-nav-btn browser-back-btn ncm-btn" title="Back" style="padding: 4px 10px; font-size: 12px; cursor: pointer;" disabled>&larr;</button>
+                        <button class="browser-nav-btn browser-forward-btn ncm-btn" title="Forward" style="padding: 4px 10px; font-size: 12px; cursor: pointer;" disabled>&rarr;</button>
+                        <button class="browser-nav-btn browser-reload-btn ncm-btn" title="Reload" style="padding: 4px 10px; font-size: 12px; cursor: pointer;">&#8635;</button>
+                        <input type="text" class="browser-url-input ncm-input" placeholder="http://hostname/path" style="flex: 1; padding: 6px 10px; background: #06090e; color: #00e5ff; border: 1px solid rgba(0, 229, 255, 0.3); font-family: monospace; font-size: 12px; outline: none;">
+                        <button class="browser-go-btn ncm-btn" style="padding: 5px 15px; font-weight: bold; cursor: pointer;">GO</button>
                     </div>
-                    <div class="browser-frame-container" style="flex: 1; background: #fff; color: #000; padding: 10px; overflow-y: auto; border: 1px solid rgba(0, 229, 255, 0.15);">
-                        <div style="color: #666; text-align: center; margin-top: 50px; font-family: sans-serif;">Browser Engine Idle</div>
+                    <div class="browser-frame-container" style="flex: 1; background: #080c10; border: 1px solid rgba(0, 229, 255, 0.2); overflow: hidden; position: relative; min-height: 0;">
+                        <iframe class="browser-viewport" style="width: 100%; height: 100%; border: none; background: #080c10; display: block;" sandbox="allow-same-origin allow-forms allow-scripts" srcdoc="&lt;!DOCTYPE html&gt;&lt;html&gt;&lt;head&gt;&lt;style&gt;body { background: #080c10; color: #5c6b73; font-family: monospace; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; } .card { text-align: center; border: 1px dashed rgba(0,229,255,0.25); padding: 30px; border-radius: 4px; background: rgba(0,229,255,0.02); } .title { color: #00e5ff; font-weight: bold; font-size: 14px; letter-spacing: 2px; margin-bottom: 8px; } .sub { font-size: 12px; color: #526870; }&lt;/style&gt;&lt;/head&gt;&lt;body&gt;&lt;div class='card'&gt;&lt;div class='title'&gt;AXIOM BROWSER ENGINE // STANDBY&lt;/div&gt;&lt;div class='sub'&gt;Enter a URL or IP address above (e.g. http://172.16.10.10) to browse&lt;/div&gt;&lt;/div&gt;&lt;/body&gt;&lt;/html&gt;"></iframe>
                     </div>
                 </div>
             </div>
@@ -154,24 +173,27 @@ function createNCMWindow(deviceName, deviceType) {
             </div>
             <div class="ncm-tab-content" data-content="terminal">
                 <div style="display: flex; flex-direction: column; height: 100%; flex: 1; min-height: 0;">
-                    <div class="ncm-terminal-output" style="flex: 1; background: #06090e; color: #d5ebf2; font-family: monospace; font-size: 12px; padding: 10px; overflow-y: auto; border: 1px solid rgba(0, 229, 255, 0.15); margin-bottom: 10px;">
+                    <div class="ncm-terminal-output" style="flex: 1; background: #06090e; color: #d5ebf2; font-family: monospace; font-size: 12px; padding: 10px; overflow-y: auto; border: 1px solid rgba(0, 229, 255, 0.15); cursor: text;" onclick="const inp = this.querySelector('.ncm-terminal-input'); if (inp) inp.focus();">
                         <div style="color: #00e5ff; font-weight: bold; letter-spacing: 1px;">> AxiomOS (Network Operations Execution)</div>
                         <div style="color: #5c6b73; margin-bottom: 15px;">System version 1.0.0. Type 'help' for available commands.</div>
-                    </div>
-                    <div style="display: flex; align-items: center; border: 1px solid rgba(0, 229, 255, 0.3); background: #06090e; padding: 8px;">
-                        <span class="ncm-terminal-prompt" id="term-prompt-${deviceName}" style="color: #00e5ff; font-family: monospace; font-weight: bold; margin-right: 8px;">user@${deviceName.toLowerCase()}:~$</span>
-                        <input type="text" class="ncm-terminal-input" placeholder="_" style="flex: 1; background: transparent; border: none; color: #d5ebf2; font-family: monospace; font-size: 12px; outline: none;" onkeydown="handleTerminalInput(event, '${safeDev}')">
+                        <div class="ncm-terminal-line-current" style="display: flex; align-items: baseline; margin-top: 4px;">
+                            <span class="ncm-terminal-prompt" id="term-prompt-${deviceName}" style="color: #00e5ff; font-family: monospace; font-weight: bold; margin-right: 8px;">user@${deviceName.toLowerCase()}:~$</span>
+                            <input type="text" class="ncm-terminal-input" placeholder="" style="flex: 1; background: transparent; border: none; color: #d5ebf2; font-family: monospace; font-size: 12px; outline: none; caret-color: #00e5ff;" onkeydown="handleTerminalInput(event, '${safeDev}')">
+                        </div>
                     </div>
                 </div>
             </div>
             <div class="ncm-tab-content" data-content="browser">
                 <div style="display: flex; flex-direction: column; height: 100%; flex: 1; min-height: 0;">
-                    <div style="display: flex; margin-bottom: 10px;">
-                        <input type="text" class="browser-url-input ncm-input" placeholder="http://hostname/path" style="flex: 1; padding: 5px; background: #06090e; color: #fff; border: 1px solid #00e5ff;">
-                        <button class="browser-go-btn ncm-btn" style="margin-left: 5px; padding: 5px 15px;">GO</button>
+                    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+                        <button class="browser-nav-btn browser-back-btn ncm-btn" title="Back" style="padding: 4px 10px; font-size: 12px; cursor: pointer;" disabled>&larr;</button>
+                        <button class="browser-nav-btn browser-forward-btn ncm-btn" title="Forward" style="padding: 4px 10px; font-size: 12px; cursor: pointer;" disabled>&rarr;</button>
+                        <button class="browser-nav-btn browser-reload-btn ncm-btn" title="Reload" style="padding: 4px 10px; font-size: 12px; cursor: pointer;">&#8635;</button>
+                        <input type="text" class="browser-url-input ncm-input" placeholder="http://hostname/path" style="flex: 1; padding: 6px 10px; background: #06090e; color: #00e5ff; border: 1px solid rgba(0, 229, 255, 0.3); font-family: monospace; font-size: 12px; outline: none;">
+                        <button class="browser-go-btn ncm-btn" style="padding: 5px 15px; font-weight: bold; cursor: pointer;">GO</button>
                     </div>
-                    <div class="browser-frame-container" style="flex: 1; background: #fff; color: #000; padding: 10px; overflow-y: auto; border: 1px solid rgba(0, 229, 255, 0.15);">
-                        <div style="color: #666; text-align: center; margin-top: 50px; font-family: sans-serif;">Browser Engine Idle</div>
+                    <div class="browser-frame-container" style="flex: 1; background: #080c10; border: 1px solid rgba(0, 229, 255, 0.2); overflow: hidden; position: relative; min-height: 0;">
+                        <iframe class="browser-viewport" style="width: 100%; height: 100%; border: none; background: #080c10; display: block;" sandbox="allow-same-origin allow-forms allow-scripts" srcdoc="&lt;!DOCTYPE html&gt;&lt;html&gt;&lt;head&gt;&lt;style&gt;body { background: #080c10; color: #5c6b73; font-family: monospace; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; } .card { text-align: center; border: 1px dashed rgba(0,229,255,0.25); padding: 30px; border-radius: 4px; background: rgba(0,229,255,0.02); } .title { color: #00e5ff; font-weight: bold; font-size: 14px; letter-spacing: 2px; margin-bottom: 8px; } .sub { font-size: 12px; color: #526870; }&lt;/style&gt;&lt;/head&gt;&lt;body&gt;&lt;div class='card'&gt;&lt;div class='title'&gt;AXIOM BROWSER ENGINE // STANDBY&lt;/div&gt;&lt;div class='sub'&gt;Enter a URL or IP address above (e.g. http://172.16.10.10) to browse&lt;/div&gt;&lt;/div&gt;&lt;/body&gt;&lt;/html&gt;"></iframe>
                     </div>
                 </div>
             </div>
@@ -197,39 +219,293 @@ function createNCMWindow(deviceName, deviceType) {
     setupNCMDragging(window, header);
     setupNCMTabs(window);
 
-    // Browser logic
-    const browserGo = window.querySelector(".browser-go-btn");
-    if (browserGo) {
-        browserGo.addEventListener("click", async () => {
-            const urlInput = window.querySelector(".browser-url-input");
-            const frame = window.querySelector(".browser-frame-container");
-            if (!urlInput || !frame) return;
-            
-            frame.innerHTML = '<div style="color: #666; text-align: center; margin-top: 50px; font-family: sans-serif;">Loading...</div>';
-            
-            try {
-                const result = await apiRequest("POST", `/api/ncm/devices/${encodeURIComponent(deviceName)}/terminal`, {
-                    command: `curl ${urlInput.value}`
+    // Initialize In-App Browser
+    setupBrowser(window, deviceName);
+
+    return window;
+}
+
+function setupBrowser(window, deviceName) {
+    const urlInput = window.querySelector(".browser-url-input");
+    const goBtn = window.querySelector(".browser-go-btn");
+    const backBtn = window.querySelector(".browser-back-btn");
+    const forwardBtn = window.querySelector(".browser-forward-btn");
+    const reloadBtn = window.querySelector(".browser-reload-btn");
+    const iframe = window.querySelector(".browser-viewport");
+
+    if (!urlInput || !goBtn || !iframe) return;
+
+    let history = [];
+    let historyIndex = -1;
+
+    function updateButtons() {
+        if (backBtn) {
+            backBtn.disabled = historyIndex <= 0;
+            backBtn.style.opacity = historyIndex <= 0 ? "0.35" : "1";
+            backBtn.style.cursor = historyIndex <= 0 ? "not-allowed" : "pointer";
+        }
+        if (forwardBtn) {
+            forwardBtn.disabled = historyIndex >= history.length - 1;
+            forwardBtn.style.opacity = historyIndex >= history.length - 1 ? "0.35" : "1";
+            forwardBtn.style.cursor = historyIndex >= history.length - 1 ? "not-allowed" : "pointer";
+        }
+    }
+
+    function resolveUrl(baseUrl, target) {
+        if (!target) return baseUrl || "";
+        target = target.trim();
+        if (target.startsWith("http://") || target.startsWith("https://")) {
+            return target;
+        }
+
+        let base = baseUrl || "http://localhost/";
+        if (!base.startsWith("http://") && !base.startsWith("https://")) {
+            base = "http://" + base;
+        }
+
+        try {
+            return new URL(target, base).toString();
+        } catch (e) {
+            if (target.startsWith("/")) {
+                const match = base.match(/^(https?:\/\/[^\/]+)/i);
+                return (match ? match[1] : "") + target;
+            }
+            return target;
+        }
+    }
+
+    function attachInterceptors(doc, currentUrl) {
+        if (!doc) return;
+
+        // Strip target attribute from links and forms so they don't break out to real browser
+        try {
+            doc.querySelectorAll("a").forEach(a => a.removeAttribute("target"));
+            doc.querySelectorAll("form").forEach(f => f.removeAttribute("target"));
+        } catch (e) {}
+
+        // Capture in-app link clicks
+        doc.addEventListener("click", (e) => {
+            const anchor = e.target.closest("a");
+            if (!anchor) return;
+            const href = anchor.getAttribute("href");
+            if (!href || href.startsWith("javascript:") || href.startsWith("#")) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            const nextUrl = resolveUrl(currentUrl, href);
+            navigateTo(nextUrl);
+        }, true);
+
+        // Capture in-app form submissions
+        doc.addEventListener("submit", (e) => {
+            const form = e.target.closest("form");
+            if (!form) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            const action = form.getAttribute("action") || "";
+            const method = (form.getAttribute("method") || "GET").toUpperCase();
+            const targetUrl = resolveUrl(currentUrl, action);
+
+            const formData = new FormData(form);
+            // Fallback for inputs without name attribute
+            if ([...formData.keys()].length === 0) {
+                const inputs = form.querySelectorAll("input, textarea, select");
+                inputs.forEach((inp, idx) => {
+                    const name = inp.getAttribute("name") || inp.getAttribute("placeholder") || `field_${idx}`;
+                    if (inp.type !== "submit" && inp.type !== "button") {
+                        formData.append(name, inp.value);
+                    }
                 });
-                
-                let output = result.output;
-                
-                if (output.includes("\r\n\r\n")) {
-                    output = output.split("\r\n\r\n").slice(1).join("\r\n\r\n");
+            }
+
+            const params = new URLSearchParams(formData).toString();
+
+            if (method === "POST") {
+                navigateTo(targetUrl, "POST", params);
+            } else {
+                const sep = targetUrl.includes("?") ? "&" : "?";
+                navigateTo(params ? `${targetUrl}${sep}${params}` : targetUrl, "GET");
+            }
+        }, true);
+    }
+
+    function renderPage(content, targetUrl) {
+        let doc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
+        if (!doc) return;
+
+        let finalHtml = content || "";
+        const defaultStyle = `
+            <style>
+                html, body {
+                    background-color: #080c10 !important;
+                    color: #d5ebf2;
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+                    margin: 0;
                 }
-                
-                if (output.startsWith("curl: ")) {
-                    frame.innerHTML = `<div style="color: red; padding: 20px; font-family: monospace;">${output}</div>`;
-                } else {
-                    frame.innerHTML = output;
-                }
-            } catch(e) {
-                frame.innerHTML = `<div style="color: red; padding: 20px; font-family: monospace;">Error: ${e}</div>`;
+            </style>
+        `;
+
+        if (!finalHtml.trim().startsWith("<")) {
+            // Probably JSON or plaintext
+            try {
+                const parsed = JSON.parse(finalHtml);
+                finalHtml = `<pre style="color: #00e5ff; font-family: monospace; font-size: 13px; margin: 0; white-space: pre-wrap; word-break: break-all;">${JSON.stringify(parsed, null, 2)}</pre>`;
+            } catch (e) {
+                finalHtml = `<pre style="color: #d5ebf2; font-family: monospace; font-size: 13px; margin: 0; white-space: pre-wrap; word-break: break-all;">${finalHtml.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>`;
+            }
+            finalHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">${defaultStyle}</head><body style="padding: 25px; background: #080c10;">${finalHtml}</body></html>`;
+        } else {
+            if (finalHtml.includes("<head>")) {
+                finalHtml = finalHtml.replace("<head>", `<head>${defaultStyle}`);
+            } else if (finalHtml.includes("<html>")) {
+                finalHtml = finalHtml.replace("<html>", `<html><head>${defaultStyle}</head>`);
+            } else {
+                finalHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">${defaultStyle}</head><body style="padding: 20px; background: #080c10;">${finalHtml}</body></html>`;
+            }
+        }
+
+        doc.open();
+        doc.write(finalHtml);
+        doc.close();
+
+        attachInterceptors(doc, targetUrl);
+    }
+
+    async function navigateTo(url, method = "GET", postData = null, isNewNavigation = true) {
+        if (!url) return;
+        url = url.trim();
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            url = "http://" + url;
+        }
+
+        urlInput.value = url;
+
+        if (isNewNavigation) {
+            history = history.slice(0, historyIndex + 1);
+            history.push({ url, method, postData });
+            historyIndex = history.length - 1;
+            updateButtons();
+        }
+
+        // Show dark loading indicator
+        let doc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
+        if (doc) {
+            doc.open();
+            doc.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        body {
+                            background: #080c10;
+                            color: #00e5ff;
+                            font-family: monospace;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            height: 100vh;
+                            margin: 0;
+                        }
+                        .loader {
+                            letter-spacing: 2px;
+                            font-size: 13px;
+                            text-align: center;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="loader">CONNECTING TO ${url}...</div>
+                </body>
+                </html>
+            `);
+            doc.close();
+        }
+
+        try {
+            let curlCmd = `curl -s -L`;
+            if (method === "POST" && postData) {
+                const escaped = postData.replace(/"/g, '\\"');
+                curlCmd += ` -X POST -d "${escaped}" "${url}"`;
+            } else {
+                curlCmd += ` "${url}"`;
+            }
+
+            const result = await apiRequest("POST", `/api/ncm/devices/${encodeURIComponent(deviceName)}/terminal`, {
+                command: curlCmd
+            });
+
+            let output = result.output || "";
+            if (output.startsWith("HTTP/") && output.includes("\r\n\r\n")) {
+                output = output.split("\r\n\r\n").slice(1).join("\r\n\r\n");
+            }
+
+            if (output.startsWith("curl: ")) {
+                renderPage(`
+                    <div style="color: #ff3860; padding: 25px; font-family: monospace;">
+                        <h3 style="margin-top:0; color: #ff3860;">REQUEST FAILED</h3>
+                        <p style="color: #d5ebf2;">${output}</p>
+                    </div>
+                `, url);
+            } else {
+                renderPage(output, url);
+            }
+        } catch (e) {
+            renderPage(`
+                <div style="color: #ff3860; padding: 25px; font-family: monospace;">
+                    <h3 style="margin-top:0; color: #ff3860;">COMMUNICATION ERROR</h3>
+                    <p style="color: #d5ebf2;">${e.message || e}</p>
+                </div>
+            `, url);
+        }
+    }
+
+    goBtn.addEventListener("click", () => {
+        navigateTo(urlInput.value);
+    });
+
+    urlInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            navigateTo(urlInput.value);
+        }
+    });
+
+    if (backBtn) {
+        backBtn.addEventListener("click", () => {
+            if (historyIndex > 0) {
+                historyIndex--;
+                const item = history[historyIndex];
+                navigateTo(item.url, item.method, item.postData, false);
+                updateButtons();
             }
         });
     }
 
-    return window;
+    if (forwardBtn) {
+        forwardBtn.addEventListener("click", () => {
+            if (historyIndex < history.length - 1) {
+                historyIndex++;
+                const item = history[historyIndex];
+                navigateTo(item.url, item.method, item.postData, false);
+                updateButtons();
+            }
+        });
+    }
+
+    if (reloadBtn) {
+        reloadBtn.addEventListener("click", () => {
+            if (historyIndex >= 0) {
+                const item = history[historyIndex];
+                navigateTo(item.url, item.method, item.postData, false);
+            } else if (urlInput.value) {
+                navigateTo(urlInput.value);
+            }
+        });
+    }
+
+    updateButtons();
 }
 
 
@@ -345,6 +621,43 @@ async function loadNCMDevice(deviceName, window) {
         }
 
         renderNCMConfig(window, deviceName, deviceData);
+
+        // Update terminal prompt to reflect current backend state
+        const promptData = await apiRequest(
+            "GET",
+            `/api/ncm/devices/${encodeURIComponent(deviceName)}/terminal`
+        ).catch(() => null);
+        if (promptData && promptData.prompt) {
+            const promptSpan = window.querySelector(`.ncm-terminal-prompt`);
+            if (promptSpan) {
+                promptSpan.textContent = promptData.prompt;
+                const inputField = window.querySelector(`.ncm-terminal-input`);
+                if (inputField) {
+                    inputField.type = promptData.prompt.toLowerCase().includes("password:") ? "password" : "text";
+                }
+            }
+        }
+
+        // If this device is an attacker laptop and has an attacker_motd, display it in the terminal tab
+        if (deviceData.is_attacker && deviceData.attacker_motd) {
+            const termOutput = window.querySelector('.ncm-terminal-output');
+            if (termOutput && !termOutput.querySelector('.ncm-attacker-motd')) {
+                const motdDiv = document.createElement("div");
+                motdDiv.className = "ncm-attacker-motd";
+                motdDiv.style.background = "rgba(255, 51, 102, 0.08)";
+                motdDiv.style.border = "1px solid rgba(255, 51, 102, 0.35)";
+                motdDiv.style.padding = "8px 10px";
+                motdDiv.style.marginBottom = "12px";
+                motdDiv.style.borderRadius = "3px";
+                motdDiv.innerHTML = `
+                    <div style="color: #ff3366; font-weight: bold; font-size: 11px; margin-bottom: 4px;">>_ LAB MISSION BRIEFING &amp; MOTD</div>
+                    <div style="color: #ffb3c1; white-space: pre-wrap; font-size: 11px; line-height: 1.5;">${escapeHtml(deviceData.attacker_motd)}</div>
+                `;
+                const curLine = termOutput.querySelector('.ncm-terminal-line-current');
+                if (curLine) termOutput.insertBefore(motdDiv, curLine);
+                else termOutput.appendChild(motdDiv);
+            }
+        }
 
     } catch (error) {
 
@@ -469,13 +782,49 @@ function renderNCMConfig(win, deviceName, deviceData) {
             </div>
         `;
     } else {
-        // End Host or Server
+        // End Host, Laptop, or Server
+        const isLaptop = devType === "LAPTOP";
+        const isAttacker = !!deviceData.is_attacker;
+        let attackerMotdVal = deviceData.attacker_motd || "";
+        if (isAttacker && !attackerMotdVal) {
+            attackerMotdVal = [
+                "MISSION OBJECTIVE: Complete network intrusion and domain dominance.",
+                "1. Scan the perimeter network using 'nmap -sV -sS 198.51.100.0/24' or discover hops via 'ip route'.",
+                "2. Leverage discovered services and credentials to pivot deeper into corporate subnets.",
+                "3. Escalate privileges to root/Administrator on target core infrastructure.",
+                "4. Locate and retrieve the classified flags or files to claim victory."
+            ].join("\n");
+        }
         nodeConfigHtml = `
             <div style="display: grid; grid-template-columns: 1fr; gap: 12px;">
                 <div>
                     <div style="font-size: 10px; color: #8a9ba8; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold;">// NODE HOSTNAME</div>
                     <input type="text" id="ncm-cfg-hostname-${deviceName}" value="${deviceData.name}" style="width: 100%; background: #06090e; border: 1px solid rgba(255,255,255,0.1); color: #00e5ff; padding: 7px; font-family: monospace; font-size: 11px;">
                 </div>
+                ${isLaptop ? `
+                <div style="background: rgba(255, 51, 102, 0.08); border: 1px solid rgba(255, 51, 102, 0.35); padding: 12px; border-radius: 4px;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; color: #ff3366; font-weight: bold; font-size: 11px; letter-spacing: 1px;">
+                        <input type="checkbox" id="ncm-cfg-is-attacker-${deviceName}" ${isAttacker ? 'checked' : ''} style="width: 16px; height: 16px; accent-color: #ff3366; cursor: pointer;" onchange="
+                            const block = document.getElementById('ncm-cfg-attacker-motd-wrap-${safeDev}');
+                            if (block) block.style.display = this.checked ? 'block' : 'none';
+                        ">
+                        <span>[!] DESIGNATE AS ATTACKER LAPTOP</span>
+                    </label>
+                    <div style="font-size: 10px; color: #cbd5e1; margin-top: 6px; line-height: 1.4;">
+                        Permanently turns this laptop's icon to the compromised error state on the canvas and excludes it from the SOC Lab defensive views. Auto-links this device to the <strong>/attacker</strong> terminal. <em>(Only 1 laptop can be designated at a time).</em>
+                    </div>
+                </div>
+                <div id="ncm-cfg-attacker-motd-wrap-${deviceName}" style="display: ${isAttacker ? 'block' : 'none'}; background: rgba(255, 51, 102, 0.05); border: 1px solid rgba(255, 51, 102, 0.25); padding: 12px; border-radius: 4px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <div style="font-size: 11px; color: #ff3366; letter-spacing: 1px; font-weight: bold;">>_ ATTACKER TERMINAL MOTD BANNER // LAB BRIEFING</div>
+                        <span style="font-size: 10px; color: #8a9ba8; font-family: monospace;">[STORED IN SAVE FILE]</span>
+                    </div>
+                    <div style="font-size: 10px; color: #8a9ba8; margin-bottom: 8px; line-height: 1.4;">
+                        This MOTD banner is displayed prominently at the top of the terminal whenever the <strong>/attacker</strong> page or this laptop's terminal is opened. Detail objectives, steps, and rules to complete this lab.
+                    </div>
+                    <textarea id="ncm-cfg-attacker-motd-${deviceName}" rows="8" placeholder="Enter objective, briefing, or instructions on how to complete this lab..." style="width: 100%; background: #06090e; border: 1px solid rgba(255, 51, 102, 0.35); color: #ffb3c1; padding: 10px; font-family: monospace; font-size: 11px; resize: vertical; line-height: 1.5; outline: none;">${escapeHtml(attackerMotdVal)}</textarea>
+                </div>
+                ` : ''}
                 <div style="font-size: 10px; color: #5c6b73; border: 1px dashed rgba(0,229,255,0.15); padding: 8px; letter-spacing: 1px;">
                     // IP ADDRESS, SUBNET MASK &amp; DEFAULT GATEWAY are configured per-interface in the INTERFACES tab.
                 </div>
@@ -962,6 +1311,8 @@ async function saveNCMNodeConfig(deviceName, win) {
     const macAgingInput = document.getElementById(`ncm-cfg-mac-aging-${deviceName}`);
     const stpInput = document.getElementById(`ncm-cfg-stp-${deviceName}`);
     const coverageInput = document.getElementById(`ncm-cfg-coverage-${deviceName}`);
+    const attackerInput = document.getElementById(`ncm-cfg-is-attacker-${deviceName}`);
+    const attackerMotdInput = document.getElementById(`ncm-cfg-attacker-motd-${deviceName}`);
 
     const payload = {};
     if (hostInput && hostInput.value) payload.hostname = hostInput.value.trim();
@@ -974,6 +1325,12 @@ async function saveNCMNodeConfig(deviceName, win) {
     if (coverageInput && coverageInput.value) {
         payload.coverage_radius = parseInt(coverageInput.value, 10);
         if (window.updateAPCoverageRadius) window.updateAPCoverageRadius(deviceName, payload.coverage_radius);
+    }
+    if (attackerInput) {
+        payload.is_attacker = attackerInput.checked;
+    }
+    if (attackerMotdInput) {
+        payload.attacker_motd = attackerMotdInput.value;
     }
 
     try {
@@ -1023,6 +1380,21 @@ async function saveNCMNodeConfig(deviceName, win) {
             await loadNCMDevice(newDeviceName, win);
         } else {
             await loadNCMDevice(deviceName, win);
+        }
+
+        // 6. Update local canvas device is_attacker status immediately
+        if (window.CHL && Array.isArray(window.CHL.devices)) {
+            const isAtt = payload.is_attacker;
+            if (isAtt !== undefined) {
+                window.CHL.devices.forEach(d => {
+                    if (d.id === (newDeviceName || deviceName)) {
+                        d.updateStatus(d.status, d.soc_threat_level, isAtt);
+                    } else if (isAtt && d.type && d.type.toUpperCase() === "LAPTOP") {
+                        // Clear attacker role on other laptops
+                        d.updateStatus(d.status, d.soc_threat_level, false);
+                    }
+                });
+            }
         }
     } catch (err) {
         console.error("[CHL:NCM] Failed to save node config", err);
@@ -1487,11 +1859,13 @@ async function handleTerminalInput(event, deviceName) {
 
     if (event.key === 'Enter') {
         const commandStr = inputField.value.trim();
-        if (!commandStr) return;
+        if (!commandStr && inputField.type !== "password") return;
         
         // Save to history
-        if (terminalHistory[terminalHistory.length - 1] !== commandStr) {
-            terminalHistory.push(commandStr);
+        if (inputField.type !== "password" && commandStr) {
+            if (terminalHistory[terminalHistory.length - 1] !== commandStr) {
+                terminalHistory.push(commandStr);
+            }
         }
         terminalHistoryIndex = -1;
         
@@ -1511,16 +1885,26 @@ async function handleTerminalInput(event, deviceName) {
         };
         
         const outputDiv = win.querySelector('.ncm-terminal-output');
+        const currentLine = win.querySelector('.ncm-terminal-line-current');
         
-        // Echo command
+        // Insert executed line before the current prompt input
+        const historyLine = document.createElement("div");
+        historyLine.style.display = "flex";
+        historyLine.style.alignItems = "baseline";
+        historyLine.style.marginTop = "4px";
         if (currentPrompt.toLowerCase().includes("password:")) {
-            outputDiv.innerHTML += `<div style="color: #00e5ff; margin-top: 5px;">${escapeHtml(currentPrompt)}</div>`;
+            historyLine.innerHTML = `<span style="color: #00e5ff; font-family: monospace; font-weight: bold; margin-right: 8px;">${escapeHtml(currentPrompt)}</span>`;
         } else {
-            outputDiv.innerHTML += `<div style="color: #00e5ff; margin-top: 5px;">${escapeHtml(currentPrompt)} ${escapeHtml(commandStr)}</div>`;
+            historyLine.innerHTML = `<span style="color: #00e5ff; font-family: monospace; font-weight: bold; margin-right: 8px;">${escapeHtml(currentPrompt)}</span> <span style="color: #ffffff;">${escapeHtml(commandStr)}</span>`;
         }
+        if (currentLine) {
+            outputDiv.insertBefore(historyLine, currentLine);
+        } else {
+            outputDiv.appendChild(historyLine);
+        }
+
         inputField.value = '';
         inputField.disabled = true;
-        
         outputDiv.scrollTop = outputDiv.scrollHeight;
         
         try {
@@ -1537,7 +1921,15 @@ async function handleTerminalInput(event, deviceName) {
                 }
             }
 
-            if (response.output) {
+            if (response.output === "__CLEAR__" || commandStr.toLowerCase() === "clear") {
+                // Clear all prior output lines except the active prompt input line
+                const children = Array.from(outputDiv.children);
+                for (let child of children) {
+                    if (child !== currentLine) {
+                        child.remove();
+                    }
+                }
+            } else if (response.output) {
                 if (response.output.startsWith("__NANO_OPEN__")) {
                     const payload = JSON.parse(response.output.replace("__NANO_OPEN__", ""));
                     
@@ -1571,7 +1963,10 @@ async function handleTerminalInput(event, deviceName) {
                         const res = await apiRequest("POST", `/api/ncm/devices/${encodeURIComponent(deviceName)}/terminal`, { command: cmd });
                         if (res.prompt && promptSpan) promptSpan.textContent = res.prompt;
                         if (res.output) {
-                            outputDiv.innerHTML += `<div style="color: #00e5ff; margin-top: 5px; white-space: pre-wrap; word-break: break-all;">${escapeHtml(res.output)}</div>`;
+                            const outWrap = document.createElement("div");
+                            outWrap.innerHTML = `<div style="color: #00e5ff; margin-top: 5px; white-space: pre-wrap; word-break: break-all;">${escapeHtml(res.output)}</div>`;
+                            if (currentLine) outputDiv.insertBefore(outWrap, currentLine);
+                            else outputDiv.appendChild(outWrap);
                             outputDiv.scrollTop = outputDiv.scrollHeight;
                         }
                         inputField.disabled = false;
@@ -1584,21 +1979,32 @@ async function handleTerminalInput(event, deviceName) {
                     return; // Stop normal output rendering
                 }
                 
-                // Render response output immediately without artificial delay loops
+                // Render response output before the prompt line
                 const lines = response.output.split('\n');
                 let renderedHtml = "";
                 for (let line of lines) {
                     const cleanLine = line.replace(/\[DELAY:\d+\]/, '');
                     renderedHtml += `<div style="color: #d5ebf2; white-space: pre-wrap; word-break: break-all;">${escapeHtml(cleanLine) || ' '}</div>`;
                 }
-                outputDiv.innerHTML += renderedHtml;
+                const outWrap = document.createElement("div");
+                outWrap.innerHTML = renderedHtml;
+                if (currentLine) {
+                    outputDiv.insertBefore(outWrap, currentLine);
+                } else {
+                    outputDiv.appendChild(outWrap);
+                }
                 outputDiv.scrollTop = outputDiv.scrollHeight;
             }
         } catch (error) {
-            outputDiv.innerHTML += `<div style="color: #ff3333;">ERROR: ${error.message || "Failed to execute command"}</div>`;
+            const errWrap = document.createElement("div");
+            errWrap.innerHTML = `<div style="color: #ff3333;">ERROR: ${error.message || "Failed to execute command"}</div>`;
+            if (currentLine) {
+                outputDiv.insertBefore(errWrap, currentLine);
+            } else {
+                outputDiv.appendChild(errWrap);
+            }
         }
         
-        outputDiv.innerHTML += `<br>`;
         outputDiv.scrollTop = outputDiv.scrollHeight;
         inputField.disabled = false;
         inputField.focus();
@@ -2290,6 +2696,8 @@ async function saveGlobalSettings(win) {
     };
     try {
         await apiRequest("POST", "/api/simulation/settings", settings);
+        const labTitleEl = document.getElementById("lab-brand-title");
+        if (labTitleEl && settings.network_name) labTitleEl.textContent = settings.network_name.toUpperCase();
         console.log("[CHL:NCM] Network settings applied.");
     } catch (e) {
         console.error("Failed to save network settings", e);

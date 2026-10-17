@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AxiomOS // Attacker Terminal</title>
+    <style>
+        :root {
+            --bg-main: #06090e;
+            --bg-term: #04060a;
+            --red: #ff3366;
+            --red-dim: rgba(255, 51, 102, 0.15);
+            --red-glow: rgba(255, 51, 102, 0.4);
+            --cyan: #00e5ff;
+            --text-main: #d5ebf2;
+            --text-muted: #5c6b73;
+            --border: rgba(255, 51, 102, 0.25);
+            --font-mono: "Courier New", Courier, monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: var(--bg-main);
+            color: var(--text-main);
+            font-family: var(--font-mono);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Scanline Overlay */
+        .scanlines {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 999;
+            opacity: 0.6;
+        }
+
+        /* Header Bar */
+        .header {
+            height: 52px;
+            background: #080d14;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            flex-shrink: 0;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            z-index: 10;
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 13px;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--red);
+            border-radius: 50%;
+            box-shadow: 0 0 8px var(--red);
+            animation: pulse-red 1.5s infinite;
+        }
+
+        @keyframes pulse-red {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.85); }
+        }
+
+        .header-title {
+            color: var(--red);
+            text-shadow: 0 0 10px var(--red-glow);
+        }
+
+        .header-sep {
+            color: var(--text-muted);
+        }
+
+        .header-sub {
+            color: #8a9ba8;
+            font-size: 11px;
+            letter-spacing: 1px;
+        }
+
+        .header-nav {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .nav-btn {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #cbd5e1;
+            padding: 5px 12px;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            text-decoration: none;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .nav-btn:hover {
+            background: var(--red-dim);
+            border-color: var(--red);
+            color: var(--red);
+            box-shadow: 0 0 10px var(--red-glow);
+        }
+
+        /* Terminal Window Container */
+        .terminal-container {
+            flex: 1;
+            background: var(--bg-term);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+            padding: 16px;
+        }
+
+        .terminal-output {
+            flex: 1;
+            overflow-y: auto;
+            color: var(--text-main);
+            font-size: 13px;
+            line-height: 1.5;
+            padding-right: 8px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .terminal-output::-webkit-scrollbar {
+            width: 6px;
+        }
+        .terminal-output::-webkit-scrollbar-thumb {
+            background: rgba(255, 51, 102, 0.3);
+            border-radius: 3px;
+        }
+
+        .input-row {
+            display: flex;
+            align-items: baseline;
+            background: transparent;
+            padding: 0;
+            margin-top: 4px;
+            border: none;
+            box-shadow: none;
+        }
+
+        .terminal-prompt {
+            color: var(--red);
+            font-weight: bold;
+            margin-right: 10px;
+            white-space: nowrap;
+            text-shadow: 0 0 6px var(--red-glow);
+        }
+
+        .terminal-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #ffffff;
+            font-family: var(--font-mono);
+            font-size: 13px;
+            outline: none;
+            caret-color: var(--red);
+        }
+
+        /* Standby state card */
+        .standby-card {
+            margin: auto;
+            max-width: 550px;
+            border: 1.5px dashed var(--border);
+            background: rgba(255, 51, 102, 0.03);
+            padding: 30px;
+            text-align: center;
+            border-radius: 6px;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+        }
+
+        .standby-title {
+            color: var(--red);
+            font-size: 16px;
+            font-weight: bold;
+            letter-spacing: 3px;
+            margin-bottom: 12px;
+        }
+
+        .standby-desc {
+            color: #8a9ba8;
+            font-size: 12px;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .standby-action {
+            display: inline-block;
+            background: var(--red-dim);
+            border: 1px solid var(--red);
+            color: var(--red);
+            padding: 8px 18px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            font-weight: bold;
+            text-decoration: none;
+            border-radius: 3px;
+            transition: 0.2s;
+            cursor: pointer;
+        }
+
+        .standby-action:hover {
+            background: var(--red);
+            color: #06090e;
+            box-shadow: 0 0 15px var(--red-glow);
+        }
+
+        /* Attacker MOTD Briefing Card */
+        .attacker-motd-card {
+            border: 1px solid rgba(255, 51, 102, 0.35);
+            background: rgba(255, 51, 102, 0.05);
+            padding: 14px 18px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            box-shadow: 0 0 20px rgba(255, 51, 102, 0.1);
+        }
+        .attacker-motd-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px dashed rgba(255, 51, 102, 0.25);
+            padding-bottom: 8px;
+            margin-bottom: 10px;
+        }
+        .attacker-motd-title {
+            color: var(--red);
+            font-size: 11px;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+        .attacker-motd-edit-btn {
+            background: rgba(255, 51, 102, 0.15);
+            border: 1px solid var(--red);
+            color: var(--red);
+            padding: 3px 8px;
+            font-size: 10px;
+            font-family: var(--font-mono);
+        .attacker-motd-text {
+            color: #ffb3c1;
+            font-size: 12px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="scanlines"></div>
+
+    <header class="header">
+        <div class="header-brand">
+            <span class="pulse-dot"></span>
+            <span class="header-title">RED TEAM EXECUTION TERMINAL</span>
+            <span class="header-sep">//</span>
+            <span class="header-sub" id="header-device-badge">TARGETING: DISCOVERING...</span>
+        </div>
+
+        <nav class="header-nav">
+            <a href="/welcome" class="nav-btn">&larr; WELCOME</a>
+            <a href="/lab" class="nav-btn">&#x2699; NET.CREATOR</a>
+            <a href="/soc" class="nav-btn">&#x1F6E1; NET.OBSERVER</a>
+        </nav>
+    </header>
+
+    <main class="terminal-container" id="terminal-container">
+        <div class="terminal-output" id="terminal-output">
+            <div class="input-row" id="terminal-input-row" style="display: none;">
+                <span class="terminal-prompt" id="terminal-prompt">user@attacker:~$</span>
+                <input type="text" class="terminal-input" id="terminal-input" placeholder="" autocomplete="off" spellcheck="false">
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let currentAttackerDevice = null;
+        let currentAttackerMotd = "";
+        let commandHistory = [];
+        let historyIndex = -1;
+
+        const container = document.getElementById("terminal-container");
+        const outputEl = document.getElementById("terminal-output");
+        const inputRow = document.getElementById("terminal-input-row");
+        const promptEl = document.getElementById("terminal-prompt");
+        const inputEl = document.getElementById("terminal-input");
+        const badgeEl = document.getElementById("header-device-badge");
+
+        function escapeHtml(str) {
+            return (str || "").toString()
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        async function initTerminal() {
+            try {
+                const res = await fetch("/api/attacker/device");
+                const data = await res.json();
+                
+                if (data && data.device) {
+                    currentAttackerDevice = data.device.name;
+                    badgeEl.innerHTML = `TARGETING: <strong style="color: var(--red);">${escapeHtml(currentAttackerDevice)}</strong>`;
+                    
+                    // Fetch initial prompt
+                    const promptRes = await fetch(`/api/ncm/devices/${encodeURIComponent(currentAttackerDevice)}/terminal`);
+                    const promptData = await promptRes.json();
+                    
+                    promptEl.textContent = promptData.prompt || `user@${currentAttackerDevice.toLowerCase()}:~$`;
+                    inputEl.type = (promptData.prompt || "").toLowerCase().includes("password:") ? "password" : "text";
+                    
+                    // Clear previous output except inputRow
+                    Array.from(outputEl.children).forEach(ch => {
+                        if (ch !== inputRow) ch.remove();
+                    });
+                    
+                    currentAttackerMotd = (data.device.attacker_motd || "").trim();
+                    if (!currentAttackerMotd) {
+                        currentAttackerMotd = [
+                            "MISSION OBJECTIVE: Complete network intrusion and domain dominance.",
+                            "1. Scan the perimeter network using 'nmap -sV -sS 198.51.100.0/24' or discover hops via 'ip route'.",
+                            "2. Leverage discovered services and credentials to pivot deeper into corporate subnets.",
+                            "3. Escalate privileges to root/Administrator on target core infrastructure.",
+                            "4. Locate and retrieve the classified flags or files to claim victory."
+                        ].join("\n");
+                    }
+
+                    const banner = document.createElement("div");
+                    banner.innerHTML = `
+<div style="color: var(--red); font-weight: bold; letter-spacing: 2px;">============================================================</div>
+<div style="color: var(--red); font-weight: bold; letter-spacing: 2px;">> AXIOM OS // OFFENSIVE CYBER WARFARE CONSOLE</div>
+<div style="color: #8a9ba8; margin-bottom: 4px;">Host: <span style="color: white; font-weight: bold;">${escapeHtml(currentAttackerDevice)}</span> | Type: LAPTOP | Environment: CYBER HAZARD LAB</div>
+<div style="color: #5c6b73; margin-bottom: 12px;">Type 'help' for available tools (nmap, ssh, scp, ping, clear, route, cat, ls).</div>
+<div style="color: var(--red); font-weight: bold; letter-spacing: 2px;">============================================================</div>
+<br>
+<div class="attacker-motd-card">
+    <div class="attacker-motd-header">
+        <span class="attacker-motd-title">>_ LAB MISSION BRIEFING &amp; MOTD</span>
+    </div>
+    <div class="attacker-motd-text">${escapeHtml(currentAttackerMotd)}</div>
+</div>
+<br>
+                    `;
+                    outputEl.insertBefore(banner, inputRow);
+                    
+                    inputRow.style.display = "flex";
+                    inputEl.focus();
+                } else {
+                    renderStandbyState();
+                }
+            } catch (err) {
+                renderStandbyState();
+            }
+        }
+
+        function renderStandbyState() {
+            badgeEl.innerHTML = `<span style="color: #ffaa00;">NO ATTACKER LAPTOP DESIGNATED</span>`;
+            inputRow.style.display = "none";
+            Array.from(outputEl.children).forEach(ch => {
+                if (ch !== inputRow) ch.remove();
+            });
+            const card = document.createElement("div");
+            card.className = "standby-card";
+            card.innerHTML = `
+                <div class="standby-title">[!] STANDBY MODE: NO ATTACKER LAPTOP</div>
+                <div class="standby-desc">
+                    No laptop is currently marked as the <strong>Attacker Laptop</strong> in the network simulation.<br><br>
+                    To activate this console, open <strong>Net.Creator</strong>, double-click any <strong>LAPTOP</strong> node to open its NCM panel, and check:<br>
+                    <strong style="color: var(--red);">[!] DESIGNATE AS ATTACKER LAPTOP</strong>.
+                </div>
+                <a href="/lab" class="standby-action">&rarr; OPEN NET.CREATOR TO CONFIGURE</a>
+            `;
+            outputEl.insertBefore(card, inputRow);
+        }
+
+        inputEl.addEventListener("keydown", async (event) => {
+            if (event.key === "ArrowUp") {
+                event.preventDefault();
+                if (commandHistory.length > 0) {
+                    if (historyIndex < commandHistory.length - 1) {
+                        historyIndex++;
+                    }
+                    inputEl.value = commandHistory[commandHistory.length - 1 - historyIndex];
+                }
+                return;
+            }
+
+            if (event.key === "ArrowDown") {
+                event.preventDefault();
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    inputEl.value = commandHistory[commandHistory.length - 1 - historyIndex];
+                } else if (historyIndex === 0) {
+                    historyIndex = -1;
+                    inputEl.value = "";
+                }
+                return;
+            }
+
+            if (event.key === "Enter") {
+                const commandStr = inputEl.value.trim();
+                if (!commandStr && !inputEl.type.includes("password")) return;
+
+                if (inputEl.type !== "password" && commandStr) {
+                    if (commandHistory[commandHistory.length - 1] !== commandStr) {
+                        commandHistory.push(commandStr);
+                    }
+                }
+                historyIndex = -1;
+
+                const curPrompt = promptEl.textContent;
+                
+                // Remove inline input line from screen temporarily or append history line
+                const historyLine = document.createElement("div");
+                historyLine.style.display = "flex";
+                historyLine.style.alignItems = "baseline";
+                historyLine.style.lineHeight = "1.6";
+                if (curPrompt.toLowerCase().includes("password:")) {
+                    historyLine.innerHTML = `<span style="color: var(--red); font-weight: bold; margin-right: 8px;">${escapeHtml(curPrompt)}</span>`;
+                } else {
+                    historyLine.innerHTML = `<span style="color: var(--red); font-weight: bold; margin-right: 8px;">${escapeHtml(curPrompt)}</span> <span style="color: #ffffff;">${escapeHtml(commandStr)}</span>`;
+                }
+                outputEl.insertBefore(historyLine, inputRow);
+
+                inputEl.value = "";
+                inputEl.disabled = true;
+                outputEl.scrollTop = outputEl.scrollHeight;
+
+                try {
+                    const res = await fetch(`/api/ncm/devices/${encodeURIComponent(currentAttackerDevice)}/terminal`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ command: commandStr })
+                    });
+                    const data = await res.json();
+
+                    if (data.prompt) {
+                        promptEl.textContent = data.prompt;
+                        inputEl.type = data.prompt.toLowerCase().includes("password:") ? "password" : "text";
+                    }
+
+                    if (data.output === "__CLEAR__" || commandStr.toLowerCase() === "clear") {
+                        // Clear all previous lines except the inputRow
+                        const children = Array.from(outputEl.children);
+                        for (let child of children) {
+                            if (child !== inputRow) {
+                                child.remove();
+                            }
+                        }
+                    } else if (data.output) {
+                        const lines = data.output.split("\n");
+                        let rendered = "";
+                        for (let line of lines) {
+                            const clean = line.replace(/\[DELAY:\d+\]/, "");
+                            rendered += `<div style="color: var(--text-main); white-space: pre-wrap; word-break: break-all;">${escapeHtml(clean) || " "}</div>`;
+                        }
+                        const outWrap = document.createElement("div");
+                        outWrap.innerHTML = rendered;
+                        outputEl.insertBefore(outWrap, inputRow);
+                    }
+                } catch (e) {
+                    const errWrap = document.createElement("div");
+                    errWrap.innerHTML = `<div style="color: var(--red);">ERROR: ${escapeHtml(e.message)}</div>`;
+                    outputEl.insertBefore(errWrap, inputRow);
+                }
+
+                outputEl.scrollTop = outputEl.scrollHeight;
+                inputEl.disabled = false;
+                inputEl.focus();
+            }
+        });
+
+        // Click anywhere in output to focus inline input
+        outputEl.addEventListener("click", () => {
+            if (inputRow.style.display !== "none") {
+                inputEl.focus();
+            }
+        });
+
+        // Initialize on page load
+        initTerminal();
+    </script>
+</body>
+</html>

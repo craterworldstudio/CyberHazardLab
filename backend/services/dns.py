@@ -224,8 +224,20 @@ class DNSServerDaemon(ServiceDaemon):
                             reachable = True
                             break
                     # Check network devices if attached
-                    if not reachable and network and hasattr(network, 'devices'):
-                        for dev in network.devices:
+                    if not reachable:
+                        all_devs = []
+                        if network and hasattr(network, 'hosts') and isinstance(network.hosts, dict):
+                            all_devs.extend(network.hosts.values())
+                        if network and hasattr(network, 'routers') and isinstance(network.routers, dict):
+                            all_devs.extend(network.routers.values())
+                        if orchestrator and hasattr(orchestrator, 'hosts') and isinstance(orchestrator.hosts, dict):
+                            all_devs.extend(orchestrator.hosts.values())
+                        if orchestrator and hasattr(orchestrator, 'routers') and isinstance(orchestrator.routers, dict):
+                            all_devs.extend(orchestrator.routers.values())
+
+                        for dev in all_devs:
+                            if getattr(dev, 'status', 'ONLINE').upper() != 'ONLINE':
+                                continue
                             for intf in getattr(dev, 'interfaces', []):
                                 if getattr(intf, 'ip', None) == check_ip:
                                     reachable = True

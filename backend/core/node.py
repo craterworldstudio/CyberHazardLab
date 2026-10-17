@@ -178,10 +178,27 @@ class Node:
                 self._install_connected_route(intf)
 
         matching = [r for r in self.routes if ip_obj in r["destination"]]
-        if not matching:
-            return None
-        # Longest Prefix Match
-        return max(matching, key=lambda r: r["destination"].prefixlen)
+        if matching:
+            # Longest Prefix Match
+            return max(matching, key=lambda r: r["destination"].prefixlen)
+
+        # Fallback to default_gateway if configured
+        gw = getattr(self, "default_gateway", None)
+        if gw:
+            try:
+                gw_obj = ipaddress.ip_address(gw)
+                for intf in getattr(self, "interfaces", []):
+                    if getattr(intf, "ip", None) and getattr(intf, "subnet", None):
+                        if gw_obj in ipaddress.ip_network(intf.subnet, strict=False):
+                            return {
+                                "destination": ipaddress.ip_network("0.0.0.0/0"),
+                                "next_hop": gw,
+                                "interface": intf
+                            }
+            except Exception:
+                pass
+
+        return None
 
     # ========================================================
     # LAYER-3 TRANSMISSION
