@@ -26,6 +26,64 @@ Designed specifically for students and aspiring network/security professionals, 
 
 ---
 
+## 🛠️ Installation, Standalone & Docker Execution
+
+Because the backend utilizes state-centric memory structures to execute live routing topologies, **local execution via loopback (`127.0.0.1`) is the recommended way to experience isolated laboratory environments.**
+
+### Option 1: Native Python
+```bash
+python -m pip install -r requirements.txt
+python application/main.py
+```
+Then navigate to: `http://127.0.0.1:8000`
+
+### Option 2: Docker Container (Docker Compose)
+Run with persistent state storage:
+```bash
+docker-compose up --build -d
+```
+Or with standard Docker:
+```bash
+docker build -t cyberhazardlab .
+docker run -d -p 8000:8000 -p 514:514/udp -v $(pwd)/simulation_state.json:/app/simulation_state.json cyberhazardlab
+```
+
+### Option 3: Standalone Executable (No Python Required)
+Build self-contained, zero-dependency executable distributions:
+
+* **Linux:**
+  ```bash
+  chmod +x build_linux.sh
+  ./build_linux.sh
+  # Run the binary:
+  ./dist/CyberHazardLab/CyberHazardLab
+  ```
+
+* **Windows:**
+  Double-click `build_windows.bat` or run:
+  ```powershell
+  .\build_windows.ps1
+  # Run the binary:
+  .\dist\CyberHazardLab\CyberHazardLab.exe
+  ```
+
+---
+
+## 🧭 Navigation Endpoints
+* **Welcome Portal:** `http://localhost:8000/` or `/welcome`
+* **Net.Creator (Network Builder & NCM):** `http://localhost:8000/lab`
+* **Net.Observer (Defensive SOC Dashboard):** `http://localhost:8000/soc`
+* **Net.Attacker (Offensive Red Team Terminal):** `http://localhost:8000/attacker`
+---
+
+## 🔒 Threat Vector Insulation & Sandboxing
+
+Cyber Hazard Lab is built from the ground up to guarantee environment containment:
+* **Air-Gapped Execution:** Packet processing engines (`Packet`, `TCPPacket`) exist purely as structured Python object instances. The backend handles no raw host socket hooks (`socket.AF_PACKET`), preventing traffic leakage outside the application process.
+* **Deterministic Lexical Terminal:** The integrated console uses an isolated token parsing matrix (`if command.startswith("ping")`) rather than exposing input arguments to system execution environments (`os.system` / `subprocess`). The application is natively safe from command injection bypasses.
+
+---
+
 ## 🗺️ Roadmap & Development Progress
 
 ### 📊 Overview
@@ -144,60 +202,4 @@ Advanced Infrastructure:
 
 
 ---
-
-## 🛠️ Installation, Standalone & Docker Execution
-
-Because the backend utilizes state-centric memory structures to execute live routing topologies, **local execution via loopback (`127.0.0.1`) is the recommended way to experience isolated laboratory environments.**
-
-### Option 1: Native Python
-```bash
-python -m pip install -r requirements.txt
-python application/main.py
-```
-Then navigate to: `http://127.0.0.1:8000`
-
-### Option 2: Docker Container (Docker Compose)
-Run with persistent state storage:
-```bash
-docker-compose up --build -d
-```
-Or with standard Docker:
-```bash
-docker build -t cyberhazardlab .
-docker run -d -p 8000:8000 -p 514:514/udp -v $(pwd)/simulation_state.json:/app/simulation_state.json cyberhazardlab
-```
-
-### Option 3: Standalone Executable (No Python Required)
-Build self-contained, zero-dependency executable distributions:
-
-* **Linux:**
-  ```bash
-  chmod +x build_linux.sh
-  ./build_linux.sh
-  # Run the binary:
-  ./dist/CyberHazardLab/CyberHazardLab
-  ```
-
-* **Windows:**
-  Double-click `build_windows.bat` or run:
-  ```powershell
-  .\build_windows.ps1
-  # Run the binary:
-  .\dist\CyberHazardLab\CyberHazardLab.exe
-  ```
-
----
-
-## 🧭 Navigation Endpoints
-* **Welcome Portal:** `http://localhost:8000/` or `/welcome`
-* **Net.Creator (Network Builder & NCM):** `http://localhost:8000/lab`
-* **Net.Observer (Defensive SOC Dashboard):** `http://localhost:8000/soc`
-* **Net.Attacker (Offensive Red Team Terminal):** `http://localhost:8000/attacker`
----
-
-## 🔒 Threat Vector Insulation & Sandboxing
-
-Cyber Hazard Lab is built from the ground up to guarantee environment containment:
-* **Air-Gapped Execution:** Packet processing engines (`Packet`, `TCPPacket`) exist purely as structured Python object instances. The backend handles no raw host socket hooks (`socket.AF_PACKET`), preventing traffic leakage outside the application process.
-* **Deterministic Lexical Terminal:** The integrated console uses an isolated token parsing matrix (`if command.startswith("ping")`) rather than exposing input arguments to system execution environments (`os.system` / `subprocess`). The application is natively safe from command injection bypasses.
 
